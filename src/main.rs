@@ -9,16 +9,21 @@ fn main() {
         .insert_resource(Scale { tile_size: 3. })
         .insert_resource(Map {
             creatures: HashMap::new(),
+            positions: HashMap::new(),
         })
         .insert_resource(InputDelay {
-            timer: Timer::new(Duration::from_millis(50), TimerMode::Once),
+            timer: Timer::new(Duration::from_millis(150), TimerMode::Once),
         })
         .add_systems(Startup, setup_camera)
         .add_systems(Startup, spawn_player)
         .add_systems(Startup, spawn_seed)
         .add_systems(Update, adjust_transforms)
-        .add_systems(Update, place_creatures)
+        .add_systems(Update, displace_creatures)
         .add_systems(Update, keyboard_input)
+        .add_systems(Update, player_step)
+        .add_systems(Update, teleport_entity)
+        .add_event::<PlayerStep>()
+        .add_event::<TeleportEntity>()
         .run();
 }
 
@@ -39,9 +44,10 @@ pub struct InputDelay {
 }
 
 /// The position of every entity, updated automatically.
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 struct Map {
     creatures: HashMap<Position, Entity>,
+    positions: HashMap<Entity, Position>,
 }
 
 /// A position on the map.
@@ -60,11 +66,51 @@ impl Position {
 #[derive(Component)]
 struct Camera;
 
+#[derive(Event)]
+struct PlayerStep {
+    direction: OrdDir,
+}
+
+#[derive(Event)]
+struct TeleportEntity {
+    destination: Position,
+    entity: Entity,
+}
+
+impl TeleportEntity {
+    fn new(entity: Entity, x: i32, y: i32) -> Self {
+        Self {
+            destination: Position::new(x, y),
+            entity,
+        }
+    }
+}
+
 #[derive(Bundle)]
 struct Creature {
     position: Position,
     sprite: SpriteBundle,
     atlas: TextureAtlas,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum OrdDir {
+    Up,
+    Right,
+    Down,
+    Left,
+}
+
+impl OrdDir {
+    pub fn as_offset(self) -> (i32, i32) {
+        let (x, y) = match self {
+            OrdDir::Up => (0, 1),
+            OrdDir::Right => (1, 0),
+            OrdDir::Down => (0, -1),
+            OrdDir::Left => (-1, 0),
+        };
+        (x, y)
+    }
 }
 
 /// Adjust every entity's display location to be offset according to the player.
@@ -117,12 +163,21 @@ fn spawn_player(
     ));
 }
 
-fn place_creatures(
+/// Remove the old entry from the map, replace with the new position
+/// of a recently moved entity.
+fn displace_creatures(
     mut map: ResMut<Map>,
     displaced_creatures: Query<(Entity, &Position), Changed<Position>>,
 ) {
     for (entity, position) in displaced_creatures.iter() {
+        let old_map = map.clone();
+        let old_pos = old_map.positions.get(&entity);
+        if let Some(old_pos) = old_pos {
+            map.creatures.remove(old_pos);
+            map.positions.remove(&entity);
+        }
         map.creatures.insert(*position, entity);
+        map.positions.insert(entity, *position);
     }
 }
 
@@ -155,22 +210,76 @@ fn spawn_seed(
     }
 }
 
-fn keyboard_input(
-    input: Res<ButtonInput<KeyCode>>,
-    mut player: Query<&mut Position, With<Player>>,
+fn player_step(
+    mut events: EventReader<PlayerStep>,
+    mut teleporter: EventWriter<TeleportEntity>,
+    player: Query<(Entity, &Position), With<Player>>,
 ) {
-    let mut player = player.get_single_mut().expect("0 or 2+ players");
+    let (player_entity, player_pos) = player.get_single().expect("0 or 2+ players");
+    for event in events.read() {
+        let (off_x, off_y) = event.direction.as_offset();
+        teleporter.send(TeleportEntity::new(
+            player_entity,
+            player_pos.x + off_x,
+            player_pos.y + off_y,
+        ));
+    }
+}
+
+fn teleport_entity(
+    mut events: EventReader<TeleportEntity>,
+    mut creature: Query<&mut Position>,
+    map: Res<Map>,
+) {
+    for event in events.read() {
+        let mut creature = creature
+            .get_mut(event.entity)
+            .expect("A TeleportEntity was given an invalid entity");
+        if map
+            .creatures
+            .get(&Position::new(event.destination.x, event.destination.y))
+            .is_some()
+        {
+            // TODO: Raise a collision event here.
+            continue;
+        }
+        (creature.x, creature.y) = (event.destination.x, event.destination.y);
+    }
+}
+
+fn keyboard_input(
+    time: Res<Time>,
+
+    mut delay: ResMut<InputDelay>,
+    mut events: EventWriter<PlayerStep>,
+    input: Res<ButtonInput<KeyCode>>,
+) {
+    delay.timer.tick(time.delta());
+    if !delay.timer.finished() {
+        return;
+    } else {
+        delay.timer.reset();
+    }
+
     if input.pressed(KeyCode::KeyW) {
-        player.y += 1;
+        events.send(PlayerStep {
+            direction: OrdDir::Up,
+        });
     }
     if input.pressed(KeyCode::KeyD) {
-        player.x += 1;
+        events.send(PlayerStep {
+            direction: OrdDir::Right,
+        });
     }
     if input.pressed(KeyCode::KeyA) {
-        player.x -= 1;
+        events.send(PlayerStep {
+            direction: OrdDir::Left,
+        });
     }
     if input.pressed(KeyCode::KeyS) {
-        player.y -= 1;
+        events.send(PlayerStep {
+            direction: OrdDir::Down,
+        });
     }
 }
 
