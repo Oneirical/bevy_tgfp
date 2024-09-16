@@ -152,7 +152,7 @@ fn spawn_player(
             sprite: SpriteBundle {
                 texture: asset_server.load("spritesheet.png"),
                 transform: Transform::from_scale(Vec3::new(scale.tile_size, scale.tile_size, 0.)),
-                ..Default::default()
+                ..default()
             },
             atlas: TextureAtlas {
                 layout: atlas_layout.handle.clone(),
@@ -200,7 +200,7 @@ fn spawn_seed(
             sprite: SpriteBundle {
                 texture: asset_server.load("spritesheet.png"),
                 transform: Transform::from_scale(Vec3::new(scale.tile_size, scale.tile_size, 0.)),
-                ..Default::default()
+                ..default()
             },
             atlas: TextureAtlas {
                 layout: atlas_layout.handle.clone(),

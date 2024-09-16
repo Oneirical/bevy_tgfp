@@ -1,3 +1,11 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 1. Drawing the Player Character" 
+date = 2024-09-16
+
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
+
 Traditional roguelikes are an ancient genre of games which earned the peak of their fame in the 20th century. They are the ancestors of modern indie roguelikes beloved by many such as Hades, The Binding of Isaac or Risk of Rain. What a "true roguelike" is has been the driving force of multiple Internet flamewars, but it almost always revolves around this list:
 
 - The game takes place on a grid, like Chess.
@@ -25,12 +33,6 @@ This tutorial assumes:
 - That you have some beginner Rust experience and know what "borrow checking" is. If you do not, I recommend going through the first half of the [rustlings](https://rustlings.cool/) suite of interactive exercises to get you up to speed.
     - No concurrency or dynamic dispatch Rust technowizardry will be required. Only the basics.
 
-It would be wise to import Bevy in a Bevy project. Place this on the very first line:
-
-```rust
-use bevy::prelude::*;
-```
-
 The nature of ECS has been covered earlier in the Quick Start guide. Here is a metaphorical reminder:
 
 * **Entities** - The actors on the stage.
@@ -48,6 +50,12 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .run();
 }
+```
+
+It would also be wise to import Bevy in a Bevy project. Place this on the very first line of `main.rs`:
+
+```rust
+use bevy::prelude::*;
 ```
 
 The `App` is the window which contains the game, the theatre in which the actors will play. To ensure it starts off with all the basic Bevy features, the `DefaultPlugins` plugin must be tacked onto it.
@@ -124,7 +132,7 @@ The player is thus spawned with the texture "otter.png" at the position (0.0, 0.
 
 Using `cargo run` on this will result in an error:
 
-`TODO`
+`ERROR bevy_asset::server: Path not found: your/path/here/bevy-quick-start/assets/otter.png`
 
 Of course, we need to provide the image. In your game's root directory (where `src` and `Cargo.toml` currently exist), create a new directory named `assets`. If the `App` is the theatre, this is the costume storage - containing all the image data that Entities can take up as their visual sprite representations.
 
@@ -160,9 +168,10 @@ fn main() {
 }
 ```
 
-Running ̀`cargo run` will now - assuming you had as much good taste as I did to pick a cute otter as my example image - display the player character!
+Running ̀`cargo run` will now - assuming you had as much good taste as I did to pick a cute otter as my example image - display the player "character"!
 
-TODO IMAGE
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/1-drawing-the-player/otter.png", alt="A Bevy app with a picture of an otter in the centre.",
+         position="center", style="border-radius: 8px;") }}
 
 # Bundling Them Up - The Spritesheet
 
@@ -177,7 +186,7 @@ struct SpriteSheetAtlas {
 }
 ```
 
-This marks the creation of our first `Resource`. A ̀`Resource`, in Bevy, is basically a global mutable variable. You can imagine it in the same way that you need to spend "wood resources" to build houses in a construction game - the wood is likely represented by a little icon on the side of the screen with a number next to it. It doesn't belong to a certain Entity - it belongs to the game as a whole.
+This marks the creation of our first `Resource`. A `Resource`, in Bevy, is basically a global mutable variable. You can imagine it in the same way that you need to spend "wood resources" to build houses in a construction game - the wood is likely represented by a little icon on the side of the screen with a number next to it. It doesn't belong to a certain Entity - it belongs to the game as a whole.
 
 In this case, this `Resource` is an Atlas, mapping the spritesheet to divide it in tidy 16x16 squares. It will be accessible each time a new Creature is made, to assign it a specific region of that spritesheet.
 
@@ -240,8 +249,11 @@ fn spawn_player(
 ) {
     commands.spawn(Creature {
         sprite: SpriteBundle {
-            texture: asset_server.load("spritesheet.png"), // Changed to spritesheet.png.
-            transform: Transform::from_xyz(0., 0., 0.),
+            // CHANGED to spritesheet.png.
+            texture: asset_server.load("spritesheet.png"),
+            // CHANGED to "from_scale" to make the
+            // player character 64x64 for good visibility.
+            transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
             ..default()
         },
         // NEW!
@@ -259,14 +271,15 @@ fn spawn_player(
 
 Running `cargo run` again will display the player glyph, cropped appropriately! But...
 
-TODO image
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/1-drawing-the-player/blurry.png", alt="A Bevy app with a blurry image of the player character glyph in the centre.",
+         position="center", style="border-radius: 8px;") }}
 
 Hmm, did I forget my glasses?
 
 ```rust
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // NEW!
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) // CHANGED!
         .init_resource::<SpriteSheetAtlas>()
         .add_systems(Startup, setup_camera)
         .add_systems(Startup, spawn_player)
@@ -276,6 +289,7 @@ fn main() {
 
 Much better. Activating `default_nearest` in Bevy options like this helps render pixel art in pixel-perfect mode.
 
-Enter ̀`cargo run` again to finish the first part of this tutorial!
+Enter `cargo run` again to finish the first part of this tutorial!
 
-TODO image
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/1-drawing-the-player/clean.png", alt="A Bevy app with a clean image of the player character glyph in the centre.",
+         position="center", style="border-radius: 8px;") }}
