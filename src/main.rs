@@ -12,7 +12,7 @@ fn main() {
             positions: HashMap::new(),
         })
         .insert_resource(InputDelay {
-            timer: Timer::new(Duration::from_millis(150), TimerMode::Once),
+            timer: Timer::new(Duration::from_millis(120), TimerMode::Once),
         })
         .add_systems(Startup, setup_camera)
         .add_systems(Startup, spawn_player)
@@ -214,9 +214,11 @@ fn player_step(
     mut events: EventReader<PlayerStep>,
     mut teleporter: EventWriter<TeleportEntity>,
     player: Query<(Entity, &Position), With<Player>>,
+    mut delay: ResMut<InputDelay>,
 ) {
     let (player_entity, player_pos) = player.get_single().expect("0 or 2+ players");
     for event in events.read() {
+        delay.timer.reset();
         let (off_x, off_y) = event.direction.as_offset();
         teleporter.send(TeleportEntity::new(
             player_entity,
@@ -257,8 +259,6 @@ fn keyboard_input(
     delay.timer.tick(time.delta());
     if !delay.timer.finished() {
         return;
-    } else {
-        delay.timer.reset();
     }
 
     if input.pressed(KeyCode::KeyW) {
