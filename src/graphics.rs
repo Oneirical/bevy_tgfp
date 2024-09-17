@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{Player, Position};
+use crate::{creature::Player, Position};
 
 pub struct GraphicsPlugin;
 

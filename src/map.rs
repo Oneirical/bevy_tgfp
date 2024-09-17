@@ -1,8 +1,8 @@
 use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
+    creature::{Creature, Hunt, Ipseity, Player, Soul},
     graphics::{Scale, SpriteSheetAtlas},
-    Creature, Hunt, Player,
 };
 
 pub struct MapPlugin;
@@ -59,6 +59,7 @@ impl Map {
 
     pub fn update_map(&mut self, entity: Entity, old_pos: Position, new_pos: Position) {
         // If the entity already existed in the Map's records, remove it.
+        // TODO Since .insert returns the old one, the old_pos field might be unnecessary.
         if self.positions.get(&entity).is_some() {
             self.creatures.remove(&old_pos);
             self.positions.remove(&entity);
@@ -107,6 +108,7 @@ fn spawn_player(
                 layout: atlas_layout.handle.clone(),
                 index: 0,
             },
+            ipseity: Ipseity::new(&[(Soul::Saintly, 2), (Soul::Ordered, 2), (Soul::Artistic, 2)]),
         },
         Player,
     ));
@@ -154,11 +156,15 @@ fn spawn_seed(
                     layout: atlas_layout.handle.clone(),
                     index,
                 },
+                ipseity: Ipseity::new(&[(Soul::Immutable, 1)]),
             })
             .id();
         // TODO If it's a scion, add Hunt
         if index == 4 {
-            commands.entity(id).insert(Hunt);
+            commands
+                .entity(id)
+                .insert(Hunt)
+                .insert(Ipseity::new(&[(Soul::Feral, 4)]));
         }
     }
 }

@@ -4,6 +4,7 @@ use graphics::GraphicsPlugin;
 use input::InputPlugin;
 use map::{MapPlugin, Position};
 
+mod creature;
 mod events;
 mod graphics;
 mod input;
@@ -14,20 +15,6 @@ fn main() {
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins((EventPlugin, GraphicsPlugin, MapPlugin, InputPlugin))
         .run();
-}
-
-/// Marker for the player
-#[derive(Component)]
-struct Player;
-
-#[derive(Component)]
-pub struct Hunt;
-
-#[derive(Bundle)]
-struct Creature {
-    position: Position,
-    sprite: SpriteBundle,
-    atlas: TextureAtlas,
 }
 
 #[derive(Copy, Clone, Debug)]

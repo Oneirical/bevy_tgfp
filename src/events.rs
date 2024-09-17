@@ -1,6 +1,11 @@
 use bevy::prelude::*;
 
-use crate::{input::InputDelay, map::Map, Hunt, OrdDir, Player, Position};
+use crate::{
+    creature::{Hunt, Ipseity, Player},
+    input::InputDelay,
+    map::Map,
+    OrdDir, Position,
+};
 
 pub struct EventPlugin;
 
@@ -9,6 +14,7 @@ impl Plugin for EventPlugin {
         app.add_event::<PlayerStep>();
         app.add_event::<TeleportEntity>();
         app.add_event::<EndTurn>();
+        app.add_event::<RepressionDamage>();
         app.add_systems(Update, player_step);
         app.add_systems(Update, teleport_entity);
         app.add_systems(Update, end_turn);
@@ -22,6 +28,12 @@ pub struct PlayerStep {
 
 #[derive(Event)]
 struct EndTurn;
+
+#[derive(Event)]
+struct RepressionDamage {
+    damage: usize,
+    entity: Entity,
+}
 
 #[derive(Event)]
 struct TeleportEntity {
@@ -96,5 +108,13 @@ fn teleport_entity(
 
         map.update_map(event.entity, creature_position.clone(), event.destination);
         creature_position.update(event.destination.x, event.destination.y);
+    }
+}
+
+fn repression_damage(mut events: EventReader<RepressionDamage>, mut ipseity: Query<&mut Ipseity>) {
+    for event in events.read() {
+        let mut ipseity = ipseity
+            .get(event.entity)
+            .expect("A RepressionDamage was given an invalid entity");
     }
 }
