@@ -20,6 +20,9 @@ fn main() {
 #[derive(Component)]
 struct Player;
 
+#[derive(Component)]
+pub struct Hunt;
+
 #[derive(Bundle)]
 struct Creature {
     position: Position,
