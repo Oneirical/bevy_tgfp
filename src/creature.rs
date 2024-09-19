@@ -1,5 +1,5 @@
 use bevy::{prelude::*, utils::HashMap};
-use rand::seq::{IteratorRandom, SliceRandom};
+use rand::seq::IteratorRandom;
 use rand::Rng;
 
 use crate::map::Position;
@@ -8,11 +8,15 @@ use crate::map::Position;
 #[derive(Component)]
 pub struct Player;
 
+/// Creatures which cannot take any more Ipseity damage
+#[derive(Component)]
+pub struct Soulless;
+
 #[derive(Component, Clone)]
 pub struct Ipseity {
-    active: HashMap<Soul, usize>,
-    forefront: [Option<Soul>; 4],
-    repressed: HashMap<Soul, usize>,
+    pub active: HashMap<Soul, usize>,
+    pub forefront: [Option<Soul>; 4],
+    pub repressed: HashMap<Soul, usize>,
 }
 
 impl Ipseity {
@@ -26,6 +30,18 @@ impl Ipseity {
             forefront: [None, None, None, None],
             repressed: HashMap::new(),
         }
+    }
+
+    pub fn get_active_soul_count(&self) -> usize {
+        self.active.values().sum()
+    }
+
+    pub fn get_ipseity_health(&self) -> usize {
+        self.forefront
+            .iter()
+            .filter(|option| option.is_some())
+            .count()
+            + self.get_active_soul_count()
     }
 
     /// Get `amount` souls from a creature. First, it goes to draw in `active`,
@@ -78,6 +94,7 @@ impl Ipseity {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum DamageResult {
     Survived,
     Drained,

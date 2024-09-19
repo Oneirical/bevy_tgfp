@@ -9,6 +9,7 @@ mod events;
 mod graphics;
 mod input;
 mod map;
+mod tests;
 
 fn main() {
     App::new()

@@ -32,6 +32,10 @@ impl Map {
         self.creatures.get(&Position::new(x, y)).is_none()
     }
 
+    pub fn get_entity_at(&self, x: i32, y: i32) -> Option<&Entity> {
+        self.creatures.get(&Position::new(x, y))
+    }
+
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
     pub fn best_manhattan_move(&self, start: Position, end: Position) -> Option<Position> {
         let mut options = [

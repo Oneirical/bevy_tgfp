@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{Hunt, Ipseity, Player},
+    creature::{DamageResult, Hunt, Ipseity, Player, Soulless},
     input::InputDelay,
     map::Map,
     OrdDir, Position,
@@ -18,6 +18,7 @@ impl Plugin for EventPlugin {
         app.add_systems(Update, player_step);
         app.add_systems(Update, teleport_entity);
         app.add_systems(Update, end_turn);
+        app.add_systems(Update, repression_damage);
     }
 }
 
@@ -94,6 +95,7 @@ fn end_turn(
 
 fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
+    mut melee_attack: EventWriter<RepressionDamage>,
     mut creature: Query<&mut Position>,
     mut map: ResMut<Map>,
 ) {
@@ -102,7 +104,12 @@ fn teleport_entity(
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
         if !map.is_empty(event.destination.x, event.destination.y) {
-            // TODO: Raise a collision event here.
+            melee_attack.send(RepressionDamage {
+                damage: 1,
+                entity: *map
+                    .get_entity_at(event.destination.x, event.destination.y)
+                    .unwrap(),
+            });
             continue;
         }
 
@@ -111,10 +118,18 @@ fn teleport_entity(
     }
 }
 
-fn repression_damage(mut events: EventReader<RepressionDamage>, mut ipseity: Query<&mut Ipseity>) {
+fn repression_damage(
+    mut commands: Commands,
+    mut events: EventReader<RepressionDamage>,
+    mut ipseity: Query<&mut Ipseity>,
+) {
     for event in events.read() {
         let mut ipseity = ipseity
-            .get(event.entity)
+            .get_mut(event.entity)
             .expect("A RepressionDamage was given an invalid entity");
+        if ipseity.harvest_random_souls(event.damage) == DamageResult::Drained {
+            // This creature can't take any more damage!
+            commands.entity(event.entity).insert(Soulless);
+        }
     }
 }
