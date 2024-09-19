@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{Creature, DamageResult, Hunt, Ipseity, Player, Soul, Soulless, Species},
-    graphics::{AnimationOffset, Scale, SpriteSheetAtlas},
+    graphics::{AnimationOffset, PlaceEffect, Scale, SpriteSheetAtlas, VisualEffectType},
     input::InputDelay,
     map::Map,
     OrdDir, Position,
@@ -19,11 +19,13 @@ impl Plugin for EventPlugin {
         app.add_event::<EndTurn>();
         app.add_event::<RepressionDamage>();
         app.add_event::<BuildRoom>();
+        app.add_event::<OpenDoor>();
         app.add_systems(Update, player_step);
         app.add_systems(Update, teleport_entity);
         app.add_systems(Update, end_turn);
         app.add_systems(Update, repression_damage);
         app.add_systems(Update, build_room_from_airlock);
+        app.add_systems(Update, open_door);
     }
 }
 
@@ -45,6 +47,11 @@ struct RepressionDamage {
 struct BuildRoom {
     direction: OrdDir,
     position: Position,
+}
+
+#[derive(Event)]
+struct OpenDoor {
+    entity: Entity,
 }
 
 #[derive(Event)]
@@ -108,18 +115,17 @@ fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut melee_attack: EventWriter<RepressionDamage>,
     mut build_room: EventWriter<BuildRoom>,
+    mut door_opener: EventWriter<OpenDoor>,
     mut creature: Query<(&mut Position, &mut AnimationOffset)>,
     species: Query<&Species>,
     mut map: ResMut<Map>,
     scale: Res<Scale>,
-
-    mut commands: Commands,
 ) {
     for event in events.read() {
         let (mut creature_position, mut creature_anim) = creature
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
-        if !map.is_empty(event.destination.x, event.destination.y) {
+        if !map.is_passable(event.destination.x, event.destination.y) {
             // Check the type of the collided entity.
             let collided_entity = *map
                 .get_entity_at(event.destination.x, event.destination.y)
@@ -129,6 +135,9 @@ fn teleport_entity(
                 build_room.send(BuildRoom {
                     direction: *orientation,
                     position: Position::new(event.destination.x, event.destination.y),
+                });
+                door_opener.send(OpenDoor {
+                    entity: collided_entity,
                 });
                 continue;
             }
@@ -172,6 +181,43 @@ fn repression_damage(
     }
 }
 
+fn open_door(
+    mut events: EventReader<OpenDoor>,
+    mut effect_place: EventWriter<PlaceEffect>,
+    mut query: Query<(&mut Visibility, &Position, &Species)>,
+    mut map: ResMut<Map>,
+) {
+    for event in events.read() {
+        let (mut door_vis, door_pos, door_species) = query.get_mut(event.entity).unwrap();
+        *door_vis = Visibility::Hidden;
+        map.make_entity_passable(event.entity);
+        let orientation = if let Species::Airlock { orientation } = door_species {
+            orientation
+        } else {
+            panic!("Something that isn't a door is being opened!");
+        };
+        let pane_set = match orientation {
+            OrdDir::Up | OrdDir::Down => [
+                Position::new(door_pos.x + 1, door_pos.y),
+                Position::new(door_pos.x - 1, door_pos.y),
+            ],
+            OrdDir::Left | OrdDir::Right => [
+                Position::new(door_pos.x, door_pos.y + 1),
+                Position::new(door_pos.x, door_pos.y - 1),
+            ],
+        };
+        for pane in pane_set {
+            effect_place.send(PlaceEffect {
+                position: pane,
+                effect_type: VisualEffectType::SlidingDoor {
+                    orientation: *orientation,
+                    source_door: *door_pos,
+                },
+            });
+        }
+    }
+}
+
 fn build_room_from_airlock(
     scale: Res<Scale>,
     mut commands: Commands,
@@ -196,7 +242,7 @@ fn build_room_from_airlock(
                 OrdDir::Right => position.shift(0, -4),
             }
             // Do not build if it would overlap with the access wall.
-            if map.get_entity_at(position.x, position.y).is_some() {
+            if !map.is_empty(position.x, position.y) {
                 continue;
             }
             let (index, species) = match tile_char {

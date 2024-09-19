@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 
 use crate::{creature::Player, OrdDir, Position};
@@ -13,6 +15,7 @@ impl Plugin for GraphicsPlugin {
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
         app.add_systems(Update, decay_animation_offsets);
+        app.add_systems(Update, place_effect);
     }
 }
 
@@ -23,14 +26,86 @@ pub struct Scale {
 }
 
 #[derive(Event)]
-struct PlaceEffect {
-    effect_type: VisualEffect,
-    position: Position,
+pub struct PlaceEffect {
+    pub position: Position,
+    pub effect_type: VisualEffectType,
 }
 
-#[derive(Component)]
-pub enum VisualEffect {
-    SlidingDoor { orientation: OrdDir },
+#[derive(Bundle)]
+pub struct VisualEffect {
+    position: Position,
+    effect_type: VisualEffectType,
+    sprite: SpriteBundle,
+    atlas: TextureAtlas,
+}
+
+#[derive(Component, Clone, Copy)]
+pub enum VisualEffectType {
+    SlidingDoor {
+        orientation: OrdDir,
+        source_door: Position,
+    },
+}
+
+fn match_effect_with_sprite(effect: VisualEffectType) -> usize {
+    match effect {
+        VisualEffectType::SlidingDoor {
+            orientation: _,
+            source_door: _,
+        } => 17,
+    }
+}
+
+fn place_effect(
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    mut events: EventReader<PlaceEffect>,
+    mut commands: Commands,
+    scale: Res<Scale>,
+) {
+    for event in events.read() {
+        let mut transform = Transform::from_scale(Vec3::new(scale.tile_size, scale.tile_size, 0.));
+        transform.translation.z = -1.0;
+        let new_effect = commands
+            .spawn(VisualEffect {
+                position: event.position,
+                effect_type: event.effect_type,
+                sprite: SpriteBundle {
+                    texture: asset_server.load("spritesheet.png"),
+                    transform,
+                    ..default()
+                },
+                atlas: TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: match_effect_with_sprite(event.effect_type),
+                },
+            })
+            .id();
+        match event.effect_type {
+            VisualEffectType::SlidingDoor {
+                orientation,
+                source_door,
+            } => {
+                commands.entity(new_effect).insert((
+                    AnimationOffset::from_tile(
+                        source_door.x - event.position.x,
+                        source_door.y - event.position.y,
+                        scale.tile_size,
+                    ),
+                    Transform {
+                        translation: transform.translation,
+                        scale: transform.translation,
+                        rotation: match orientation {
+                            OrdDir::Down => Quat::from_rotation_z(0.),
+                            OrdDir::Right => Quat::from_rotation_z(PI / 2.),
+                            OrdDir::Up => Quat::from_rotation_z(PI),
+                            OrdDir::Left => Quat::from_rotation_z(3. * PI / 2.),
+                        },
+                    },
+                ));
+            }
+        }
+    }
 }
 
 /// The pixels offsetting a creature from its real position.

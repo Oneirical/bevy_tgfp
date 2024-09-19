@@ -15,6 +15,7 @@ impl Plugin for MapPlugin {
         app.insert_resource(Map {
             creatures: HashMap::new(),
             positions: HashMap::new(),
+            passable: HashMap::new(),
         });
         app.add_systems(Startup, spawn_player);
         app.add_systems(Startup, spawn_seed);
@@ -26,17 +27,34 @@ impl Plugin for MapPlugin {
 #[derive(Resource, Clone)]
 pub struct Map {
     pub creatures: HashMap<Position, Entity>,
+    pub passable: HashMap<Position, Entity>,
     pub positions: HashMap<Entity, Position>,
 }
 
 impl Map {
-    /// Is this tile empty?
+    /// Is this tile passable?
+    pub fn is_passable(&self, x: i32, y: i32) -> bool {
+        self.creatures.get(&Position::new(x, y)).is_none()
+    }
+
+    /// Is this tile really empty, with not even intangible creatures?
     pub fn is_empty(&self, x: i32, y: i32) -> bool {
         self.creatures.get(&Position::new(x, y)).is_none()
+            && self.passable.get(&Position::new(x, y)).is_none()
     }
 
     pub fn get_entity_at(&self, x: i32, y: i32) -> Option<&Entity> {
         self.creatures.get(&Position::new(x, y))
+    }
+
+    pub fn make_entity_passable(&mut self, entity: Entity) {
+        if let Some(pos) = self.positions.get(&entity) {
+            self.passable.insert(*pos, entity);
+            self.creatures.remove(pos);
+            self.positions.remove(&entity);
+        } else {
+            panic!("Map attempted to clear out an already cleared entity.");
+        }
     }
 
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
@@ -52,7 +70,7 @@ impl Map {
         let best_move = options
             .iter()
             // Only keep either the destination or unblocked tiles.
-            .filter(|&p| *p == end || self.is_empty(p.x, p.y))
+            .filter(|&p| *p == end || self.is_passable(p.x, p.y))
             .next();
 
         //FIXME Dereferencing the inner part here seems a little janky. There might be a better way.
@@ -130,7 +148,7 @@ fn spawn_player(
 /// Newly spawned creatures earn their place in the HashMap.
 fn displace_creatures(
     mut map: ResMut<Map>,
-    displaced_creatures: Query<(Entity, &Position), Added<Position>>,
+    displaced_creatures: Query<(Entity, &Position), (With<Species>, Added<Position>)>,
 ) {
     for (entity, position) in displaced_creatures.iter() {
         map.creatures.insert(*position, entity);
