@@ -59,3 +59,8 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 - Avatar Heavy Containment. A special boss representing a certain Identity with very high threat. (Ataixa, Anisychia, Rose...)
 - 
 
+
+
+# Ideas
+
+- Spawn all new room tiles "moving from" a main "reality generator" room.

@@ -33,6 +33,13 @@ impl AnimationOffset {
         AnimationOffset { x: 0., y: 0. }
     }
 
+    pub fn from_tile(x: i32, y: i32, tile_scale: f32) -> Self {
+        AnimationOffset {
+            x: x as f32 * 16. * tile_scale,
+            y: y as f32 * 16. * tile_scale,
+        }
+    }
+
     pub fn decay(&mut self) {
         self.x = bring_closer_to_zero(self.x);
         self.y = bring_closer_to_zero(self.y);
@@ -51,7 +58,7 @@ impl AnimationOffset {
 
 fn bring_closer_to_zero(value: f32) -> f32 {
     let abs_value = value.abs();
-    let adjustment = 0.1 * abs_value + 0.3;
+    let adjustment = 0.2 * abs_value + 0.3;
 
     if value > 0.0 {
         (value - adjustment).max(0.0)

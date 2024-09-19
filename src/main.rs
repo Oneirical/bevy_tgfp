@@ -18,7 +18,7 @@ fn main() {
         .run();
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum OrdDir {
     Up,
     Right,

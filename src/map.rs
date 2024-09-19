@@ -1,8 +1,11 @@
+use std::f32::consts::PI;
+
 use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
-    creature::{Creature, Hunt, Ipseity, Player, Soul},
+    creature::{Creature, Hunt, Ipseity, Player, Soul, Species},
     graphics::{AnimationOffset, Scale, SpriteSheetAtlas},
+    OrdDir,
 };
 
 pub struct MapPlugin;
@@ -92,6 +95,10 @@ impl Position {
     pub fn update(&mut self, x: i32, y: i32) {
         (self.x, self.y) = (x, y);
     }
+
+    pub fn shift(&mut self, dx: i32, dy: i32) {
+        (self.x, self.y) = (self.x + dx, self.y + dy);
+    }
 }
 
 fn spawn_player(
@@ -114,6 +121,7 @@ fn spawn_player(
             },
             ipseity: Ipseity::new(&[(Soul::Saintly, 2), (Soul::Ordered, 2), (Soul::Artistic, 2)]),
             animation: AnimationOffset::new(),
+            species: Species::Terminal,
         },
         Player,
     ));
@@ -136,25 +144,55 @@ fn spawn_seed(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
-    let seed = "##########S......##.......##.......##.......##.......##.......##.......##########";
+    let seed = "####V#####.......##.......##.......#<.......>#.......##.......##.......#####^####";
     for (idx, tile_char) in seed.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
-        let index = match tile_char {
-            '#' => 3,
-            'S' => 4,
+        let (index, species) = match tile_char {
+            '#' => (3, Species::Wall),
+            'S' => (4, Species::Scion),
+            'V' => (
+                17,
+                Species::Airlock {
+                    orientation: crate::OrdDir::Down,
+                },
+            ),
+            '^' => (
+                17,
+                Species::Airlock {
+                    orientation: crate::OrdDir::Up,
+                },
+            ),
+            '<' => (
+                17,
+                Species::Airlock {
+                    orientation: crate::OrdDir::Left,
+                },
+            ),
+            '>' => (
+                17,
+                Species::Airlock {
+                    orientation: crate::OrdDir::Right,
+                },
+            ),
             '.' => continue,
             _ => panic!(),
         };
+        let mut transform = Transform::from_scale(Vec3::new(scale.tile_size, scale.tile_size, 0.));
+        if let Species::Airlock { orientation } = species {
+            match orientation {
+                OrdDir::Down => transform.rotate_z(0.),
+                OrdDir::Right => transform.rotate_z(PI / 2.),
+                OrdDir::Up => transform.rotate_z(PI),
+                OrdDir::Left => transform.rotate_z(3. * PI / 2.),
+            }
+        }
+
         let id = commands
-            .spawn(Creature {
+            .spawn((Creature {
                 position,
                 sprite: SpriteBundle {
                     texture: asset_server.load("spritesheet.png"),
-                    transform: Transform::from_scale(Vec3::new(
-                        scale.tile_size,
-                        scale.tile_size,
-                        0.,
-                    )),
+                    transform,
                     ..default()
                 },
                 atlas: TextureAtlas {
@@ -163,7 +201,8 @@ fn spawn_seed(
                 },
                 ipseity: Ipseity::new(&[(Soul::Immutable, 1)]),
                 animation: AnimationOffset::new(),
-            })
+                species,
+            },))
             .id();
         // TODO If it's a scion, add Hunt
         if index == 4 {

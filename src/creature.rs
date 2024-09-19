@@ -5,6 +5,7 @@ use rand::Rng;
 
 use crate::graphics::AnimationOffset;
 use crate::map::Position;
+use crate::OrdDir;
 
 /// Marker for the player
 #[derive(Component)]
@@ -116,9 +117,18 @@ pub enum Soul {
 #[derive(Component)]
 pub struct Hunt;
 
+#[derive(Component, PartialEq, Eq)]
+pub enum Species {
+    Terminal,
+    Wall,
+    Scion,
+    Airlock { orientation: OrdDir },
+}
+
 #[derive(Bundle)]
 pub struct Creature {
     pub position: Position,
+    pub species: Species,
     pub sprite: SpriteBundle,
     pub atlas: TextureAtlas,
     pub ipseity: Ipseity,
