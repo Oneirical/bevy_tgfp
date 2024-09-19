@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{creature::Player, Position};
+use crate::{creature::Player, OrdDir, Position};
 
 pub struct GraphicsPlugin;
 
@@ -9,6 +9,7 @@ impl Plugin for GraphicsPlugin {
         app.init_resource::<SpriteSheetAtlas>();
         app.insert_resource(Scale { tile_size: 3. });
         app.insert_resource(Msaa::Off);
+        app.add_event::<PlaceEffect>();
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
         app.add_systems(Update, decay_animation_offsets);
@@ -19,6 +20,17 @@ impl Plugin for GraphicsPlugin {
 #[derive(Resource)]
 pub struct Scale {
     pub tile_size: f32,
+}
+
+#[derive(Event)]
+struct PlaceEffect {
+    effect_type: VisualEffect,
+    position: Position,
+}
+
+#[derive(Component)]
+pub enum VisualEffect {
+    SlidingDoor { orientation: OrdDir },
 }
 
 /// The pixels offsetting a creature from its real position.
@@ -94,11 +106,13 @@ fn decay_animation_offsets(mut creatures: Query<&mut AnimationOffset>) {
 
 /// Adjust every entity's display location to be offset according to the player.
 fn adjust_transforms(
-    player: Query<(&Position, &AnimationOffset), With<Player>>,
+    mut player: Query<(&Position, &AnimationOffset, &mut Transform), With<Player>>,
     scale: Res<Scale>,
     mut npcs: Query<(&Position, &mut Transform, &AnimationOffset), Without<Player>>,
 ) {
-    let (player_pos, player_anim) = player.get_single().expect("0 or 2+ players");
+    let (player_pos, player_anim, mut player_tran) =
+        player.get_single_mut().expect("0 or 2+ players");
+    player_tran.scale = Vec3::new(scale.tile_size, scale.tile_size, 0.);
     let (px, py) = (player_pos.x, player_pos.y);
     for (npc_pos, mut npc_tran, npc_anim) in npcs.iter_mut() {
         let (off_x, off_y) = (npc_pos.x - px, npc_pos.y - py);
@@ -106,6 +120,7 @@ fn adjust_transforms(
             off_x as f32 * scale.tile_size * 16. + npc_anim.x - player_anim.x,
             off_y as f32 * scale.tile_size * 16. + npc_anim.y - player_anim.y,
         );
+        npc_tran.scale = Vec3::new(scale.tile_size, scale.tile_size, 0.);
     }
 }
 

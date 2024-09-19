@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use std::time::Duration;
 
-use crate::{events::PlayerStep, OrdDir};
+use crate::{events::PlayerStep, graphics::Scale, OrdDir};
 
 pub struct InputPlugin;
 
@@ -26,6 +26,8 @@ fn keyboard_input(
     mut delay: ResMut<InputDelay>,
     mut events: EventWriter<PlayerStep>,
     input: Res<ButtonInput<KeyCode>>,
+
+    mut scale: ResMut<Scale>,
 ) {
     delay.timer.tick(time.delta());
     if !delay.timer.finished() {
@@ -51,5 +53,12 @@ fn keyboard_input(
         events.send(PlayerStep {
             direction: OrdDir::Down,
         });
+    }
+
+    if input.just_pressed(KeyCode::KeyO) {
+        scale.tile_size -= 1.;
+    }
+    if input.just_pressed(KeyCode::KeyP) {
+        scale.tile_size += 1.;
     }
 }
