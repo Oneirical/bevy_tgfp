@@ -2,7 +2,7 @@ use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
     creature::{Creature, Hunt, Ipseity, Player, Soul},
-    graphics::{Scale, SpriteSheetAtlas},
+    graphics::{AnimationOffset, Scale, SpriteSheetAtlas},
 };
 
 pub struct MapPlugin;
@@ -113,6 +113,7 @@ fn spawn_player(
                 index: 0,
             },
             ipseity: Ipseity::new(&[(Soul::Saintly, 2), (Soul::Ordered, 2), (Soul::Artistic, 2)]),
+            animation: AnimationOffset::new(),
         },
         Player,
     ));
@@ -161,6 +162,7 @@ fn spawn_seed(
                     index,
                 },
                 ipseity: Ipseity::new(&[(Soul::Immutable, 1)]),
+                animation: AnimationOffset::new(),
             })
             .id();
         // TODO If it's a scion, add Hunt

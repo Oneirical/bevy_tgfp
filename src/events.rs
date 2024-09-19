@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{DamageResult, Hunt, Ipseity, Player, Soulless},
+    graphics::{AnimationOffset, Scale},
     input::InputDelay,
     map::Map,
     OrdDir, Position,
@@ -96,11 +97,12 @@ fn end_turn(
 fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut melee_attack: EventWriter<RepressionDamage>,
-    mut creature: Query<&mut Position>,
+    mut creature: Query<(&mut Position, &mut AnimationOffset)>,
     mut map: ResMut<Map>,
+    scale: Res<Scale>,
 ) {
     for event in events.read() {
-        let mut creature_position = creature
+        let (mut creature_position, mut creature_anim) = creature
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
         if !map.is_empty(event.destination.x, event.destination.y) {
@@ -110,9 +112,19 @@ fn teleport_entity(
                     .get_entity_at(event.destination.x, event.destination.y)
                     .unwrap(),
             });
+            creature_anim.initiate_offset_f32(
+                (creature_position.x - event.destination.x) as f32 * -0.3,
+                (creature_position.y - event.destination.y) as f32 * -0.3,
+                scale.tile_size,
+            );
             continue;
         }
 
+        creature_anim.initiate_offset(
+            creature_position.x - event.destination.x,
+            creature_position.y - event.destination.y,
+            scale.tile_size,
+        );
         map.update_map(event.entity, creature_position.clone(), event.destination);
         creature_position.update(event.destination.x, event.destination.y);
     }

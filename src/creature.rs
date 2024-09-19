@@ -1,7 +1,9 @@
+use bevy::asset::meta::AssetActionMinimal;
 use bevy::{prelude::*, utils::HashMap};
 use rand::seq::IteratorRandom;
 use rand::Rng;
 
+use crate::graphics::AnimationOffset;
 use crate::map::Position;
 
 /// Marker for the player
@@ -120,4 +122,5 @@ pub struct Creature {
     pub sprite: SpriteBundle,
     pub atlas: TextureAtlas,
     pub ipseity: Ipseity,
+    pub animation: AnimationOffset,
 }
