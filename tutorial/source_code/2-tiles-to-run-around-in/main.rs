@@ -33,6 +33,11 @@ impl Position {
     pub fn update(&mut self, x: i32, y: i32) {
         (self.x, self.y) = (x, y);
     }
+
+    /// Shift the position by a delta.
+    pub fn shift(&mut self, dx: i32, dy: i32) {
+        (self.x, self.y) = (self.x + dx, self.y + dy);
+    }
 }
 
 #[derive(Bundle)]
