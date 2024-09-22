@@ -80,7 +80,7 @@ impl Map {
             // Only keep either the destination or unblocked tiles.
             .filter(|&p| *p == end || self.is_passable(p.x, p.y))
             // Remove the borrow.
-            .map(|p| *p)
+            .copied()
             // Get the tile that manages to close the most distance to the destination.
             // If it exists, that is. Otherwise, this is just a None.
             .next()
