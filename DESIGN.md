@@ -66,3 +66,8 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 - Make it so entities are invisible for 1 frame until the adjust_transforms function picks them up.
 
 - Spawn all new room tiles "moving from" a main "reality generator" room.
+
+# Tutorial
+
+- Mention the unwieldiness of Events with 1-frame delay.
+- A Gimp tutorial for the spritesheet, inspired by the broughlike one.
