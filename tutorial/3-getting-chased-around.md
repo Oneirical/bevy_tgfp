@@ -99,7 +99,7 @@ fn main() {
 }
 ```
 
-Note that this reorganization comes with the necessity of many import (`use`) statements. In the future of this tutorial, inter-file imports will no longer be represented in the code snippets. `rust-analyzer` offers auto-importing of unimported items as a code action, and compiler errors for this particular issue are clear and offer precise suggestions.
+Note that this reorganization comes with the necessity of many import (`use`) statements. In the future of this tutorial, inter-file imports will no longer be represented in the code snippets. `rust-analyzer` offers auto-importing of unimported items as a code action, and compiler errors for this particular issue are clear and offer precise suggestions. Also remember to clean as you go, and remove unused imports marked by warnings.
 
 I have organized the rest of the Part 2 components, bundles, systems and resources in the following way:
 
@@ -137,6 +137,29 @@ fn main() {
 ```
 
 Note the tuple in the second `add_plugins̀`. Just as it was shown in Part 2 for `commands.spawn()`, many Bevy functions can take either a single item or a tuple of items as an argument!
+
+Compile everything with `cargo run` to make sure all is neat and proper, and to fix potential still-private or unimported structs/struct fields.
+
+If it works, you may notice strange black lines on the periphery of the walls:
+
+TODO image
+
+This can happen when working with a 2D spritesheet in Bevy. To fix it, disable Multi Sample Anti-aliasing:
+
+```rust
+impl Plugin for GraphicsPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SpriteSheetAtlas>();
+        app.insert_resource(Msaa::Off); // NEW!
+        app.add_systems(Startup, setup_camera);
+        app.add_systems(Update, adjust_transforms);
+    }
+}
+```
+
+TODO image
+
+Much better. If you'd like to see how the fully reorganized code looks like, check in [`tutorial/source_code/3-getting-chased-around/3.1-reorganized`](TODO).
 
 # Detecting the Happening of Things - Events
 
@@ -177,7 +200,7 @@ fn dispense_functions(
     mut commands: Commands,
     mut current_crea_display: ResMut<CurrentEntityInUI>,
     texture_atlas_handle: Res<SpriteSheetHandle>,
-){
+){ /* endless misery */ }
 ```
 
 Yes, this is a real function, from one of my old (and bad) Bevy projects. We wish to avoid this. Enter: `Event`s!
@@ -208,6 +231,12 @@ mod events; // NEW!
 mod graphics;
 mod input;
 mod map;
+
+use bevy::prelude::*;
+use events::EventPlugin; // NEW!
+use graphics::GraphicsPlugin;
+use input::InputPlugin;
+use map::MapPlugin;
 
 fn main() {
     App::new()
@@ -452,12 +481,20 @@ This Hunter also earns itself a separate sprite:
 let position = Position::new(idx as i32 % 9, idx as i32 / 9);
 let index = match tile_char {
     '#' => 3,
-    'H' => 4,
+    'H' => 4, // NEW!
     _ => continue,
 };
 ```
 
-And the ability to be differentiated from walls, with a new `Hunt` component.
+And the ability to be differentiated from walls, with a new `Hunt` component...
+
+```rust
+// creature.rs
+#[derive(Component)]
+pub struct Hunt;
+```
+
+...added to any 'H' character in the initial spawn function.
 
 ```rust
 // map.rs, spawn_cage
@@ -476,12 +513,6 @@ let mut creature = commands.spawn(Creature { // CHANGED - note the variable assi
 if tile_char == 'H' {
     creature.insert(Hunt);
 }
-```
-
-```rust
-// creature.rs
-#[derive(Component)]
-pub struct Hunt;
 ```
 
 `cargo run`, and our new companion is here. Excellent. Now, to give it motion of its own...
@@ -610,10 +641,11 @@ impl Map {
             .iter()
             // Only keep either the destination or unblocked tiles.
             .filter(|&p| *p == end || self.is_passable(p.x, p.y))
+            // Remove the borrow.
+            .map(|p| *p)
             // Get the tile that manages to close the most distance to the destination.
             // If it exists, that is. Otherwise, this is just a None.
             .next()
-            .clone()
     }
 }
 ```
@@ -658,7 +690,7 @@ fn player_step(
 
 TODO gif
 
-There is only the slight issue that our Hunter is rather on the incorporeal side of things. Indeed, as it moves, the Map fails to update and the Hunter is still considered to have phantasmatically remained in its spawn location.
+There is only the slight issue that our Hunter is rather on the incorporeal side of things. Indeed, as it moves, the Map fails to update and the Hunter is still considered to have phantasmatically remained in its spawn location. Not to mention that the centre of the cage, where we spawned, is also mysteriously blocked by an invisible wall.
 
 [//]: # (This part is really weird. Maybe there is a more elegant, Bevy specific way to do this.)
 
@@ -684,8 +716,8 @@ fn teleport_entity(
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
         if map.is_passable(event.destination.x, event.destination.y) {
+            map.move_creature(*creature_position, event.destination); // NEW!
             creature_position.update(event.destination.x, event.destination.y);
-            map.update_map(event.entity, event.destination); // NEW!
         } else {
             continue;
         }
@@ -693,16 +725,18 @@ fn teleport_entity(
 }
 ```
 
-`map.update_map` is a new `impl Map` function.
+`map.move_creature` is a new `impl Map` function.
 
 ```rust
 // map.rs
 impl Map {
-    pub fn update_map(&mut self, entity: Entity, new_pos: Position) {
-        // If the entity already existed in the Map's records, remove it.
-        if let Some(old_pos) = self.positions.get(&entity) {
-            self.creatures.remove(&old_pos);
-        }
+    /// Move a pre-existing entity around the Map.
+    pub fn move_creature(&mut self, old_pos: Position, new_pos: Position) {
+        // As the entity already existed in the Map's records, remove it.
+        let entity = self.creatures.remove(&old_pos).expect(&format!(
+            "The map cannot move a nonexistent Entity from {:?} to {:?}.",
+            old_pos, new_pos
+        ));
         self.creatures.insert(new_pos, entity);
     }
 }
@@ -712,4 +746,4 @@ And with that, everything is going according to plan.
 
 TODO gif
 
-The next chapter of this tutorial will introduce violence, as well as a cleaner way to generate the starting map, free of mega one-line `"#####H....#####"̀`-style strings and match statements!
+The next chapter of this tutorial will introduce basic animation, as well as a cleaner way to generate the starting map, free of mega one-line `"#####H....#####"̀`-style strings and match statements!

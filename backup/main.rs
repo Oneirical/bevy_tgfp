@@ -1,14 +1,15 @@
+use bevy::prelude::*;
+use events::EventPlugin;
+use graphics::GraphicsPlugin;
+use input::InputPlugin;
+use map::{MapPlugin, Position};
+
 mod creature;
 mod events;
 mod graphics;
 mod input;
 mod map;
-
-use bevy::prelude::*;
-use events::EventPlugin;
-use graphics::GraphicsPlugin;
-use input::InputPlugin;
-use map::MapPlugin;
+mod tests;
 
 fn main() {
     App::new()

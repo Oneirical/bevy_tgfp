@@ -12,6 +12,3 @@ pub struct Creature {
 /// Marker for the player
 #[derive(Component)]
 pub struct Player;
-
-#[derive(Component)]
-pub struct Hunt;
