@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{Hunt, Player},
+    graphics::VisualOffset,
     map::{Map, Position},
     OrdDir,
 };
@@ -70,6 +71,7 @@ fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<&mut Position>,
     mut map: ResMut<Map>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
         let mut creature_position = creature
@@ -80,6 +82,13 @@ fn teleport_entity(
         if map.is_passable(event.destination.x, event.destination.y) {
             // ...update the Map to reflect this...
             map.move_creature(*creature_position, event.destination);
+            // ...grant it a sliding animation...
+            commands
+                .entity(event.entity)
+                .insert(VisualOffset::from_tile_displacement(
+                    *creature_position,
+                    event.destination,
+                ));
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
         } else {
