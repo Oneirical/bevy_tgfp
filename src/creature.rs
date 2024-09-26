@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 
-use crate::map::Position;
+use crate::{map::Position, OrdDir};
 
 #[derive(Bundle)]
 pub struct Creature {
     pub position: Position,
+    pub momentum: OrdDir,
     pub sprite: SpriteBundle,
     pub atlas: TextureAtlas,
 }

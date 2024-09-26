@@ -3,6 +3,7 @@ use bevy::{prelude::*, utils::HashMap};
 use crate::{
     creature::{Creature, Hunt, Player},
     graphics::SpriteSheetAtlas,
+    OrdDir,
 };
 
 pub struct MapPlugin;
@@ -129,6 +130,7 @@ fn spawn_player(
                 layout: atlas_layout.handle.clone(),
                 index: 0,
             },
+            momentum: OrdDir::Up,
         },
         Player,
     ));
@@ -158,6 +160,7 @@ fn spawn_cage(
                 layout: atlas_layout.handle.clone(),
                 index,
             },
+            momentum: OrdDir::Up,
         });
         if tile_char == 'H' {
             creature.insert(Hunt);

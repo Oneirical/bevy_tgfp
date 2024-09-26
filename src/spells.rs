@@ -12,15 +12,15 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
         app.add_event::<SpellEffect>();
-        app.add_systems(Update, dispatch_events);
         app.add_systems(Update, gather_effects);
+        app.add_systems(Update, dispatch_events);
     }
 }
 
 #[derive(Event)]
 pub struct CastSpell {
-    caster: Entity,
-    spell: Entity,
+    pub caster: Entity,
+    pub spell: Spell,
 }
 
 #[derive(Event)]
@@ -30,7 +30,7 @@ pub struct SpellEffect {
 
 #[derive(Component)]
 pub struct Spell {
-    axioms: Vec<Axiom>,
+    pub axioms: Vec<Axiom>,
 }
 
 pub enum EventDispatch {
@@ -98,12 +98,11 @@ impl SynapseData {
 fn gather_effects(
     mut cast_spells: EventReader<CastSpell>,
     mut sender: EventWriter<SpellEffect>,
-    synapse: Query<&Spell>,
     caster: Query<(&Position, &OrdDir)>,
     map: Res<Map>,
 ) {
     for cast_spell in cast_spells.read() {
-        let axioms = &synapse.get(cast_spell.spell).unwrap().axioms;
+        let axioms = &cast_spell.spell.axioms;
         let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
 
         let mut synapse_data =
@@ -157,7 +156,7 @@ impl Axiom {
                 // Get the penultimate tile, aka the last passable tile in the beam's path.
                 let destination_tile = artifical_synapse
                     .targets
-                    .get(artifical_synapse.targets.len() - 2);
+                    .get(artifical_synapse.targets.len().wrapping_sub(2));
                 // If that penultimate tile existed, teleport to it.
                 if let Some(destination_tile) = destination_tile {
                     synapse_data.effects.push(EventDispatch::TeleportEntity {
