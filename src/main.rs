@@ -3,21 +3,29 @@ mod events;
 mod graphics;
 mod input;
 mod map;
+mod spells;
 
 use bevy::prelude::*;
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;
 use map::MapPlugin;
+use spells::SpellPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .add_plugins((EventPlugin, GraphicsPlugin, MapPlugin, InputPlugin))
+        .add_plugins((
+            SpellPlugin,
+            EventPlugin,
+            GraphicsPlugin,
+            MapPlugin,
+            InputPlugin,
+        ))
         .run();
 }
 
-#[derive(PartialEq, Eq, Copy, Clone, Debug)]
+#[derive(Component, PartialEq, Eq, Copy, Clone, Debug)]
 pub enum OrdDir {
     Up,
     Right,

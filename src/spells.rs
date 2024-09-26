@@ -1,0 +1,172 @@
+use bevy::prelude::*;
+
+use crate::{
+    events::TeleportEntity,
+    map::{Map, Position},
+    OrdDir,
+};
+
+pub struct SpellPlugin;
+
+impl Plugin for SpellPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<CastSpell>();
+        app.add_event::<SpellEffect>();
+        app.add_systems(Update, dispatch_events);
+        app.add_systems(Update, gather_effects);
+    }
+}
+
+#[derive(Event)]
+pub struct CastSpell {
+    caster: Entity,
+    spell: Entity,
+}
+
+#[derive(Event)]
+pub struct SpellEffect {
+    events: Vec<EventDispatch>,
+}
+
+#[derive(Component)]
+pub struct Spell {
+    axioms: Vec<Axiom>,
+}
+
+pub enum EventDispatch {
+    TeleportEntity {
+        destination: Position,
+        entity: Entity,
+    },
+}
+
+pub enum Axiom {
+    // FORMS
+    Ego,
+    MomentumBeam,
+
+    // FUNCTIONS
+    Dash,
+}
+
+fn dispatch_events(
+    mut receiver: EventReader<SpellEffect>,
+    mut teleport: EventWriter<TeleportEntity>,
+) {
+    for effect_list in receiver.read() {
+        for effect in &effect_list.events {
+            match effect {
+                EventDispatch::TeleportEntity {
+                    destination,
+                    entity,
+                } => teleport.send(TeleportEntity::new(*entity, destination.x, destination.y)),
+            };
+        }
+    }
+}
+
+struct SynapseData {
+    targets: Vec<Position>,
+    effects: Vec<EventDispatch>,
+    caster: Entity,
+    caster_momentum: OrdDir,
+    caster_position: Position,
+}
+
+impl SynapseData {
+    fn new(caster: Entity, caster_momentum: OrdDir, caster_position: Position) -> Self {
+        SynapseData {
+            targets: Vec::new(),
+            effects: Vec::new(),
+            caster,
+            caster_momentum,
+            caster_position,
+        }
+    }
+
+    fn new_from_synapse(synapse: &SynapseData) -> Self {
+        SynapseData {
+            targets: Vec::new(),
+            effects: Vec::new(),
+            caster: synapse.caster,
+            caster_momentum: synapse.caster_momentum,
+            caster_position: synapse.caster_position,
+        }
+    }
+}
+
+fn gather_effects(
+    mut cast_spells: EventReader<CastSpell>,
+    mut sender: EventWriter<SpellEffect>,
+    synapse: Query<&Spell>,
+    caster: Query<(&Position, &OrdDir)>,
+    map: Res<Map>,
+) {
+    for cast_spell in cast_spells.read() {
+        let axioms = &synapse.get(cast_spell.spell).unwrap().axioms;
+        let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
+
+        let mut synapse_data =
+            SynapseData::new(cast_spell.caster, *caster_momentum, *caster_position);
+
+        for axiom in axioms {
+            // For Forms, add targets.
+            axiom.target(&mut synapse_data, &map);
+            // For Functions, add effects that operate on those targets.
+            axiom.execute(&mut synapse_data, &map);
+        }
+
+        sender.send(SpellEffect {
+            events: synapse_data.effects,
+        });
+    }
+}
+
+impl Axiom {
+    fn target(&self, synapse_data: &mut SynapseData, map: &Map) {
+        match self {
+            Self::Ego => {
+                synapse_data.targets.push(synapse_data.caster_position);
+            }
+            Self::MomentumBeam => {
+                let mut start = synapse_data.caster_position;
+                let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
+                let mut distance_travelled = 0;
+                let mut output = Vec::new();
+                while distance_travelled < 100 {
+                    distance_travelled += 1;
+                    start.shift(off_x, off_y);
+                    output.push(start);
+                    if !map.is_passable(start.x, start.y) {
+                        break;
+                    }
+                }
+                synapse_data.targets.append(&mut output);
+            }
+            _ => (),
+        }
+    }
+
+    fn execute(&self, synapse_data: &mut SynapseData, map: &Map) {
+        match self {
+            Self::Dash => {
+                // Create a fake synapse just to use a beam.
+                let mut artifical_synapse = SynapseData::new_from_synapse(&synapse_data);
+                // Fire the beam with the caster's momentum.
+                Self::MomentumBeam.target(&mut artifical_synapse, &map);
+                // Get the penultimate tile, aka the last passable tile in the beam's path.
+                let destination_tile = artifical_synapse
+                    .targets
+                    .get(artifical_synapse.targets.len() - 2);
+                // If that penultimate tile existed, teleport to it.
+                if let Some(destination_tile) = destination_tile {
+                    synapse_data.effects.push(EventDispatch::TeleportEntity {
+                        destination: *destination_tile,
+                        entity: synapse_data.caster,
+                    });
+                }
+            }
+            _ => (),
+        }
+    }
+}

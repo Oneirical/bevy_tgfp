@@ -48,6 +48,14 @@ impl VisualOffset {
         }
     }
 
+    pub fn from_tile_attack(old_pos: Position, new_pos: Position) -> Self {
+        VisualOffset {
+            x: (new_pos.x - old_pos.x) as f32 * 16.,
+            y: (new_pos.y - old_pos.y) as f32 * 16.,
+            convergence: Convergence::Zero,
+        }
+    }
+
     fn converge_to_zero(&mut self) {
         (self.x, self.y) = (
             converge_to_zero(self.x, quadratic_adjustment(self.x)),
@@ -85,7 +93,7 @@ fn converge_to_zero(value: f32, adjustment: f32) -> f32 {
 }
 
 fn quadratic_adjustment(value: f32) -> f32 {
-    value.abs() / 7. + 1.0
+    10.0
 }
 
 pub enum Convergence {

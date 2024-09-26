@@ -71,3 +71,4 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 
 - Mention the unwieldiness of Events with 1-frame delay.
 - A Gimp tutorial for the spritesheet, inspired by the broughlike one.
+- Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere.

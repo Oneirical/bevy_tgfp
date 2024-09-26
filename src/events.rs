@@ -53,13 +53,13 @@ fn player_step(
 }
 
 #[derive(Event)]
-struct TeleportEntity {
+pub struct TeleportEntity {
     destination: Position,
     entity: Entity,
 }
 
 impl TeleportEntity {
-    fn new(entity: Entity, x: i32, y: i32) -> Self {
+    pub fn new(entity: Entity, x: i32, y: i32) -> Self {
         Self {
             destination: Position::new(x, y),
             entity,
@@ -94,6 +94,12 @@ fn teleport_entity(
         } else {
             // Nothing here just yet, but this is where collisions between creatures
             // will be handled.
+            commands
+                .entity(event.entity)
+                .insert(VisualOffset::from_tile_attack(
+                    *creature_position,
+                    event.destination,
+                ));
             continue;
         }
     }
