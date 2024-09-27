@@ -12,7 +12,7 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
         app.add_event::<SpellEffect>();
-        app.add_systems(Update, gather_effects);
+        app.add_systems(Update, gather_effects.before(dispatch_events));
         app.add_systems(Update, dispatch_events);
     }
 }
@@ -55,7 +55,7 @@ pub enum Axiom {
     Dash,
 }
 
-fn dispatch_events(
+pub fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
     mut spell_chain: EventWriter<CastSpell>,

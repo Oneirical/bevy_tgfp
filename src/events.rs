@@ -4,6 +4,7 @@ use crate::{
     creature::{Hunt, Player},
     graphics::VisualOffset,
     map::{Map, Position},
+    spells::dispatch_events,
     OrdDir,
 };
 
@@ -15,8 +16,8 @@ impl Plugin for EventPlugin {
         app.add_event::<TeleportEntity>();
         app.add_event::<AlterMomentum>();
         app.add_systems(Update, player_step);
-        app.add_systems(Update, teleport_entity);
-        app.add_systems(Update, alter_momentum);
+        app.add_systems(Update, teleport_entity.after(dispatch_events));
+        app.add_systems(Update, alter_momentum.after(teleport_entity));
     }
 }
 
