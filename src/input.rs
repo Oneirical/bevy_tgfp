@@ -26,7 +26,7 @@ fn keyboard_input(
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
+                axioms: vec![Axiom::Ego, Axiom::Dash, Axiom::Circlet, Axiom::Dash],
             },
         });
     }

@@ -28,7 +28,7 @@ pub struct SpellEffect {
     events: Vec<EventDispatch>,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Spell {
     pub axioms: Vec<Axiom>,
 }
@@ -38,12 +38,18 @@ pub enum EventDispatch {
         destination: Position,
         entity: Entity,
     },
+    SpellChain {
+        caster: Entity,
+        spell: Spell,
+    },
 }
 
+#[derive(Debug, Clone)]
 pub enum Axiom {
     // FORMS
     Ego,
     MomentumBeam,
+    Circlet,
 
     // FUNCTIONS
     Dash,
@@ -52,6 +58,7 @@ pub enum Axiom {
 fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
+    mut spell_chain: EventWriter<CastSpell>,
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
@@ -59,7 +66,15 @@ fn dispatch_events(
                 EventDispatch::TeleportEntity {
                     destination,
                     entity,
-                } => teleport.send(TeleportEntity::new(*entity, destination.x, destination.y)),
+                } => {
+                    teleport.send(TeleportEntity::new(*entity, destination.x, destination.y));
+                }
+                EventDispatch::SpellChain { caster, spell } => {
+                    spell_chain.send(CastSpell {
+                        caster: *caster,
+                        spell: spell.clone(),
+                    });
+                }
             };
         }
     }
@@ -128,11 +143,22 @@ fn gather_effects(
         let mut synapse_data =
             SynapseData::new(cast_spell.caster, *caster_momentum, *caster_position);
 
-        for axiom in axioms {
+        for (i, axiom) in axioms.iter().enumerate() {
             // For Forms, add targets.
             axiom.target(&mut synapse_data, &map);
             // For Functions, add effects that operate on those targets.
-            axiom.execute(&mut synapse_data, &map);
+            // If it's actually a Function and it's not the last element, stop, dispatch events
+            // and resume later.
+            if axiom.execute(&mut synapse_data, &map) && i != axioms.len() - 1 {
+                let spell = Spell {
+                    axioms: axioms[i + 1..].to_vec(),
+                };
+                synapse_data.effects.push(EventDispatch::SpellChain {
+                    caster: synapse_data.caster,
+                    spell,
+                });
+                break;
+            }
         }
 
         sender.send(SpellEffect {
@@ -146,6 +172,44 @@ impl Axiom {
         match self {
             Self::Ego => {
                 synapse_data.targets.push(synapse_data.caster_position);
+            }
+            Self::Circlet => {
+                // TODO could be interesting to filter this by momentum so the front ones are acted on first
+                let mut circlet = vec![
+                    Position::new(
+                        synapse_data.caster_position.x + 1,
+                        synapse_data.caster_position.y + 1,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x + 1,
+                        synapse_data.caster_position.y,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x + 1,
+                        synapse_data.caster_position.y - 1,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x,
+                        synapse_data.caster_position.y + 1,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x,
+                        synapse_data.caster_position.y - 1,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x - 1,
+                        synapse_data.caster_position.y + 1,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x - 1,
+                        synapse_data.caster_position.y,
+                    ),
+                    Position::new(
+                        synapse_data.caster_position.x - 1,
+                        synapse_data.caster_position.y - 1,
+                    ),
+                ];
+                synapse_data.targets.append(&mut circlet);
             }
             Self::MomentumBeam => {
                 let mut start = synapse_data.caster_position;
@@ -166,7 +230,8 @@ impl Axiom {
         }
     }
 
-    fn execute(&self, synapse_data: &mut SynapseData, map: &Map) {
+    /// Execute Function-type Axioms. Returns true if this produced an actual effect.
+    fn execute(&self, synapse_data: &mut SynapseData, map: &Map) -> bool {
         match self {
             Self::Dash => {
                 for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
@@ -189,8 +254,9 @@ impl Axiom {
                         });
                     }
                 }
+                true
             }
-            _ => (),
+            _ => false,
         }
     }
 }
