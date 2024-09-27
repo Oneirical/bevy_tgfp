@@ -11,7 +11,15 @@ impl Plugin for GraphicsPlugin {
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
         app.add_systems(Update, decay_offsets);
+        app.init_state::<GameState>();
     }
+}
+
+#[derive(States, Default, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GameState {
+    #[default]
+    Running,
+    Animating,
 }
 
 #[derive(Resource)]
@@ -36,6 +44,8 @@ impl FromWorld for SpriteSheetAtlas {
 pub struct VisualOffset {
     x: f32,
     y: f32,
+    original_x: f32,
+    original_y: f32,
     convergence: Convergence,
 }
 
@@ -44,6 +54,8 @@ impl VisualOffset {
         VisualOffset {
             x: (old_pos.x - new_pos.x) as f32 * 64.,
             y: (old_pos.y - new_pos.y) as f32 * 64.,
+            original_x: (old_pos.x - new_pos.x) as f32 * 64.,
+            original_y: (old_pos.y - new_pos.y) as f32 * 64.,
             convergence: Convergence::Zero,
         }
     }
@@ -52,21 +64,23 @@ impl VisualOffset {
         VisualOffset {
             x: (new_pos.x - old_pos.x) as f32 * 16.,
             y: (new_pos.y - old_pos.y) as f32 * 16.,
+            original_x: (new_pos.x - old_pos.x) as f32 * 16.,
+            original_y: (new_pos.y - old_pos.y) as f32 * 16.,
             convergence: Convergence::Zero,
         }
     }
 
     fn converge_to_zero(&mut self) {
         (self.x, self.y) = (
-            converge_to_zero(self.x, quadratic_adjustment(self.x)),
-            converge_to_zero(self.y, quadratic_adjustment(self.y)),
+            converge_to_zero(self.x, quadratic_adjustment(self.original_x)),
+            converge_to_zero(self.y, quadratic_adjustment(self.original_y)),
         );
     }
 
     fn converge_towards(&mut self, x: f32, y: f32) {
         (self.x, self.y) = (
-            converge_towards(self.x, quadratic_adjustment(self.x), x),
-            converge_towards(self.y, quadratic_adjustment(self.y), y),
+            converge_towards(self.x, quadratic_adjustment(self.original_x), x),
+            converge_towards(self.y, quadratic_adjustment(self.original_y), y),
         );
     }
 
@@ -93,7 +107,7 @@ fn converge_to_zero(value: f32, adjustment: f32) -> f32 {
 }
 
 fn quadratic_adjustment(value: f32) -> f32 {
-    10.0
+    value.abs() / 15.
 }
 
 pub enum Convergence {
@@ -101,7 +115,16 @@ pub enum Convergence {
     Target { x: f32, y: f32 },
 }
 
-fn decay_offsets(mut commands: Commands, mut offsets: Query<(Entity, &mut VisualOffset)>) {
+fn decay_offsets(
+    mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
+    mut offsets: Query<(Entity, &mut VisualOffset)>,
+) {
+    let mut animating_entity_count = offsets.iter().count();
+    // If nothing is being animated, this system is useless.
+    if animating_entity_count == 0 {
+        return;
+    }
     for (entity, mut offset) in offsets.iter_mut() {
         match offset.convergence {
             Convergence::Zero => offset.converge_to_zero(),
@@ -109,7 +132,12 @@ fn decay_offsets(mut commands: Commands, mut offsets: Query<(Entity, &mut Visual
         }
         if offset.is_finished() {
             commands.entity(entity).remove::<VisualOffset>();
+            animating_entity_count -= 1;
         }
+    }
+    // If all animations are finished, return to running mode.
+    if animating_entity_count == 0 {
+        next_state.set(GameState::Running);
     }
 }
 

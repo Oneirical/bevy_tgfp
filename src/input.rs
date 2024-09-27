@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Player,
     events::PlayerStep,
+    graphics::GameState,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -11,7 +12,7 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_input);
+        app.add_systems(Update, keyboard_input.run_if(in_state(GameState::Running)));
     }
 }
 

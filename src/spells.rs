@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     events::TeleportEntity,
+    graphics::GameState,
     map::{Map, Position},
     OrdDir,
 };
@@ -10,9 +11,14 @@ pub struct SpellPlugin;
 
 impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<CastSpell>();
+        app.init_resource::<Events<CastSpell>>();
         app.add_event::<SpellEffect>();
-        app.add_systems(Update, gather_effects.before(dispatch_events));
+        app.add_systems(
+            Update,
+            gather_effects
+                .before(dispatch_events)
+                .run_if(in_state(GameState::Running)),
+        );
         app.add_systems(Update, dispatch_events);
     }
 }
@@ -216,7 +222,7 @@ impl Axiom {
                 let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
                 let mut distance_travelled = 0;
                 let mut output = Vec::new();
-                while distance_travelled < 100 {
+                while distance_travelled < 10 {
                     distance_travelled += 1;
                     start.shift(off_x, off_y);
                     output.push(start);

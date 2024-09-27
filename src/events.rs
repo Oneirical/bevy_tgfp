@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{Hunt, Player},
-    graphics::VisualOffset,
+    graphics::{GameState, VisualOffset},
     map::{Map, Position},
     spells::dispatch_events,
     OrdDir,
@@ -92,6 +92,7 @@ fn teleport_entity(
     mut creature: Query<&mut Position>,
     mut map: ResMut<Map>,
     mut commands: Commands,
+    mut next_state: ResMut<NextState<GameState>>,
 ) {
     for event in events.read() {
         let mut creature_position = creature
@@ -120,7 +121,9 @@ fn teleport_entity(
                     *creature_position,
                     event.destination,
                 ));
+
             continue;
         }
+        next_state.set(GameState::Animating);
     }
 }
