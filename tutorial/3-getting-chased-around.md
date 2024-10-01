@@ -1,3 +1,11 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 3. Establishing the Hunting Grounds"
+date = 2024-09-23
+authors = ["Julien Robert"]
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
+
 # Cleaning Our Room
 
 Before continuing, it must be noted that the `main.rs` file is slowly reaching critical mass with its 161 lines of code. Before it swallows the Sun, it would be wise to divide it into multiple files, using `Plugins`.
@@ -142,11 +150,13 @@ Compile everything with `cargo run` to make sure all is neat and proper, and to 
 
 If it works, you may notice strange black lines on the periphery of the walls:
 
-TODO image
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/3-getting-chased-around/msaalines.png", alt="The player in the centre of the cage, with odd black line artefacts on the textures.",
+         position="center", style="border-radius: 8px;") }}
 
 This can happen when working with a 2D spritesheet in Bevy. To fix it, disable Multi Sample Anti-aliasing:
 
 ```rust
+// graphics.rs
 impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteSheetAtlas>();
@@ -157,9 +167,10 @@ impl Plugin for GraphicsPlugin {
 }
 ```
 
-TODO image
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/3-getting-chased-around/msaafixed.png", alt="The player in the centre of the cage, with the artefacts fixed.",
+         position="center", style="border-radius: 8px;") }}
 
-Much better. If you'd like to see how the fully reorganized code looks like, check in [`tutorial/source_code/3-getting-chased-around/3.1-reorganized`](TODO).
+Much better. If you'd like to see how the fully reorganized code looks like, check in [`tutorial/source_code/3-getting-chased-around/3.1-reorganized`](https://github.com/Oneirical/bevy_tgfp/tree/master/tutorial/source_code/3-getting-chased-around/3.1-reorganized).
 
 # Detecting the Happening of Things - Events
 
@@ -226,6 +237,7 @@ pub struct PlayerStep {
 Don't forget to link all this to `main.rs`.
 
 ```rust
+// main.rs
 mod creature;
 mod events; // NEW!
 mod graphics;
@@ -437,7 +449,7 @@ fn register_creatures(
 }
 ```
 
-[//]: # (It may be worthwhile to eventually mention that `commands.insert()` can be used to replace existing components, and that this does not trigger the Added filter.)
+[//]: # (It may be worthwhile to eventually mention that `commands.insert` can be used to replace existing components, and that this does not trigger the Added filter.)
 
 The most unique part about this new system is the ̀`Added` filter, which fetches only entities who have newly received the `Position` component and not been handled by this system yet. Right now, it means all newly created creatures will be processed by this system once, and then ignored afterwards.
 
@@ -461,7 +473,8 @@ impl Plugin for MapPlugin {
 
 Activate `cargo run`... and the walls finally have tangibility!
 
-TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/3-getting-chased-around/wallbonk.gif", alt="The player bashing itself on the walls of the cage, unable to escape.",
+         position="center", style="border-radius: 8px;") }}
 
 # A Very Sticky Critter - The First NPC
 
@@ -469,7 +482,15 @@ It's about time the Player got some company. Not a particularly affable one, I m
 
 ```rust
 // map.rs, spawn_cage
-let cage = "##########H......##.......##.......##.......##.......##.......##.......##########";
+    let cage = "#########\
+                #H......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #########";
 ```
 
 Edit the wall placement string to include a (H)unter. Yes, this is messy - a proper map generator will be the topic of a future chapter.
@@ -517,7 +538,8 @@ if tile_char == 'H' {
 
 `cargo run`, and our new companion is here. Excellent. Now, to give it motion of its own...
 
-TODO image
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/3-getting-chased-around/immobilehunter.png", alt="The cage, with a green Hunter standing motionless in a corner.",
+         position="center", style="border-radius: 8px;") }}
 
 The first problem is that motion, in our game, is currently only supported by `player_step`, which solely refers to the player character and nothing else. There should be a more generic `Event`, capable of controlling absolutely any creature to move around...
 
@@ -688,7 +710,8 @@ fn player_step(
 
 `cargo run`, and let the hunt begin!
 
-TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/3-getting-chased-around/phantomhunt.gif", alt="The player getting chased by the Hunter, with their sprites occasionally superposing.",
+         position="center", style="border-radius: 8px;") }}
 
 There is only the slight issue that our Hunter is rather on the incorporeal side of things. Indeed, as it moves, the Map fails to update and the Hunter is still considered to have phantasmatically remained in its spawn location. Not to mention that the centre of the cage, where we spawned, is also mysteriously blocked by an invisible wall.
 
@@ -699,7 +722,7 @@ There exists another filter like `Added`, named `Changed`, which triggers whenev
 - The user presses a button on their keyboard to move.
 - `PlayerStep` is triggered. Two `TeleportEntity` are sent out.
 - The Player's `TeleportEntity` happens first, moving the Player onto coordinates (2, 3). The `Map` is NOT updated yet, because it is located in a different system (`register_creatures`), and ̀`teleport_entity` isn't done yet, as it has another event to get through.
-- The Hunter's `TeleportEntity` happens, moving the Hunter onto coordinates (2, 3) too! This appears to be a legal move to the game, because the `Map̀` hadn't been updated yet.
+- The Hunter's `TeleportEntity` happens, moving the Hunter onto coordinates (2, 3) too! This appears to be a legal move to the game, because the `Map` hadn't been updated yet.
 - `teleport_entity` is done, and `register_creatures` triggers, editing `Map` to "knock out" the Player and leave only the Hunter, while the Player is now off the `Map` and completely untargetable.
 
 To fix this, we need to modify the `Map` immediately after a creature moves. Leave `register_creatures` set to `Added`, and instead, modify `teleport_entity`:
@@ -744,6 +767,7 @@ impl Map {
 
 And with that, everything is going according to plan.
 
-TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/3-getting-chased-around/finalhunt.gif", alt="The player getting chased by the Hunter, who is extremely sticky and always following behind the player, as if it were the player's 'tail'.",
+         position="center", style="border-radius: 8px;") }}
 
 The next chapter of this tutorial will introduce basic animation, as well as a cleaner way to generate the starting map, free of mega one-line `"#####H....#####"̀`-style strings and match statements!

@@ -1,7 +1,7 @@
 +++
-title = "Bevy Traditional Roguelike Quick-Start - 1. Drawing the Player Character" 
+title = "Bevy Traditional Roguelike Quick-Start - 1. Drawing the Player Character"
 date = 2024-09-16
-
+authors = ["Julien Robert"]
 [taxonomies]
 tags = ["rust", "bevy", "tutorial"]
 +++
@@ -39,6 +39,13 @@ The nature of ECS has been covered earlier in the Quick Start guide. Here is a m
 * **Components** - The costumes and characters worn by the actors.
 * **Systems** - The script of the play.
 
+# Table of Contents
+
+ 1. [The App](#setting-the-stage---the-app)
+ 2. [The Player](#the-first-denizen---the-player)
+ 3. [The Camera](#bird's-eye-view---the-camera)
+ 4. [The Spritesheet](#bundling-them-up---the-spritesheet)
+
 # Setting the Stage - The App
 
 Writing `cargo new bevy-quick-start` creates a Rust version of the evergreen *Hello World* program. It feels quite distant from anything resembling a game you can play in a contained window, except perhaps a prehistoric text adventure. Let's fix that by replacing the code in `fn main`:
@@ -58,7 +65,7 @@ It would also be wise to import Bevy in a Bevy project. Place this on the very f
 use bevy::prelude::*;
 ```
 
-The `App` is the window which contains the game, the theatre in which the actors will play. To ensure it starts off with all the basic Bevy features, the `DefaultPlugins` plugin must be tacked onto it.
+The `App` is the primary container of the game - the theatre in which the actors will play. To ensure it starts off with all the basic Bevy features, the `DefaultPlugins` plugin must be tacked onto it.
 
 Running this code with `cargo run` will result in an empty, boring window. Progress!
 

@@ -24,21 +24,28 @@ impl Plugin for SpellPlugin {
 }
 
 #[derive(Event)]
+/// Triggered when a creature (the `caster`) casts a `spell`.
 pub struct CastSpell {
     pub caster: Entity,
     pub spell: Spell,
 }
 
 #[derive(Event)]
+/// An event dictating that a list of Events must be sent to the game loop
+/// after the completion of a spell.
 pub struct SpellEffect {
     events: Vec<EventDispatch>,
 }
 
 #[derive(Component, Clone)]
+/// A spell is composed of a list of "Axioms", which will select tiles or execute an effect onto
+/// those tiles, in the order they are listed.
 pub struct Spell {
     pub axioms: Vec<Axiom>,
 }
 
+/// An enum with replicas of common game Events, to be translated into the real Events
+/// and dispatched to the main game loop.
 pub enum EventDispatch {
     TeleportEntity {
         destination: Position,
@@ -51,16 +58,27 @@ pub enum EventDispatch {
 }
 
 #[derive(Debug, Clone)]
+/// There are Form axioms, which target certain tiles, and Function axioms, which execute an effect
+/// onto those tiles.
 pub enum Axiom {
     // FORMS
+
+    // Target the caster's tile.
     Ego,
+    // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
+    // including the first solid tile encountered, which stops the beam.
     MomentumBeam,
+    // Target all 8 adjacent tiles to the caster.
     Circlet,
 
     // FUNCTIONS
+
+    // The targeted creatures dash in the direction of the caster's last move.
     Dash,
 }
 
+/// Translate a list of EventDispatch into their "real" Event counterparts and send them off
+/// into the main game loop to modify the game's creatures.
 pub fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
@@ -68,6 +86,7 @@ pub fn dispatch_events(
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
+            // Each EventDispatch enum is translated into its Event counterpart.
             match effect {
                 EventDispatch::TeleportEntity {
                     destination,
@@ -86,15 +105,22 @@ pub fn dispatch_events(
     }
 }
 
+/// The tracker of everything which determines how a certain spell will act.
 struct SynapseData {
+    /// Where a spell will act.
     targets: Vec<Position>,
+    /// How a spell will act.
     effects: Vec<EventDispatch>,
+    /// Who cast the spell.
     caster: Entity,
+    /// In which direction did the caster move the last time they did so?
     caster_momentum: OrdDir,
+    /// Where is the caster on the map?
     caster_position: Position,
 }
 
 impl SynapseData {
+    /// Create a blank SynapseData.
     fn new(caster: Entity, caster_momentum: OrdDir, caster_position: Position) -> Self {
         SynapseData {
             targets: Vec::new(),
@@ -136,6 +162,7 @@ impl SynapseData {
     }
 }
 
+/// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
 fn gather_effects(
     mut cast_spells: EventReader<CastSpell>,
     mut sender: EventWriter<SpellEffect>,
@@ -143,12 +170,16 @@ fn gather_effects(
     map: Res<Map>,
 ) {
     for cast_spell in cast_spells.read() {
+        // First, get the list of Axioms.
         let axioms = &cast_spell.spell.axioms;
+        // And the caster's position and last move direction.
         let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
 
+        // Create a new synapse to start "rolling down the hill" accumulating targets and effects.
         let mut synapse_data =
             SynapseData::new(cast_spell.caster, *caster_momentum, *caster_position);
 
+        // Loop through each axiom.
         for (i, axiom) in axioms.iter().enumerate() {
             // For Forms, add targets.
             axiom.target(&mut synapse_data, &map);
@@ -167,6 +198,8 @@ fn gather_effects(
             }
         }
 
+        // Once all Axioms are processed, dispatch everything to the system that will translate
+        // all effects into proper events.
         sender.send(SpellEffect {
             events: synapse_data.effects,
         });
@@ -242,12 +275,12 @@ impl Axiom {
             Self::Dash => {
                 for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
                     // Create a fake synapse just to use a beam.
-                    let mut artifical_synapse = SynapseData::new_from_synapse(&synapse_data);
+                    let mut artifical_synapse = SynapseData::new_from_synapse(synapse_data);
                     // Set the fake synapse's caster and caster position to be the targeted creatures.
                     (artifical_synapse.caster, artifical_synapse.caster_position) =
                         (dasher, dasher_pos);
                     // Fire the beam with the caster's momentum.
-                    Self::MomentumBeam.target(&mut artifical_synapse, &map);
+                    Self::MomentumBeam.target(&mut artifical_synapse, map);
                     // Get the penultimate tile, aka the last passable tile in the beam's path.
                     let destination_tile = artifical_synapse
                         .targets

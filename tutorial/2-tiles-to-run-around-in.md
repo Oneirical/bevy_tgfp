@@ -1,3 +1,11 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 2. Tiles to Frolic Around In"
+date = 2024-09-18
+authors = ["Julien Robert"]
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
+
 Motionless floating in the void is getting old. Let's remedy this.
 
 Our player might have a `Transform` translation of 0, making it appear in the centre of the screen, but that is merely a visual position. Roguelikes take place on a grid, and if a spell starts summoning magical rainbow clouds, it will need to know where to place those pretty vapours. This is where a new component, `Position`, comes in.
@@ -19,11 +27,6 @@ impl Position {
     /// Edit an existing Position with new coordinates.
     pub fn update(&mut self, x: i32, y: i32) {
         (self.x, self.y) = (x, y);
-    }
-
-    /// Shift the position by a delta.
-    pub fn shift(&mut self, dx: i32, dy: i32) {
-        (self.x, self.y) = (self.x + dx, self.y + dy);
     }
 }
 ```
@@ -73,7 +76,15 @@ fn spawn_cage(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
-    let cage = "##########.......##.......##.......##.......##.......##.......##.......##########";
+    let cage = "#########\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
         let index = match tile_char {
@@ -96,23 +107,9 @@ fn spawn_cage(
 }
 ```
 
-The strange `cage` string is simply:
+For each character within the `cage` string, the (x, y) `Position` is derived using modulo and division, respectively (every 9 tiles, the y coordinate increments by 1, and the remainder of that division is the x coordinate). Note that this will cause a mirror flip (as this code starts counting from the top, whereas Bevy's coordinate system starts counting from the bottom). This will not be an issue when the map generator is refactored in a future chapter.
 
-```
-#########
-#.......#
-#.......#
-#.......#
-#.......#
-#.......#
-#.......#
-#.......#
-#########
-```
-
-flattened into a one-line string. For each character within, the (x, y) `Position` is derived using modulo and division, respectively (every 9 tiles, the y coordinate increments by 1, and the remainder of that division is the x coordinate).
-
-As for the `#` being proper walls, we simply abort the loop for any character that is not a ̀`#`, and assign sprite index "3" for those that are. This will go fetch the third sprite in our spritesheet!
+As for the `#` being proper walls, we simply abort the loop for any character that is not a `#`, and assign sprite index "3" for those that are. This will go fetch the third sprite in our spritesheet!
 
 Finally, the walls can be spawned one by one. Note the `Transform::from_scale(Vec3::new(4., 4., 0.))̀`, which is the exact same as the player - currently, every creature is drawn in the centre of the screen with a size of 64x64 (4 times 16 x 4 times 16).
 
@@ -132,9 +129,10 @@ fn main() {
 }
 ```
 
-Running ̀`cargo ruǹ` will prove unimpressive.
+Running `cargo run` will prove unimpressive.
 
-// TODO IMAGE
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/2-tiles-to-run-around-in/stack.png", alt="A Bevy app with a single wall tile in the centre.",
+         position="center", style="border-radius: 8px;") }}
 
 The player is still there, drawn under a pile of 32 walls. `Position` is still completely ineffectual. Disappointing! It is time to remedy this. First, we'll need a way to quickly tell Bevy which of these 33 creatures is the `Player`:
 
@@ -199,7 +197,7 @@ fn adjust_transforms(
 }
 ```
 
-This introduces a major Bevy feature: `Query`. A query will go fetch ̀*all* ̀Entities in the game that match their Component list and added filters.
+This introduces a major Bevy feature: `Query`. A query will go fetch *all* Entities in the game that match their Component list and added filters.
 
 - `Query<&Position, With<Player>>` grants us access to all Entities with *both* `Position` and `Player`, and exposes their `Position` component for read-only access.
 - `Query<(&Position, &mut Transform), Without<Player>>` grants us access to all Entities with `Position` and `Transform`, and which do *not* contain `Player`. The `Position` component is exposed in read-only mode, while the `Transform` component is exposed in read-write (mutable) mode.
@@ -227,7 +225,8 @@ fn main() {
 
 Compile once more with `cargo run`. It will reveal the player in its little cage, with no more visual superposition of entities!
 
-TODO IMAGE
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/2-tiles-to-run-around-in/walls.png", alt="A Bevy app with the player in the centre, surrounded by 9x9 walls.",
+         position="center", style="border-radius: 8px;") }}
 
 Since this new system is `Update`, it runs every frame and readjusts all `Creature`s where they need to be relative to the player. This isn't very useful as everyone here is cursed with eternal paralysis... Let's fix that.
 
@@ -276,5 +275,8 @@ fn main() {
 ```
 
 `cargo run`. You can now move around the cage... and escape it with zero difficulty by phasing through the walls, running at the speed of light into the far reaches of reality itself. Note that despite the ludicrous speed, it is impossible to stop "clipping" to the grid - you will never be in between two walls!
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/2-tiles-to-run-around-in/moving.gif", alt="A Bevy app with the player moving frantically, ignoring all walls.",
+         position="center", style="border-radius: 8px;") }}
 
 Enforcing basic physical principles will be the topic of the next tutorial!

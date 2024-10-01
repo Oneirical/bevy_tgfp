@@ -104,7 +104,15 @@ fn spawn_cage(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
-    let cage = "##########.......##.......##.......##.......##.......##.......##.......##########";
+    let cage = "#########\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #.......#\
+                #########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
         let index = match tile_char {
