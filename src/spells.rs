@@ -275,16 +275,18 @@ impl Axiom {
             Self::Dash => {
                 for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
                     // Create a fake synapse just to use a beam.
-                    let mut artifical_synapse = SynapseData::new_from_synapse(synapse_data);
+                    let mut artificial_synapse = SynapseData::new_from_synapse(synapse_data);
                     // Set the fake synapse's caster and caster position to be the targeted creatures.
-                    (artifical_synapse.caster, artifical_synapse.caster_position) =
-                        (dasher, dasher_pos);
+                    (
+                        artificial_synapse.caster,
+                        artificial_synapse.caster_position,
+                    ) = (dasher, dasher_pos);
                     // Fire the beam with the caster's momentum.
-                    Self::MomentumBeam.target(&mut artifical_synapse, map);
+                    Self::MomentumBeam.target(&mut artificial_synapse, map);
                     // Get the penultimate tile, aka the last passable tile in the beam's path.
-                    let destination_tile = artifical_synapse
+                    let destination_tile = artificial_synapse
                         .targets
-                        .get(artifical_synapse.targets.len().wrapping_sub(2));
+                        .get(artificial_synapse.targets.len().wrapping_sub(2));
                     // If that penultimate tile existed, teleport to it.
                     if let Some(destination_tile) = destination_tile {
                         synapse_data.effects.push(EventDispatch::TeleportEntity {

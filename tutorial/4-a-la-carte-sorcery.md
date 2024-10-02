@@ -176,6 +176,8 @@ Let us work through these problems one by one.
 
 ## 1. Transforming Spell Effects into Events
 
+Our spell effects currently do nothing - they are only replicas of real Events, such as `TeleportEntity`. They need to be translated into the real deal.
+
 ```rust
 // spells.rs
 
@@ -207,3 +209,244 @@ pub fn dispatch_events(
     }
 }
 ```
+
+With this new system, every completed spell with dispatch all corresponding Events once it is concluded!
+
+## 2. Tracking Creatures' Last Move (Momentum)
+
+`OrdDir` already exists, but it is currently nothing but a simple enum. It could be elevated into a much greater `Component`...
+
+```rust
+// main.rs
+#[derive(Component, PartialEq, Eq, Copy, Clone, Debug)] // CHANGED: Added Component.
+pub enum OrdDir {
+    Up,
+    Right,
+    Down,
+    Left,
+}
+```
+
+It will also need to be a crucial part of each `Creature`.
+
+```rust
+// creature.rs
+#[derive(Bundle)]
+pub struct Creature {
+    pub position: Position,
+    pub momentum: OrdDir, // NEW!
+    pub sprite: SpriteBundle,
+    pub atlas: TextureAtlas,
+}
+```
+
+This will instantly rain down errors into the crate - all Creatures must now receive this new Component.
+
+```rust
+// map.rs
+fn spawn_player(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+) {
+            // SNIP
+            atlas: TextureAtlas {
+                layout: atlas_layout.handle.clone(),
+                index: 0,
+            },
+            momentum: OrdDir::Up, // NEW!
+        },
+        Player,
+    ));
+}
+```
+
+```rust
+fn spawn_cage(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+) {
+            // SNIP
+            atlas: TextureAtlas {
+                layout: atlas_layout.handle.clone(),
+                index,
+            },
+            momentum: OrdDir::Up, // NEW!
+        });
+        if tile_char == 'H' {
+            creature.insert(Hunt);
+        }
+    }
+}
+```
+
+All good, but all Creatures are now eternally "facing" upwards regardless of their actions. Let us track this with a new `Event`.
+
+```rust
+// events.rs
+#[derive(Event)]
+pub struct AlterMomentum {
+    pub entity: Entity,
+    pub direction: OrdDir,
+}
+
+fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&mut OrdDir>) {
+    for momentum_alteration in events.read() {
+        *creature.get_mut(momentum_alteration.entity).unwrap() = momentum_alteration.direction;
+    }
+}
+```
+
+This event receives its trigger, right now, from when the player steps. It won't track any other creatures... for now.
+
+```rust
+// events.rs
+fn player_step(
+    mut events: EventReader<PlayerStep>,
+    mut teleporter: EventWriter<TeleportEntity>,
+    mut momentum: EventWriter<AlterMomentum>, // NEW!
+    player: Query<(Entity, &Position), With<Player>>,
+    hunters: Query<(Entity, &Position), With<Hunt>>,
+    map: Res<Map>,
+) {
+        // SNIP
+        teleporter.send(TeleportEntity::new(
+            player_entity,
+            player_pos.x + off_x,
+            player_pos.y + off_y,
+        ));
+        // NEW!
+        momentum.send(AlterMomentum {
+            entity: player_entity,
+            direction: event.direction,
+        });
+        // End NEW.
+
+        for (hunter_entity, hunter_pos) in hunters.iter() {
+        // SNIP
+        }
+    }
+}
+```
+
+## 3. Actually Making The Spell Do Something
+
+Now, for the true main course...
+
+```rust
+// spells.rs
+impl Axiom {
+    fn target(&self, synapse_data: &mut SynapseData, map: &Map) {
+        match self {
+            // Target the caster's tile.
+            Self::Ego => {
+                synapse_data.targets.push(synapse_data.caster_position);
+            }
+            _ => (),
+        }
+    }
+}
+```
+
+The ̀`target` function should handle all potential "Forms" in a spell targeting certain tiles. Anything that isn't a "Form" gets flushed down the final `_ => ()`.
+
+`Ego` is quite simple. Push the `caster_position` into the `targets`, done.
+
+As for `Dash`... it is a little more involved. Its implementation will reside inside another `impl Axiom` function, `execute`.
+
+```rust
+// events.rs
+impl Axiom {
+    // SNIP
+    /// Execute Function-type Axioms. Returns true if this produced an actual effect.
+    fn execute(&self, synapse_data: &mut SynapseData, map: &Map) -> bool {
+        match self {
+            Self::Dash => {
+                // For each (Entity, Position) on a targeted tile...
+                for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
+                    // The dashing creature starts where it currently is standing.
+                    let mut final_dash_destination = dasher_pos;
+                    // It will travel in the direction of the caster's last move.
+                    let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
+                    // The dash has a maximum travel distance of 10.
+                    let mut distance_travelled = 0;
+                    while distance_travelled < 10 {
+                        distance_travelled += 1;
+                        // Stop dashing if a solid Creature is hit.
+                        if !map.is_passable(
+                            final_dash_destination.x + off_x,
+                            final_dash_destination.y + off_y,
+                        ) {
+                            break;
+                        }
+                        // Otherwise, keep offsetting the dashing creature's position.
+                        final_dash_destination.shift(off_x, off_y);
+                    }
+
+                    // Once finished, release the Teleport event.
+                    synapse_data.effects.push(EventDispatch::TeleportEntity {
+                        destination: final_dash_destination,
+                        entity: dasher,
+                    });
+                }
+                true
+            }
+            // Forms (which do not have an in-game effect) return false.
+            _ => false,
+        }
+    }
+ }
+```
+
+There is only one unimplemented function in this block, `get_all_targeted_entity_pos_pairs`, which inspects the `Map` to pull out all the corresponding key-value pairs.
+
+```rust
+// spells.rs
+impl SynapseData {
+
+    // SNIP
+
+    fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
+        let mut targeted_pairs = Vec::new();
+        for target in &self.targets {
+            if let Some(entity) = map.get_entity_at(target.x, target.y) {
+                targeted_pairs.push((*entity, *target));
+            }
+        }
+        targeted_pairs
+    }
+}
+```
+
+# The Test Run
+
+After all this, the first spell **Ego, Dash** is ready to enter our grimoire - and while that was a lot, future spell effects will be a lot easier to implement from now on. Simply add more entries in the `match` statements of `target` and `execute`!
+
+One last thing: actually casting it.
+
+```rust
+// input.rs
+/// Each frame, if a button is pressed, move the player 1 tile.
+fn keyboard_input(
+    player: Query<Entity, With<Player>>,
+    mut spell: EventWriter<CastSpell>, // NEW!
+    mut events: EventWriter<PlayerStep>,
+    input: Res<ButtonInput<KeyCode>>,
+) {
+    // NEW!
+    if input.just_pressed(KeyCode::Space) {
+        spell.send(CastSpell {
+            caster: player.get_single().unwrap(),
+            spell: Spell {
+                axioms: vec![Axiom::Ego, Axiom::Dash],
+            },
+        });
+    }
+    // End NEW.
+
+    // SNIP
+}
+```
+
+Finally, `cargo ruǹ` will allow us to escape the sticky grasp of the Hunter by pressing the spacebar!
