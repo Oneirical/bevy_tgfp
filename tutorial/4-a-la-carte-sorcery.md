@@ -27,6 +27,9 @@ Don't forget to link it into `main.rs`.
 // SNIP
 mod spells;
 
+// SNIP
+use spells::SpellPlugin;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
@@ -150,7 +153,7 @@ fn gather_effects(
             SynapseData::new(cast_spell.caster, *caster_momentum, *caster_position);
 
         // Loop through each axiom.
-        for (i, axiom) in axioms.iter().enumerate() {
+        for axiom in axioms.iter() {
             // For Forms, add targets.
             axiom.target(&mut synapse_data, &map);
             // For Functions, add effects that operate on those targets.
@@ -429,7 +432,7 @@ One last thing: actually casting it.
 // input.rs
 /// Each frame, if a button is pressed, move the player 1 tile.
 fn keyboard_input(
-    player: Query<Entity, With<Player>>,
+    player: Query<Entity, With<Player>>, // NEW!
     mut spell: EventWriter<CastSpell>, // NEW!
     mut events: EventWriter<PlayerStep>,
     input: Res<ButtonInput<KeyCode>>,
@@ -449,4 +452,195 @@ fn keyboard_input(
 }
 ```
 
-Finally, `cargo ruǹ` will allow us to escape the sticky grasp of the Hunter by pressing the spacebar!
+Finally, `cargo ruǹ` will allow us to escape the sticky grasp of the Hunter by pressing the spacebar! What's that? It crashed? Of course, we now need to register absolutely everything that was just added into Bevy's ECS.
+
+This is extremely easy to forget and is mostly indicated by "struct is never constructed"-type warnings. If you are ever testing your changes and things seem to be going wrong, check first that you registered your systems, events and resources!
+
+With that said:
+
+```rust
+// events.rs
+impl Plugin for EventPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<PlayerStep>();
+        app.add_event::<TeleportEntity>();
+        app.add_event::<AlterMomentum>(); // NEW!
+        app.add_systems(Update, player_step);
+        app.add_systems(Update, teleport_entity);
+        app.add_systems(Update, alter_momentum); // NEW!
+    }
+}
+```
+
+```rust
+// spells.rs
+impl Plugin for SpellPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_event::<CastSpell>();
+        app.add_event::<SpellEffect>();
+        app.add_systems(Update, gather_effects);
+        app.add_systems(Update, dispatch_events);
+    }
+}
+```
+
+And there's just one last thing I'd like to change for now: knocking down the light-speed movement down a notch.
+
+```rust
+// input.rs
+    if input.just_pressed(KeyCode::KeyW) { // CHANGED to just_pressed
+        events.send(PlayerStep {
+            direction: OrdDir::Up,
+        });
+    }
+    if input.just_pressed(KeyCode::KeyD) { // CHANGED to just_pressed
+        events.send(PlayerStep {
+            direction: OrdDir::Right,
+        });
+    }
+    if input.just_pressed(KeyCode::KeyA) { // CHANGED to just_pressed
+        events.send(PlayerStep {
+            direction: OrdDir::Left,
+        });
+    }
+    if input.just_pressed(KeyCode::KeyS) { // CHANGED to just_pressed
+        events.send(PlayerStep {
+            direction: OrdDir::Down,
+        });
+    }
+```
+
+Try again. `cargo run`. Pressing the space bar will now allow you to escape your sticky little friend!
+
+// TODO gif
+
+# Intermediate Wizardry 201 
+
+The player dashing around is fun and good... but what about a projectile that knocks back whatever critter it hits? This sounds slightly far-fetched, but it actually takes almost no code that we have not already seen. Enter... **MomentumBeam, Dash**.
+
+```rust
+// spells.rs
+pub enum Axiom {
+    // FORMS
+
+    // Target the caster's tile.
+    Ego,
+
+    // NEW!
+    // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
+    // including the first solid tile encountered, which stops the beam.
+    MomentumBeam,
+    // End NEW.
+
+    // SNIP
+}
+```
+
+It, of course, receives its own implementation.
+
+```rust
+// spells.rs
+    fn target(&self, synapse_data: &mut SynapseData, map: &Map) {
+        match self {
+        // SNIP
+        // NEW!
+            // Shoot a beam from the caster towards its last move, all tiles passed through
+            // become targets, including the impact point.
+            Self::MomentumBeam => {
+                // Start the beam where the caster is standing.
+                let mut start = synapse_data.caster_position;
+                // The beam travels in the direction of the caster's last move.
+                let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
+                let mut distance_travelled = 0;
+                let mut output = Vec::new();
+                // The beam has a maximum distance of 10.
+                while distance_travelled < 10 {
+                    distance_travelled += 1;
+                    start.shift(off_x, off_y);
+                    // The new tile is always added, even if it is impassable...
+                    output.push(start);
+                    // But if it is impassable, it is the last added tile.
+                    if !map.is_passable(start.x, start.y) {
+                        break;
+                    }
+                }
+                // Add these tiles to `targets`.
+                synapse_data.targets.append(&mut output);
+            }
+        // End NEW.
+        }
+    }
+```
+
+You may notice that this is extremely similar to the `Dash` logic... Its differences are the inclusion of the final impact tile (which is solid), and how it collects all travelled tiles in an output vector, added to `targets`.
+
+```rust
+// Do not add this block, it is merely a demonstration.
+// The dashing creature starts where it currently is standing.
+let mut final_dash_destination = dasher_pos;
+// It will travel in the direction of the caster's last move.
+let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
+// The dash has a maximum travel distance of 10.
+let mut distance_travelled = 0;
+while distance_travelled < 10 {
+    distance_travelled += 1;
+    // Stop dashing if a solid Creature is hit.
+    if !map.is_passable(
+        final_dash_destination.x + off_x,
+        final_dash_destination.y + off_y,
+    ) {
+        break;
+    }
+    // Otherwise, keep offsetting the dashing creature's position.
+    final_dash_destination.shift(off_x, off_y);
+}
+```
+
+In software development, "don't repeat yourself" is a common wisdom, but in games development, sometimes, it must be done within reason. Think, what if we add later a magic forcefield that blocks beams but not movement? In that case, if we had done something like this to adhere to "don't repeat yourself":
+
+```rust
+// Do not add this block, it is merely a demonstration.
+Self::Dash => {
+    for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
+        // Create a fake synapse just to use a beam.
+        let mut artificial_synapse = SynapseData::new_from_synapse(synapse_data);
+        // Set the fake synapse's caster and caster position to be the targeted creatures.
+        (
+            artificial_synapse.caster,
+            artificial_synapse.caster_position,
+        ) = (dasher, dasher_pos);
+        // Fire the beam with the caster's momentum.
+        Self::MomentumBeam.target(&mut artificial_synapse, map);
+        // Get the penultimate tile, aka the last passable tile in the beam's path.
+        let destination_tile = artificial_synapse
+            .targets
+            .get(artificial_synapse.targets.len().wrapping_sub(2));
+        // If that penultimate tile existed, teleport to it.
+        if let Some(destination_tile) = destination_tile {
+            synapse_data.effects.push(EventDispatch::TeleportEntity {
+                destination: *destination_tile,
+                entity: dasher,
+            });
+        }
+    }
+    true
+}
+```
+
+Here, a fake beam is invented, which needs a fake "synapse" to go alongside it, and it specifically extracts the penultimate tile (as the last one is the solid impact point) to dash to. Should the "anti beam forcefield" be invented later, this would need an added exception, potentially implemented as an extra parameter passed to the `target` function... lots of complexity for not much reward.
+
+And just like that, with only 11 added lines of code (which were very similar to our `Dash` implementation), the projectile is ready:
+
+```rust
+// input.rs
+    if input.just_pressed(KeyCode::Space) {
+        spell.send(CastSpell {
+            caster: player.get_single().unwrap(),
+            spell: Spell {
+                axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
+            },
+        });
+    }
+```
+
+`cargo run`. Not only can you teach your sticky companion some manners, you can even break the walls of the cage, and escape into the abyss beyond.

@@ -546,13 +546,13 @@ The first problem is that motion, in our game, is currently only supported by `p
 ```rust
 // events.rs
 #[derive(Event)]
-struct TeleportEntity {
+pub struct TeleportEntity {
     destination: Position,
     entity: Entity,
 }
 
 impl TeleportEntity {
-    fn new(entity: Entity, x: i32, y: i32) -> Self {
+    pub fn new(entity: Entity, x: i32, y: i32) -> Self {
         Self {
             destination: Position::new(x, y),
             entity,

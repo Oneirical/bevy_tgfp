@@ -16,11 +16,12 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins((
-            SpellPlugin,
+            // NOTE: Spell needs to go last because of event write/read ordering. Add a note about this.
             EventPlugin,
             GraphicsPlugin,
             MapPlugin,
             InputPlugin,
+            SpellPlugin,
         ))
         .run();
 }

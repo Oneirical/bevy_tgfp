@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Player,
     events::PlayerStep,
+    graphics::GameState,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -11,22 +12,22 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_input);
+        app.add_systems(Update, keyboard_input.run_if(in_state(GameState::Running)));
     }
 }
 
 /// Each frame, if a button is pressed, move the player 1 tile.
 fn keyboard_input(
     player: Query<Entity, With<Player>>,
+    mut spell: EventWriter<CastSpell>,
     mut events: EventWriter<PlayerStep>,
     input: Res<ButtonInput<KeyCode>>,
-    mut spell: EventWriter<CastSpell>,
 ) {
     if input.just_pressed(KeyCode::Space) {
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
+                axioms: vec![Axiom::Ego, Axiom::Dash, Axiom::Circlet, Axiom::Dash],
             },
         });
     }
