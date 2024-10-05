@@ -1,8 +1,10 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{Hunt, Player},
+    creature::{get_species_sprite, Creature, Hunt, Player, Species},
+    graphics::SpriteSheetAtlas,
     map::{Map, Position},
+    spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
 
@@ -10,49 +12,95 @@ pub struct EventPlugin;
 
 impl Plugin for EventPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<PlayerStep>();
+        app.add_event::<CreatureStep>();
         app.add_event::<TeleportEntity>();
         app.add_event::<AlterMomentum>();
-        app.add_systems(Update, player_step);
+        app.add_event::<SummonCreature>();
+        app.add_event::<EndTurn>();
+        app.add_systems(Update, creature_step);
         app.add_systems(Update, teleport_entity);
         app.add_systems(Update, alter_momentum);
+        app.add_systems(Update, summon_creature);
+        app.add_systems(Update, end_turn);
     }
 }
 
 #[derive(Event)]
-pub struct PlayerStep {
+pub struct CreatureStep {
+    pub entity: Entity,
     pub direction: OrdDir,
 }
 
-fn player_step(
-    mut events: EventReader<PlayerStep>,
+fn creature_step(
+    mut events: EventReader<CreatureStep>,
     mut teleporter: EventWriter<TeleportEntity>,
     mut momentum: EventWriter<AlterMomentum>,
-    player: Query<(Entity, &Position), With<Player>>,
-    hunters: Query<(Entity, &Position), With<Hunt>>,
-    map: Res<Map>,
+    mut turn_end: EventWriter<EndTurn>,
+    creature: Query<(&Position, Has<Player>)>,
 ) {
-    let (player_entity, player_pos) = player.get_single().expect("0 or 2+ players");
     for event in events.read() {
+        let (creature_pos, is_player) = creature.get(event.entity).unwrap();
         let (off_x, off_y) = event.direction.as_offset();
         teleporter.send(TeleportEntity::new(
-            player_entity,
-            player_pos.x + off_x,
-            player_pos.y + off_y,
+            event.entity,
+            creature_pos.x + off_x,
+            creature_pos.y + off_y,
         ));
 
         momentum.send(AlterMomentum {
-            entity: player_entity,
+            entity: event.entity,
             direction: event.direction,
         });
-        for (hunter_entity, hunter_pos) in hunters.iter() {
-            // Try to find a tile that gets the hunter closer to the player.
-            if let Some(move_target) = map.best_manhattan_move(*hunter_pos, *player_pos) {
-                // If it is found, cause another TeleportEntity event.
-                teleporter.send(TeleportEntity {
-                    destination: move_target,
-                    entity: hunter_entity,
-                });
+        if is_player {
+            turn_end.send(EndTurn);
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct EndTurn;
+
+fn end_turn(
+    mut events: EventReader<EndTurn>,
+    mut step: EventWriter<CreatureStep>,
+    mut spell: EventWriter<CastSpell>,
+    npcs: Query<(Entity, &Position, &Species), Without<Player>>,
+    player: Query<&Position, With<Player>>,
+    map: Res<Map>,
+) {
+    for _event in events.read() {
+        let player_pos = player.get_single().unwrap();
+        for (creature_entity, creature_position, creature_species) in npcs.iter() {
+            match creature_species {
+                Species::Hunter => {
+                    // Try to find a tile that gets the hunter closer to the player.
+                    if let Some(move_target) =
+                        map.best_manhattan_move(*creature_position, *player_pos)
+                    {
+                        // If it is found, the hunter approaches the player by stepping.
+                        step.send(CreatureStep {
+                            direction: OrdDir::as_variant(
+                                move_target.x - creature_position.x,
+                                move_target.y - creature_position.y,
+                            ),
+                            entity: creature_entity,
+                        });
+                    }
+                }
+                Species::Spawner => {
+                    spell.send(CastSpell {
+                        caster: creature_entity,
+                        spell: Spell {
+                            axioms: vec![
+                                Axiom::Smooch,
+                                Axiom::SummonCreature {
+                                    species: Species::Hunter,
+                                },
+                            ],
+                        },
+                    });
+                }
+                _ => (),
             }
         }
     }
@@ -72,8 +120,8 @@ fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&m
 
 #[derive(Event)]
 pub struct TeleportEntity {
-    destination: Position,
-    entity: Entity,
+    pub destination: Position,
+    pub entity: Entity,
 }
 
 impl TeleportEntity {
@@ -105,6 +153,51 @@ fn teleport_entity(
             // Nothing here just yet, but this is where collisions between creatures
             // will be handled.
             continue;
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct SummonCreature {
+    pub species: Species,
+    pub position: Position,
+}
+
+fn summon_creature(
+    mut commands: Commands,
+    mut events: EventReader<SummonCreature>,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    map: Res<Map>,
+) {
+    for event in events.read() {
+        // Avoid summoning if the tile is already occupied.
+        if !map.is_passable(event.position.x, event.position.y) {
+            continue;
+        }
+        let mut new_creature = commands.spawn(Creature {
+            position: event.position,
+            species: event.species,
+            sprite: SpriteBundle {
+                texture: asset_server.load("spritesheet.png"),
+                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+                visibility: Visibility::Hidden,
+                ..default()
+            },
+            atlas: TextureAtlas {
+                layout: atlas_layout.handle.clone(),
+                index: get_species_sprite(&event.species),
+            },
+            momentum: OrdDir::Up,
+        });
+        match &event.species {
+            Species::Player => {
+                new_creature.insert(Player);
+            }
+            Species::Hunter => {
+                new_creature.insert(Hunt);
+            }
+            _ => (),
         }
     }
 }

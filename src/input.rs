@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Player,
-    events::PlayerStep,
+    events::CreatureStep,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -18,36 +18,42 @@ impl Plugin for InputPlugin {
 /// Each frame, if a button is pressed, move the player 1 tile.
 fn keyboard_input(
     player: Query<Entity, With<Player>>,
-    mut events: EventWriter<PlayerStep>,
+    mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
     mut spell: EventWriter<CastSpell>,
 ) {
-    if input.just_pressed(KeyCode::Space) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
-            },
-        });
-    }
-    if input.just_pressed(KeyCode::KeyW) {
-        events.send(PlayerStep {
-            direction: OrdDir::Up,
-        });
-    }
-    if input.just_pressed(KeyCode::KeyD) {
-        events.send(PlayerStep {
-            direction: OrdDir::Right,
-        });
-    }
-    if input.just_pressed(KeyCode::KeyA) {
-        events.send(PlayerStep {
-            direction: OrdDir::Left,
-        });
-    }
-    if input.just_pressed(KeyCode::KeyS) {
-        events.send(PlayerStep {
-            direction: OrdDir::Down,
-        });
+    if let Ok(player) = player.get_single() {
+        if input.just_pressed(KeyCode::Space) {
+            spell.send(CastSpell {
+                caster: player,
+                spell: Spell {
+                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
+                },
+            });
+        }
+        if input.just_pressed(KeyCode::KeyW) {
+            events.send(CreatureStep {
+                entity: player,
+                direction: OrdDir::Up,
+            });
+        }
+        if input.just_pressed(KeyCode::KeyD) {
+            events.send(CreatureStep {
+                entity: player,
+                direction: OrdDir::Right,
+            });
+        }
+        if input.just_pressed(KeyCode::KeyA) {
+            events.send(CreatureStep {
+                entity: player,
+                direction: OrdDir::Left,
+            });
+        }
+        if input.just_pressed(KeyCode::KeyS) {
+            events.send(CreatureStep {
+                entity: player,
+                direction: OrdDir::Down,
+            });
+        }
     }
 }

@@ -6,6 +6,7 @@ use crate::{map::Position, OrdDir};
 pub struct Creature {
     pub position: Position,
     pub momentum: OrdDir,
+    pub species: Species,
     pub sprite: SpriteBundle,
     pub atlas: TextureAtlas,
 }
@@ -16,3 +17,20 @@ pub struct Player;
 
 #[derive(Component)]
 pub struct Hunt;
+
+#[derive(Debug, Component, Clone, Copy)]
+pub enum Species {
+    Player,
+    Wall,
+    Hunter,
+    Spawner,
+}
+
+pub fn get_species_sprite(species: &Species) -> usize {
+    match species {
+        Species::Player => 0,
+        Species::Wall => 3,
+        Species::Hunter => 4,
+        Species::Spawner => 75,
+    }
+}

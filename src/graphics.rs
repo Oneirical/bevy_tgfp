@@ -10,6 +10,7 @@ impl Plugin for GraphicsPlugin {
         app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
+        app.add_systems(Update, render_new_summons.after(adjust_transforms));
     }
 }
 
@@ -21,7 +22,7 @@ pub struct SpriteSheetAtlas {
 
 impl FromWorld for SpriteSheetAtlas {
     fn from_world(world: &mut World) -> Self {
-        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 8, 1, None, None);
+        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 80, 1, None, None);
         let mut texture_atlases = world
             .get_resource_mut::<Assets<TextureAtlasLayout>>()
             .unwrap();
@@ -45,18 +46,28 @@ fn adjust_transforms(
     mut npcs: Query<(&Position, &mut Transform), Without<Player>>,
 ) {
     // There should only be one player on any given frame.
-    let player_pos = player.get_single().expect("0 or 2+ players");
-    // Get the player's position.
-    let (px, py) = (player_pos.x, player_pos.y);
-    // For each Position and Transform of each non-player creature...
-    for (npc_pos, mut npc_tran) in npcs.iter_mut() {
-        // Measure their offset distance from the player's location.
-        let (off_x, off_y) = (npc_pos.x - px, npc_pos.y - py);
-        // Adjust their visual position to match this offset.
-        (npc_tran.translation.x, npc_tran.translation.y) = (
-            // Multiplied by the graphical size of a tile, which is 64x64.
-            off_x as f32 * 4. * 16.,
-            off_y as f32 * 4. * 16.,
-        );
+    let player_pos = player.get_single();
+    if let Ok(player_pos) = player_pos {
+        // Get the player's position.
+        let (px, py) = (player_pos.x, player_pos.y);
+        // For each Position and Transform of each non-player creature...
+        for (npc_pos, mut npc_tran) in npcs.iter_mut() {
+            // Measure their offset distance from the player's location.
+            let (off_x, off_y) = (npc_pos.x - px, npc_pos.y - py);
+            // Adjust their visual position to match this offset.
+            (npc_tran.translation.x, npc_tran.translation.y) = (
+                // Multiplied by the graphical size of a tile, which is 64x64.
+                off_x as f32 * 4. * 16.,
+                off_y as f32 * 4. * 16.,
+            );
+        }
+    }
+}
+
+/// To avoid 1-frame flashes of newly spawned creatures, only make them appear on screen
+/// after they have been passed through adjust_transforms.
+fn render_new_summons(mut summoned_creatures: Query<&mut Visibility, Added<Position>>) {
+    for mut creature_visibility in summoned_creatures.iter_mut() {
+        *creature_visibility = Visibility::Visible;
     }
 }

@@ -5,7 +5,7 @@ mod input;
 mod map;
 mod spells;
 
-use bevy::{prelude::*, utils::warn};
+use bevy::prelude::*;
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;
@@ -16,11 +16,12 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins((
-            SpellPlugin,
+            // NOTE: Spell needs to go last because of event write/read ordering. Add a note about this.
             EventPlugin,
             GraphicsPlugin,
             MapPlugin,
             InputPlugin,
+            SpellPlugin,
         ))
         .run();
 }
@@ -35,21 +36,12 @@ pub enum OrdDir {
 
 impl OrdDir {
     pub fn as_offset(self) -> (i32, i32) {
-        match self {
+        let (x, y) = match self {
             OrdDir::Up => (0, 1),
             OrdDir::Right => (1, 0),
             OrdDir::Down => (0, -1),
             OrdDir::Left => (-1, 0),
-        }
-    }
-
-    pub fn as_variant(dx: i32, dy: i32) -> Self {
-        match (dx, dy) {
-            (0, 1) => OrdDir::Up,
-            (0, -1) => OrdDir::Down,
-            (1, 0) => OrdDir::Right,
-            (-1, 0) => OrdDir::Left,
-            _ => panic!("Invalid offset provided."),
-        }
+        };
+        (x, y)
     }
 }

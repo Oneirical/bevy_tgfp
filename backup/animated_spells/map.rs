@@ -1,6 +1,10 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::{creature::Species, events::SummonCreature};
+use crate::{
+    creature::{Creature, Hunt, Player},
+    graphics::SpriteSheetAtlas,
+    OrdDir,
+};
 
 pub struct MapPlugin;
 
@@ -9,6 +13,7 @@ impl Plugin for MapPlugin {
         app.insert_resource(Map {
             creatures: HashMap::new(),
         });
+        app.add_systems(Startup, spawn_player);
         app.add_systems(Startup, spawn_cage);
         app.add_systems(Update, register_creatures);
     }
@@ -108,25 +113,65 @@ fn register_creatures(
     }
 }
 
-fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
+fn spawn_player(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+) {
+    commands.spawn((
+        Creature {
+            position: Position { x: 4, y: 4 },
+            sprite: SpriteBundle {
+                texture: asset_server.load("spritesheet.png"),
+                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+                ..default()
+            },
+            atlas: TextureAtlas {
+                layout: atlas_layout.handle.clone(),
+                index: 0,
+            },
+            momentum: OrdDir::Up,
+        },
+        Player,
+    ));
+}
+
+fn spawn_cage(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+) {
     let cage = "#########\
                 #H......#\
                 #.......#\
                 #.......#\
-                #...S...#\
                 #.......#\
-                #...@...#\
+                #.......#\
+                #.......#\
                 #.......#\
                 #########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
-        let species = match tile_char {
-            '#' => Species::Wall,
-            'H' => Species::Hunter,
-            '@' => Species::Player,
-            'S' => Species::Spawner,
+        let index = match tile_char {
+            '#' => 3,
+            'H' => 4,
             _ => continue,
         };
-        summon.send(SummonCreature { species, position });
+        let mut creature = commands.spawn(Creature {
+            position,
+            sprite: SpriteBundle {
+                texture: asset_server.load("spritesheet.png"),
+                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+                ..default()
+            },
+            atlas: TextureAtlas {
+                layout: atlas_layout.handle.clone(),
+                index,
+            },
+            momentum: OrdDir::Up,
+        });
+        if tile_char == 'H' {
+            creature.insert(Hunt);
+        }
     }
 }

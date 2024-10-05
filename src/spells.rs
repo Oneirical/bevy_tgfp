@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
-    events::TeleportEntity,
+    creature::Species,
+    events::{SummonCreature, TeleportEntity},
     map::{Map, Position},
     OrdDir,
 };
@@ -39,6 +40,8 @@ pub enum Axiom {
 
     // Target the caster's tile.
     Ego,
+    // Target the adjacent tile to the caster's tile, in the direction of the caster's last move.
+    Smooch,
     // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     // including the first solid tile encountered, which stops the beam.
     MomentumBeam,
@@ -47,6 +50,8 @@ pub enum Axiom {
 
     // The targeted creatures dash in the direction of the caster's last move.
     Dash,
+    // The targeted passable tiles summon a new instance of species.
+    SummonCreature { species: Species },
 }
 
 impl Axiom {
@@ -55,6 +60,14 @@ impl Axiom {
             // Target the caster's tile.
             Self::Ego => {
                 synapse_data.targets.push(synapse_data.caster_position);
+            }
+            // Target the adjacent tile to the caster's tile, in the direction of the caster's
+            // last move.
+            Self::Smooch => {
+                let mut new_pos = synapse_data.caster_position;
+                let offset = synapse_data.caster_momentum.as_offset();
+                new_pos.shift(offset.0, offset.1);
+                synapse_data.targets.push(new_pos);
             }
             // Shoot a beam from the caster towards its last move, all tiles passed through
             // become targets, including the impact point.
@@ -115,6 +128,15 @@ impl Axiom {
                 }
                 true
             }
+            Self::SummonCreature { species } => {
+                for position in &synapse_data.targets {
+                    synapse_data.effects.push(EventDispatch::SummonCreature {
+                        species: *species,
+                        position: *position,
+                    });
+                }
+                true
+            }
             // Forms (which do not have an in-game effect) return false.
             _ => false,
         }
@@ -166,6 +188,10 @@ pub enum EventDispatch {
         destination: Position,
         entity: Entity,
     },
+    SummonCreature {
+        species: Species,
+        position: Position,
+    },
 }
 
 /// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
@@ -213,6 +239,7 @@ pub struct SpellEffect {
 pub fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
+    mut summon: EventWriter<SummonCreature>,
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
@@ -222,7 +249,16 @@ pub fn dispatch_events(
                     destination,
                     entity,
                 } => {
-                    teleport.send(TeleportEntity::new(*entity, destination.x, destination.y));
+                    teleport.send(TeleportEntity {
+                        destination: *destination,
+                        entity: *entity,
+                    });
+                }
+                EventDispatch::SummonCreature { species, position } => {
+                    summon.send(SummonCreature {
+                        species: *species,
+                        position: *position,
+                    });
                 }
             };
         }
