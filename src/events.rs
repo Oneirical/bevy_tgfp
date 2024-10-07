@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{get_species_sprite, Creature, Hunt, Player, Species},
+    creature::{get_species_sprite, Creature, Hunt, Immutable, Intangible, Player, Species},
     graphics::SpriteSheetAtlas,
     map::{Map, Position},
     spells::{Axiom, CastSpell, Spell},
@@ -17,11 +17,13 @@ impl Plugin for EventPlugin {
         app.add_event::<AlterMomentum>();
         app.add_event::<SummonCreature>();
         app.add_event::<EndTurn>();
+        app.add_event::<CreatureCollision>();
         app.add_systems(Update, creature_step);
         app.add_systems(Update, teleport_entity);
         app.add_systems(Update, alter_momentum);
         app.add_systems(Update, summon_creature);
         app.add_systems(Update, end_turn);
+        app.add_systems(Update, creature_collision);
     }
 }
 
@@ -135,14 +137,17 @@ impl TeleportEntity {
 
 fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut creature: Query<&mut Position>,
+    mut creature: Query<(&mut Position, Has<Intangible>, Has<Immutable>)>,
     mut map: ResMut<Map>,
 ) {
     for event in events.read() {
-        let mut creature_position = creature
+        let (mut creature_position, is_intangible, is_immutable) = creature
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
+        if is_intangible || is_immutable {
+            continue;
+        }
         // If motion is possible...
         if map.is_passable(event.destination.x, event.destination.y) {
             // ...update the Map to reflect this...
@@ -180,7 +185,7 @@ fn summon_creature(
             species: event.species,
             sprite: SpriteBundle {
                 texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+                transform: Transform::from_scale(Vec3::new(2., 2., 0.)),
                 visibility: Visibility::Hidden,
                 ..default()
             },
@@ -197,7 +202,35 @@ fn summon_creature(
             Species::Hunter => {
                 new_creature.insert(Hunt);
             }
+            Species::Wall => {
+                new_creature.insert(Immutable);
+            }
             _ => (),
         }
+    }
+}
+
+#[derive(Event)]
+pub struct CreatureCollision {
+    pub attacker: Entity,
+    pub defender: Entity,
+    pub speed: usize,
+}
+
+fn creature_collision(
+    mut events: EventReader<CreatureCollision>,
+    mut removed_creature: Query<(&Position, &mut Visibility)>,
+    mut map: ResMut<Map>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        if event.speed <= 1 {
+            continue;
+        }
+        let (creature_position, mut creature_vis) =
+            removed_creature.get_mut(event.defender).unwrap();
+        map.creatures.remove(creature_position);
+        *creature_vis = Visibility::Hidden;
+        commands.entity(event.defender).insert(Intangible);
     }
 }

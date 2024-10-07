@@ -57,8 +57,8 @@ fn adjust_transforms(
             // Adjust their visual position to match this offset.
             (npc_tran.translation.x, npc_tran.translation.y) = (
                 // Multiplied by the graphical size of a tile, which is 64x64.
-                off_x as f32 * 4. * 16.,
-                off_y as f32 * 4. * 16.,
+                off_x as f32 * 2. * 16.,
+                off_y as f32 * 2. * 16.,
             );
         }
     }

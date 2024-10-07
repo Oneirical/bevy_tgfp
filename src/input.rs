@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Player,
-    events::CreatureStep,
+    events::{CreatureStep, EndTurn},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -21,6 +21,7 @@ fn keyboard_input(
     mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
     mut spell: EventWriter<CastSpell>,
+    mut turn_end: EventWriter<EndTurn>,
 ) {
     if let Ok(player) = player.get_single() {
         if input.just_pressed(KeyCode::Space) {
@@ -30,6 +31,7 @@ fn keyboard_input(
                     axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
                 },
             });
+            turn_end.send(EndTurn);
         }
         if input.just_pressed(KeyCode::KeyW) {
             events.send(CreatureStep {

@@ -5,7 +5,7 @@ mod input;
 mod map;
 mod spells;
 
-use bevy::{prelude::*, utils::warn};
+use bevy::prelude::*;
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;

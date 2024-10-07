@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Species,
-    events::{SummonCreature, TeleportEntity},
+    events::{CreatureCollision, SummonCreature, TeleportEntity},
     map::{Map, Position},
     OrdDir,
 };
@@ -99,6 +99,7 @@ impl Axiom {
     fn execute(&self, synapse_data: &mut SynapseData, map: &Map) -> bool {
         match self {
             Self::Dash => {
+                let mut risk_of_collision = None;
                 // For each (Entity, Position) on a targeted tile...
                 for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
                     // The dashing creature starts where it currently is standing.
@@ -110,10 +111,15 @@ impl Axiom {
                     while distance_travelled < 10 {
                         distance_travelled += 1;
                         // Stop dashing if a solid Creature is hit.
-                        if !map.is_passable(
+                        if let Some(collided_entity) = map.get_entity_at(
                             final_dash_destination.x + off_x,
                             final_dash_destination.y + off_y,
                         ) {
+                            risk_of_collision = Some(EventDispatch::CreatureCollision {
+                                attacker: *collided_entity,
+                                defender: dasher,
+                                speed: distance_travelled,
+                            });
                             break;
                         }
                         // Otherwise, keep offsetting the dashing creature's position.
@@ -125,6 +131,11 @@ impl Axiom {
                         destination: final_dash_destination,
                         entity: dasher,
                     });
+
+                    // If a collision occured, also release a Collision event.
+                    if let Some(collision) = risk_of_collision {
+                        synapse_data.effects.push(collision);
+                    }
                 }
                 true
             }
@@ -183,6 +194,7 @@ impl SynapseData {
 
 /// An enum with replicas of common game Events, to be translated into the real Events
 /// and dispatched to the main game loop.
+#[derive(Clone, Copy)]
 pub enum EventDispatch {
     TeleportEntity {
         destination: Position,
@@ -191,6 +203,11 @@ pub enum EventDispatch {
     SummonCreature {
         species: Species,
         position: Position,
+    },
+    CreatureCollision {
+        attacker: Entity,
+        defender: Entity,
+        speed: usize,
     },
 }
 
@@ -240,6 +257,7 @@ pub fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
     mut summon: EventWriter<SummonCreature>,
+    mut collide: EventWriter<CreatureCollision>,
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
@@ -258,6 +276,17 @@ pub fn dispatch_events(
                     summon.send(SummonCreature {
                         species: *species,
                         position: *position,
+                    });
+                }
+                EventDispatch::CreatureCollision {
+                    attacker: attack,
+                    defender,
+                    speed,
+                } => {
+                    collide.send(CreatureCollision {
+                        attacker: *attack,
+                        defender: *defender,
+                        speed: *speed,
                     });
                 }
             };

@@ -18,6 +18,12 @@ pub struct Player;
 #[derive(Component)]
 pub struct Hunt;
 
+#[derive(Component)]
+pub struct Intangible;
+
+#[derive(Component)]
+pub struct Immutable;
+
 #[derive(Debug, Component, Clone, Copy)]
 pub enum Species {
     Player,
