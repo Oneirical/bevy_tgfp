@@ -13,8 +13,8 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
         app.add_event::<SpellEffect>();
-        app.add_systems(Update, gather_effects);
-        app.add_systems(Update, dispatch_events);
+        app.add_systems(FixedUpdate, gather_effects);
+        app.add_systems(FixedUpdate, dispatch_events);
     }
 }
 
@@ -99,7 +99,6 @@ impl Axiom {
     fn execute(&self, synapse_data: &mut SynapseData, map: &Map) -> bool {
         match self {
             Self::Dash => {
-                let mut risk_of_collision = None;
                 // For each (Entity, Position) on a targeted tile...
                 for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
                     // The dashing creature starts where it currently is standing.
@@ -115,7 +114,8 @@ impl Axiom {
                             final_dash_destination.x + off_x,
                             final_dash_destination.y + off_y,
                         ) {
-                            risk_of_collision = Some(EventDispatch::CreatureCollision {
+                            // If a collision occured, also release a Collision event.
+                            synapse_data.effects.push(EventDispatch::CreatureCollision {
                                 attacker: *collided_entity,
                                 defender: dasher,
                                 speed: distance_travelled,
@@ -131,11 +131,6 @@ impl Axiom {
                         destination: final_dash_destination,
                         entity: dasher,
                     });
-
-                    // If a collision occured, also release a Collision event.
-                    if let Some(collision) = risk_of_collision {
-                        synapse_data.effects.push(collision);
-                    }
                 }
                 true
             }

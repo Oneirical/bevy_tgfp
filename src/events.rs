@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, Hunt, Immutable, Intangible, Player, Species},
-    graphics::SpriteSheetAtlas,
-    map::{Map, Position},
+    graphics::{SlideAnimation, SpriteSheetAtlas},
+    map::{register_creatures, Map, Position},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -18,12 +18,15 @@ impl Plugin for EventPlugin {
         app.add_event::<SummonCreature>();
         app.add_event::<EndTurn>();
         app.add_event::<CreatureCollision>();
-        app.add_systems(Update, creature_step);
-        app.add_systems(Update, teleport_entity);
-        app.add_systems(Update, alter_momentum);
-        app.add_systems(Update, summon_creature);
-        app.add_systems(Update, end_turn);
-        app.add_systems(Update, creature_collision);
+        app.add_systems(FixedUpdate, creature_step);
+        // Ordered because teleporting entities not registered yet causes a panic.
+        app.add_systems(FixedUpdate, teleport_entity.after(register_creatures));
+        app.add_systems(FixedUpdate, alter_momentum);
+        app.add_systems(FixedUpdate, summon_creature);
+        app.add_systems(FixedUpdate, end_turn);
+        // Ordered because removing entities from the map, then teleporting them,
+        // causes a panic.
+        app.add_systems(FixedUpdate, creature_collision.after(teleport_entity));
     }
 }
 
@@ -139,6 +142,7 @@ fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<(&mut Position, Has<Intangible>, Has<Immutable>)>,
     mut map: ResMut<Map>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible, is_immutable) = creature
@@ -152,6 +156,11 @@ fn teleport_entity(
         if map.is_passable(event.destination.x, event.destination.y) {
             // ...update the Map to reflect this...
             map.move_creature(*creature_position, event.destination);
+            // ...give the creature a sliding animation...
+            commands.entity(event.entity).insert(SlideAnimation {
+                elapsed: Timer::from_seconds(0.3, TimerMode::Once),
+                origin: *creature_position,
+            });
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
         } else {
@@ -185,7 +194,7 @@ fn summon_creature(
             species: event.species,
             sprite: SpriteBundle {
                 texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(2., 2., 0.)),
+                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
                 visibility: Visibility::Hidden,
                 ..default()
             },
@@ -203,7 +212,7 @@ fn summon_creature(
                 new_creature.insert(Hunt);
             }
             Species::Wall => {
-                new_creature.insert(Immutable);
+                // new_creature.insert(Immutable);
             }
             _ => (),
         }
