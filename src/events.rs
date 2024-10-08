@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, Hunt, Immutable, Intangible, Player, Species},
-    graphics::{SlideAnimation, SpriteSheetAtlas},
+    graphics::{
+        AwaitingAnimation, SlideAnimation, SpriteSheetAtlas, VisualEffect, VisualEffectQueue,
+    },
     map::{register_creatures, Map, Position},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
@@ -69,7 +71,7 @@ fn end_turn(
     mut events: EventReader<EndTurn>,
     mut step: EventWriter<CreatureStep>,
     mut spell: EventWriter<CastSpell>,
-    npcs: Query<(Entity, &Position, &Species), Without<Player>>,
+    npcs: Query<(Entity, &Position, &Species), (Without<Player>, Without<Intangible>)>,
     player: Query<&Position, With<Player>>,
     map: Res<Map>,
 ) {
@@ -142,6 +144,7 @@ fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<(&mut Position, Has<Intangible>, Has<Immutable>)>,
     mut map: ResMut<Map>,
+    mut visual_effects: ResMut<VisualEffectQueue>,
     mut commands: Commands,
 ) {
     for event in events.read() {
@@ -157,9 +160,13 @@ fn teleport_entity(
             // ...update the Map to reflect this...
             map.move_creature(*creature_position, event.destination);
             // ...give the creature a sliding animation...
-            commands.entity(event.entity).insert(SlideAnimation {
-                elapsed: Timer::from_seconds(0.3, TimerMode::Once),
+            let effect = VisualEffect::SlidingCreature {
+                entity: event.entity,
                 origin: *creature_position,
+            };
+            visual_effects.queue.push_back(effect);
+            commands.entity(event.entity).insert(AwaitingAnimation {
+                future_animation: effect,
             });
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
@@ -228,18 +235,22 @@ pub struct CreatureCollision {
 
 fn creature_collision(
     mut events: EventReader<CreatureCollision>,
-    mut removed_creature: Query<(&Position, &mut Visibility)>,
+    removed_creature: Query<&Position>,
     mut map: ResMut<Map>,
+    mut visual_effects: ResMut<VisualEffectQueue>,
     mut commands: Commands,
 ) {
     for event in events.read() {
         if event.speed <= 1 {
             continue;
         }
-        let (creature_position, mut creature_vis) =
-            removed_creature.get_mut(event.defender).unwrap();
+        let creature_position = removed_creature.get(event.defender).unwrap();
         map.creatures.remove(creature_position);
-        *creature_vis = Visibility::Hidden;
+        visual_effects
+            .queue
+            .push_back(VisualEffect::HideVisibility {
+                entity: event.defender,
+            });
         commands.entity(event.defender).insert(Intangible);
     }
 }
