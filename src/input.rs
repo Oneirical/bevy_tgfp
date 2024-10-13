@@ -22,7 +22,14 @@ fn keyboard_input(
     input: Res<ButtonInput<KeyCode>>,
     mut spell: EventWriter<CastSpell>,
     mut turn_end: EventWriter<EndTurn>,
+
+    mut camera: Query<&mut Transform, With<Camera>>,
 ) {
+    if input.pressed(KeyCode::ArrowUp) {
+        let mut trans = camera.get_single_mut().unwrap();
+        trans.translation.y += 10.
+    }
+
     if let Ok(player) = player.get_single() {
         if input.just_pressed(KeyCode::Space) {
             spell.send(CastSpell {

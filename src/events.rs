@@ -2,9 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, Hunt, Immutable, Intangible, Player, Species},
-    graphics::{
-        AwaitingAnimation, SlideAnimation, SpriteSheetAtlas, VisualEffect, VisualEffectQueue,
-    },
+    graphics::{SlideAnimation, SpriteSheetAtlas, VisualEffect, VisualEffectQueue},
     map::{register_creatures, Map, Position},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
@@ -145,7 +143,7 @@ fn teleport_entity(
     mut creature: Query<(&mut Position, Has<Intangible>, Has<Immutable>)>,
     mut map: ResMut<Map>,
     mut visual_effects: ResMut<VisualEffectQueue>,
-    mut commands: Commands,
+    mut animation_timer: ResMut<SlideAnimation>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible, is_immutable) = creature
@@ -159,15 +157,7 @@ fn teleport_entity(
         if map.is_passable(event.destination.x, event.destination.y) {
             // ...update the Map to reflect this...
             map.move_creature(*creature_position, event.destination);
-            // ...give the creature a sliding animation...
-            let effect = VisualEffect::SlidingCreature {
-                entity: event.entity,
-                origin: *creature_position,
-            };
-            visual_effects.queue.push_back(effect);
-            commands.entity(event.entity).insert(AwaitingAnimation {
-                future_animation: effect,
-            });
+            animation_timer.elapsed.reset();
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
         } else {
@@ -235,7 +225,7 @@ pub struct CreatureCollision {
 
 fn creature_collision(
     mut events: EventReader<CreatureCollision>,
-    removed_creature: Query<&Position>,
+    mut removed_creature: Query<(&Position, &mut Sprite)>,
     mut map: ResMut<Map>,
     mut visual_effects: ResMut<VisualEffectQueue>,
     mut commands: Commands,
@@ -244,7 +234,8 @@ fn creature_collision(
         if event.speed <= 1 {
             continue;
         }
-        let creature_position = removed_creature.get(event.defender).unwrap();
+        let (creature_position, mut creature_sprite) =
+            removed_creature.get_mut(event.defender).unwrap();
         map.creatures.remove(creature_position);
         visual_effects
             .queue
@@ -252,5 +243,6 @@ fn creature_collision(
                 entity: event.defender,
             });
         commands.entity(event.defender).insert(Intangible);
+        creature_sprite.color.set_alpha(0.1);
     }
 }

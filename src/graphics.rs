@@ -13,11 +13,14 @@ impl Plugin for GraphicsPlugin {
             queue: VecDeque::new(),
             cooldown: Timer::from_seconds(0., TimerMode::Repeating),
         });
+        app.insert_resource(SlideAnimation {
+            elapsed: Timer::from_seconds(0.4, TimerMode::Once),
+        });
         app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
-        app.add_systems(Update, adjust_transforms);
+        app.add_systems(Update, adjust_transform);
         app.add_systems(Update, render_new_summons);
-        app.add_systems(Update, visual_effect_pump);
+        // app.add_systems(Update, visual_effect_pump);
     }
 }
 
@@ -25,6 +28,11 @@ impl Plugin for GraphicsPlugin {
 pub struct VisualEffectQueue {
     pub queue: VecDeque<VisualEffect>,
     pub cooldown: Timer,
+}
+
+#[derive(Resource)]
+pub struct SlideAnimation {
+    pub elapsed: Timer,
 }
 
 #[derive(Clone, Copy)]
@@ -57,65 +65,54 @@ fn setup_camera(mut commands: Commands) {
     });
 }
 
-/// Each frame, adjust every entity's display location to be offset
-/// according to the player's location.
-fn adjust_transforms(
-    mut player: Query<
-        (&Position, Option<&mut SlideAnimation>),
-        (With<Player>, Without<AwaitingAnimation>),
-    >,
-    mut npcs: Query<
-        (
-            &Position,
-            &mut Transform,
-            Option<&mut SlideAnimation>,
-            Option<&AwaitingAnimation>,
-        ),
-        Without<Player>,
-    >,
+fn adjust_transform(
+    mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
+    mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
+    mut animation_timer: ResMut<SlideAnimation>,
     time: Res<Time>,
 ) {
-    // There should only be one player on any given frame.
-    if let Ok((player_pos, player_animation)) = player.get_single_mut() {
-        // Get the player's position, adjusted for its current animation.
-        let (player_offset_x, player_offset_y) =
-            if let Some(mut player_animation) = player_animation {
-                player_animation.get_animation_offsets(time.delta(), *player_pos)
-            } else {
-                (player_pos.x as f32, player_pos.y as f32)
-            };
-        // For each Position, Transform, SlideAnimation of each non-player creature...
-        for (npc_pos, mut npc_tran, npc_anim, future_animation) in npcs.iter_mut() {
-            let (npc_offset_x, npc_offset_y) = if let Some(mut npc_anim) = npc_anim {
-                npc_anim.get_animation_offsets(time.delta(), *npc_pos)
-            } else {
-                (npc_pos.x as f32, npc_pos.y as f32)
-            };
-            // Measure their offset distance from the player's location.
-            let (off_x, off_y) = if let Some(future_animation) = future_animation {
-                if let VisualEffect::SlidingCreature { entity: _, origin } =
-                    future_animation.future_animation
-                {
-                    (
-                        origin.x as f32 - player_offset_x,
-                        origin.y as f32 - player_offset_y,
-                    )
-                } else {
-                    panic!();
-                }
-            } else {
-                (
-                    npc_offset_x - player_offset_x,
-                    npc_offset_y - player_offset_y,
-                )
-            };
-            // Adjust their visual position to match this offset.
-            (npc_tran.translation.x, npc_tran.translation.y) = (
-                // Multiplied by the graphical size of a tile, which is 64x64.
-                off_x as f32 * 4. * 16.,
-                off_y as f32 * 4. * 16.,
-            );
+    let fraction_before_tick = animation_timer.elapsed.fraction();
+    animation_timer.elapsed.tick(time.delta());
+    let fraction_ticked = animation_timer.elapsed.fraction() - fraction_before_tick;
+    for (pos, mut trans, is_player) in creatures.iter_mut() {
+        // Multiplied by the graphical size of a tile, which is 64x64.
+        let (dx, dy) = (
+            pos.x as f32 * 64. - trans.translation.x,
+            pos.y as f32 * 64. - trans.translation.y,
+        );
+        // The distance between the original position and the destination position.
+        let (ori_dx, ori_dy) = (
+            dx / animation_timer.elapsed.fraction_remaining(),
+            dy / animation_timer.elapsed.fraction_remaining(),
+        );
+        // The sprite approaches its destination.
+        trans.translation.x = bring_closer_to_target_value(
+            trans.translation.x,
+            ori_dx * fraction_ticked,
+            pos.x as f32 * 64.,
+        );
+        trans.translation.y = bring_closer_to_target_value(
+            trans.translation.y,
+            ori_dy * fraction_ticked,
+            pos.y as f32 * 64.,
+        );
+        if is_player {
+            // The camera follows the player.
+            let mut camera_trans = camera.get_single_mut().unwrap();
+            (camera_trans.translation.x, camera_trans.translation.y) =
+                (trans.translation.x, trans.translation.y);
         }
+    }
+}
+
+fn bring_closer_to_target_value(value: f32, adjustment: f32, target_value: f32) -> f32 {
+    let adjustment = adjustment.abs();
+    if value > target_value {
+        (value - adjustment).max(target_value)
+    } else if value < target_value {
+        (value + adjustment).min(target_value)
+    } else {
+        target_value // value is already at target
     }
 }
 
@@ -127,56 +124,33 @@ fn render_new_summons(mut summoned_creatures: Query<&mut Visibility, Added<Posit
     }
 }
 
-fn visual_effect_pump(
-    time: Res<Time>,
-    mut commands: Commands,
-    mut pump: ResMut<VisualEffectQueue>,
-) {
-    pump.cooldown.tick(time.delta());
-    if !pump.cooldown.finished() {
-        return;
-    }
-    pump.cooldown.reset();
-    let effect = pump.queue.pop_front();
-    if let Some(effect) = effect {
-        match effect {
-            VisualEffect::SlidingCreature { entity, origin } => {
-                commands.entity(entity).insert(SlideAnimation {
-                    elapsed: Timer::from_seconds(0.3, TimerMode::Once),
-                    origin,
-                });
-                pump.cooldown.set_duration(Duration::from_millis(50));
-                // FIXME The code this generated is messy, and the queue doesn't
-                // get emptied if you spam the buttons.
-                commands.entity(entity).remove::<AwaitingAnimation>();
-            }
-            VisualEffect::HideVisibility { entity } => {
-                commands.entity(entity).insert(Visibility::Hidden);
-                pump.cooldown.set_duration(Duration::from_millis(0));
-            }
-        }
-    }
-}
-
-#[derive(Component)]
-pub struct AwaitingAnimation {
-    pub future_animation: VisualEffect,
-}
-
-#[derive(Component)]
-pub struct SlideAnimation {
-    pub elapsed: Timer,
-    pub origin: Position,
-}
-
-impl SlideAnimation {
-    fn get_animation_offsets(&mut self, delta_time: Duration, destination: Position) -> (f32, f32) {
-        let source = self.origin;
-        self.elapsed.tick(delta_time);
-        let (dx, dy) = (destination.x - source.x, destination.y - source.y);
-        (
-            destination.x as f32 - dx as f32 * self.elapsed.fraction_remaining(),
-            destination.y as f32 - dy as f32 * self.elapsed.fraction_remaining(),
-        )
-    }
-}
+// fn visual_effect_pump(
+//     time: Res<Time>,
+//     mut commands: Commands,
+//     mut pump: ResMut<VisualEffectQueue>,
+// ) {
+//     pump.cooldown.tick(time.delta());
+//     if !pump.cooldown.finished() {
+//         return;
+//     }
+//     pump.cooldown.reset();
+//     let effect = pump.queue.pop_front();
+//     if let Some(effect) = effect {
+//         match effect {
+//             VisualEffect::SlidingCreature { entity, origin } => {
+//                 commands.entity(entity).insert(SlideAnimation {
+//                     elapsed: Timer::from_seconds(0.3, TimerMode::Once),
+//                     origin,
+//                 });
+//                 pump.cooldown.set_duration(Duration::from_millis(50));
+//                 // FIXME The code this generated is messy, and the queue doesn't
+//                 // get emptied if you spam the buttons.
+//                 commands.entity(entity).remove::<AwaitingAnimation>();
+//             }
+//             VisualEffect::HideVisibility { entity } => {
+//                 commands.entity(entity).insert(Visibility::Hidden);
+//                 pump.cooldown.set_duration(Duration::from_millis(0));
+//             }
+//         }
+//     }
+// }
