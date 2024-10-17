@@ -2,9 +2,9 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, Hunt, Immutable, Intangible, Player, Species},
-    graphics::{SlideAnimation, SpriteSheetAtlas, VisualEffect, VisualEffectQueue},
+    graphics::{SlideAnimation, SpriteSheetAtlas},
     map::{register_creatures, Map, Position},
-    spells::{dispatch_events, gather_effects, Axiom, CastSpell, Spell},
+    spells::{dispatch_events, Axiom, CastSpell, Spell},
     OrdDir,
 };
 
@@ -97,6 +97,7 @@ fn end_turn(
                     }
                 }
                 Species::Spawner => {
+                    // Find an empty tile around the spawner to place a Hunter in.
                     if let Some(empty_tile) =
                         map.best_manhattan_move(*creature_position, *player_pos)
                     {
@@ -104,6 +105,7 @@ fn end_turn(
                             empty_tile.x - creature_position.x,
                             empty_tile.y - creature_position.y,
                         );
+                        // Make the spawner "face" that tile.
                         momentum.send(AlterMomentum {
                             entity: creature_entity,
                             direction,
@@ -216,6 +218,7 @@ pub fn summon_creature(
             },
             momentum: OrdDir::Up,
         });
+        // Add any species-specific components.
         match &event.species {
             Species::Player => {
                 new_creature.insert(Player);
@@ -242,21 +245,17 @@ fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut removed_creature: Query<(Entity, &mut Sprite)>,
     mut map: ResMut<Map>,
-    mut visual_effects: ResMut<VisualEffectQueue>,
     mut commands: Commands,
 ) {
     for event in events.read() {
+        // The creature needs to have travelled at least one empty tile to actually be struck.
         if event.speed <= 1 {
             continue;
         }
         let (creature_entity, mut creature_sprite) =
             removed_creature.get_mut(event.defender).unwrap();
+        // The creature becomes intangible.
         map.make_intangible(creature_entity);
-        visual_effects
-            .queue
-            .push_back(VisualEffect::HideVisibility {
-                entity: event.defender,
-            });
         commands.entity(event.defender).insert(Intangible);
         creature_sprite.color.set_alpha(0.1);
     }
