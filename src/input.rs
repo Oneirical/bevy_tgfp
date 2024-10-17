@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Player,
     events::{CreatureStep, EndTurn},
+    graphics::SlideAnimation,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -22,14 +23,11 @@ fn keyboard_input(
     input: Res<ButtonInput<KeyCode>>,
     mut spell: EventWriter<CastSpell>,
     mut turn_end: EventWriter<EndTurn>,
-
-    mut camera: Query<&mut Transform, With<Camera>>,
+    animation_timer: Res<SlideAnimation>,
 ) {
-    if input.pressed(KeyCode::ArrowUp) {
-        let mut trans = camera.get_single_mut().unwrap();
-        trans.translation.y += 10.
+    if !animation_timer.elapsed.finished() {
+        return;
     }
-
     if let Ok(player) = player.get_single() {
         if input.just_pressed(KeyCode::Space) {
             spell.send(CastSpell {

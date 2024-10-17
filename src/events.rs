@@ -4,7 +4,7 @@ use crate::{
     creature::{get_species_sprite, Creature, Hunt, Immutable, Intangible, Player, Species},
     graphics::{SlideAnimation, SpriteSheetAtlas, VisualEffect, VisualEffectQueue},
     map::{register_creatures, Map, Position},
-    spells::{Axiom, CastSpell, Spell},
+    spells::{dispatch_events, gather_effects, Axiom, CastSpell, Spell},
     OrdDir,
 };
 
@@ -16,17 +16,16 @@ impl Plugin for EventPlugin {
         app.add_event::<TeleportEntity>();
         app.add_event::<AlterMomentum>();
         app.add_event::<SummonCreature>();
-        app.add_event::<EndTurn>();
+        app.init_resource::<Events<EndTurn>>();
         app.add_event::<CreatureCollision>();
-        app.add_systems(FixedUpdate, creature_step);
-        // Ordered because teleporting entities not registered yet causes a panic.
+        app.add_systems(FixedUpdate, creature_step.before(alter_momentum));
+        app.add_systems(FixedUpdate, alter_momentum.after(creature_step));
+        // Spell effects go next.
+        app.add_systems(FixedUpdate, creature_collision.after(dispatch_events));
+        app.add_systems(FixedUpdate, summon_creature.after(creature_collision));
+        // Newly summoned creatures are registered by `register_creatures`.
         app.add_systems(FixedUpdate, teleport_entity.after(register_creatures));
-        app.add_systems(FixedUpdate, alter_momentum);
-        app.add_systems(FixedUpdate, summon_creature);
-        app.add_systems(FixedUpdate, end_turn);
-        // Ordered because removing entities from the map, then teleporting them,
-        // causes a panic.
-        app.add_systems(FixedUpdate, creature_collision.after(teleport_entity));
+        app.add_systems(FixedUpdate, end_turn.after(teleport_entity));
     }
 }
 
@@ -72,7 +71,12 @@ fn end_turn(
     npcs: Query<(Entity, &Position, &Species), (Without<Player>, Without<Intangible>)>,
     player: Query<&Position, With<Player>>,
     map: Res<Map>,
+    animation_timer: Res<SlideAnimation>,
+    mut momentum: EventWriter<AlterMomentum>,
 ) {
+    if !animation_timer.elapsed.finished() {
+        return;
+    }
     for _event in events.read() {
         let player_pos = player.get_single().unwrap();
         for (creature_entity, creature_position, creature_species) in npcs.iter() {
@@ -93,17 +97,29 @@ fn end_turn(
                     }
                 }
                 Species::Spawner => {
-                    spell.send(CastSpell {
-                        caster: creature_entity,
-                        spell: Spell {
-                            axioms: vec![
-                                Axiom::Smooch,
-                                Axiom::SummonCreature {
-                                    species: Species::Hunter,
-                                },
-                            ],
-                        },
-                    });
+                    if let Some(empty_tile) =
+                        map.best_manhattan_move(*creature_position, *player_pos)
+                    {
+                        let direction = OrdDir::as_variant(
+                            empty_tile.x - creature_position.x,
+                            empty_tile.y - creature_position.y,
+                        );
+                        momentum.send(AlterMomentum {
+                            entity: creature_entity,
+                            direction,
+                        });
+                        spell.send(CastSpell {
+                            caster: creature_entity,
+                            spell: Spell {
+                                axioms: vec![
+                                    Axiom::Smooch,
+                                    Axiom::SummonCreature {
+                                        species: Species::Hunter,
+                                    },
+                                ],
+                            },
+                        });
+                    }
                 }
                 _ => (),
             }
@@ -117,7 +133,7 @@ pub struct AlterMomentum {
     pub direction: OrdDir,
 }
 
-fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&mut OrdDir>) {
+pub fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&mut OrdDir>) {
     for momentum_alteration in events.read() {
         *creature.get_mut(momentum_alteration.entity).unwrap() = momentum_alteration.direction;
     }
@@ -142,7 +158,6 @@ fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<(&mut Position, Has<Intangible>, Has<Immutable>)>,
     mut map: ResMut<Map>,
-    mut visual_effects: ResMut<VisualEffectQueue>,
     mut animation_timer: ResMut<SlideAnimation>,
 ) {
     for event in events.read() {
@@ -150,11 +165,11 @@ fn teleport_entity(
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
-        if is_intangible || is_immutable {
+        if is_immutable {
             continue;
         }
-        // If motion is possible...
-        if map.is_passable(event.destination.x, event.destination.y) {
+        // If motion is possible... (destination tile is empty, or creature is intangible)
+        if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
             // ...update the Map to reflect this...
             map.move_creature(*creature_position, event.destination);
             animation_timer.elapsed.reset();
@@ -174,7 +189,7 @@ pub struct SummonCreature {
     pub position: Position,
 }
 
-fn summon_creature(
+pub fn summon_creature(
     mut commands: Commands,
     mut events: EventReader<SummonCreature>,
     asset_server: Res<AssetServer>,
@@ -209,7 +224,7 @@ fn summon_creature(
                 new_creature.insert(Hunt);
             }
             Species::Wall => {
-                // new_creature.insert(Immutable);
+                new_creature.insert(Immutable);
             }
             _ => (),
         }
@@ -225,7 +240,7 @@ pub struct CreatureCollision {
 
 fn creature_collision(
     mut events: EventReader<CreatureCollision>,
-    mut removed_creature: Query<(&Position, &mut Sprite)>,
+    mut removed_creature: Query<(Entity, &mut Sprite)>,
     mut map: ResMut<Map>,
     mut visual_effects: ResMut<VisualEffectQueue>,
     mut commands: Commands,
@@ -234,9 +249,9 @@ fn creature_collision(
         if event.speed <= 1 {
             continue;
         }
-        let (creature_position, mut creature_sprite) =
+        let (creature_entity, mut creature_sprite) =
             removed_creature.get_mut(event.defender).unwrap();
-        map.creatures.remove(creature_position);
+        map.make_intangible(creature_entity);
         visual_effects
             .queue
             .push_back(VisualEffect::HideVisibility {

@@ -5,7 +5,10 @@ mod input;
 mod map;
 mod spells;
 
-use bevy::prelude::*;
+use bevy::{
+    ecs::schedule::{LogLevel, ScheduleBuildSettings},
+    prelude::*,
+};
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;
@@ -22,6 +25,12 @@ fn main() {
             MapPlugin,
             InputPlugin,
         ))
+        .edit_schedule(FixedUpdate, |schedule| {
+            schedule.set_build_settings(ScheduleBuildSettings {
+                ambiguity_detection: LogLevel::Warn,
+                ..default()
+            });
+        })
         .run();
 }
 

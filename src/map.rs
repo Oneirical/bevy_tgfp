@@ -1,6 +1,12 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
 
-use crate::{creature::Species, events::SummonCreature};
+use crate::{
+    creature::Species,
+    events::{summon_creature, SummonCreature},
+};
 
 pub struct MapPlugin;
 
@@ -8,9 +14,10 @@ impl Plugin for MapPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Map {
             creatures: HashMap::new(),
+            intangible: HashSet::new(),
         });
         app.add_systems(Startup, spawn_cage);
-        app.add_systems(FixedUpdate, register_creatures);
+        app.add_systems(FixedUpdate, register_creatures.after(summon_creature));
     }
 }
 
@@ -46,6 +53,7 @@ fn manhattan_distance(a: Position, b: Position) -> i32 {
 #[derive(Resource)]
 pub struct Map {
     pub creatures: HashMap<Position, Entity>,
+    pub intangible: HashSet<Entity>,
 }
 
 impl Map {
@@ -56,7 +64,20 @@ impl Map {
 
     /// Is this tile passable?
     pub fn is_passable(&self, x: i32, y: i32) -> bool {
-        self.get_entity_at(x, y).is_none()
+        self.get_blocking_entity(x, y).is_none()
+    }
+
+    pub fn get_blocking_entity(&self, x: i32, y: i32) -> Option<&Entity> {
+        let entity = self.get_entity_at(x, y);
+        if let Some(entity) = entity {
+            if self.intangible.contains(entity) {
+                None
+            } else {
+                Some(entity)
+            }
+        } else {
+            None
+        }
     }
 
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
@@ -90,6 +111,11 @@ impl Map {
             old_pos, new_pos
         ));
         self.creatures.insert(new_pos, entity);
+    }
+
+    /// Make a creature intangible, if it is not already.
+    pub fn make_intangible(&mut self, entity: Entity) {
+        self.intangible.insert(entity);
     }
 }
 

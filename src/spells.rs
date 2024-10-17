@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Species,
-    events::{CreatureCollision, SummonCreature, TeleportEntity},
+    events::{alter_momentum, CreatureCollision, SummonCreature, TeleportEntity},
     map::{Map, Position},
     OrdDir,
 };
@@ -13,8 +13,8 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
         app.add_event::<SpellEffect>();
-        app.add_systems(FixedUpdate, gather_effects);
-        app.add_systems(FixedUpdate, dispatch_events);
+        app.add_systems(FixedUpdate, gather_effects.after(alter_momentum));
+        app.add_systems(FixedUpdate, dispatch_events.after(gather_effects));
     }
 }
 
@@ -110,7 +110,7 @@ impl Axiom {
                     while distance_travelled < 10 {
                         distance_travelled += 1;
                         // Stop dashing if a solid Creature is hit.
-                        if let Some(collided_entity) = map.get_entity_at(
+                        if let Some(collided_entity) = map.get_blocking_entity(
                             final_dash_destination.x + off_x,
                             final_dash_destination.y + off_y,
                         ) {
@@ -207,7 +207,7 @@ pub enum EventDispatch {
 }
 
 /// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
-fn gather_effects(
+pub fn gather_effects(
     mut cast_spells: EventReader<CastSpell>,
     mut sender: EventWriter<SpellEffect>,
     caster: Query<(&Position, &OrdDir)>,
