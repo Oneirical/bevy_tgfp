@@ -627,7 +627,9 @@ Self::Dash => {
 }
 ```
 
-Here, a fake beam is invented, which needs a fake "synapse" to go alongside it, and it specifically extracts the penultimate tile (as the last one is the solid impact point) to dash to. Should the "anti beam forcefield" be invented later, this would need an added exception, potentially implemented as an extra parameter passed to the `target` function... lots of complexity for not much reward.
+Here, a fake beam is invented, which needs a fake "synapse" to go alongside it. This "beam" is fired for the sole purpose of finding the penultimate tile in its path (the ultimate tile is the solid impact point). This is the tile where the affected dash to.
+
+Should the "anti beam forcefield" be invented later, this would need an added exception, potentially implemented as an extra parameter passed to the `target` function... lots of complexity for not much reward.
 
 And just like that, with only 11 added lines of code (which were very similar to our `Dash` implementation), the projectile is ready:
 

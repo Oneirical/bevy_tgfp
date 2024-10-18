@@ -54,8 +54,11 @@ fn adjust_transforms(
 ) {
     let fraction_before_tick = animation_timer.elapsed.fraction();
     animation_timer.elapsed.tick(time.delta());
+    // Calculate what % of the animation has elapsed during this tick.
     let fraction_ticked = animation_timer.elapsed.fraction() - fraction_before_tick;
     for (pos, mut trans, is_player) in creatures.iter_mut() {
+        // The distance between where a creature CURRENTLY is,
+        // and the destination of a creature's movement.
         // Multiplied by the graphical size of a tile, which is 64x64.
         let (dx, dy) = (
             pos.x as f32 * 64. - trans.translation.x,

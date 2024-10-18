@@ -174,6 +174,7 @@ fn teleport_entity(
         if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
             // ...update the Map to reflect this...
             map.move_creature(*creature_position, event.destination);
+            // ...begin the sliding animation...
             animation_timer.elapsed.reset();
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
