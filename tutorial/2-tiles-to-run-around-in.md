@@ -173,40 +173,47 @@ Indeed, `commands.spawn()` doesn't only accept a single `Bundle` (`Creature`), b
 Just like `Position`, `Player` also currently does nothing. However, it's time to unify everything with our very first `Update` system:
 
 ```rust
-/// Each frame, adjust every entity's display location to be offset
-/// according to the player's location.
+/// Each frame, adjust every entity's display location to match
+/// their position on the grid, and make the camera follow the player.
 fn adjust_transforms(
-    player: Query<&Position, With<Player>>,
-    mut npcs: Query<(&Position, &mut Transform), Without<Player>>,
+    mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
+    mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
 ) {
-    // There should only be one player on any given frame.
-    let player_pos = player.get_single().expect("0 or 2+ players");
-    // Get the player's position.
-    let (px, py) = (player_pos.x, player_pos.y);
-    // For each Position and Transform of each non-player creature...
-    for (npc_pos, mut npc_tran) in npcs.iter_mut() {
-        // Measure their offset distance from the player's location.
-        let (off_x, off_y) = (npc_pos.x - px, npc_pos.y - py);
-        // Adjust their visual position to match this offset.
-        (npc_tran.translation.x, npc_tran.translation.y) = (
-            // Multiplied by the graphical size of a tile, which is 64x64.
-            off_x as f32 * 4. * 16.,
-            off_y as f32 * 4. * 16.,
-        );
+    for (pos, mut trans, is_player) in creatures.iter_mut() {
+        // Multiplied by the graphical size of a tile, which is 64x64.
+        trans.translation.x = pos.x as f32 * 64.;
+        trans.translation.y = pos.y as f32 * 64.;
+        if is_player {
+            // The camera follows the player.
+            let mut camera_trans = camera.get_single_mut().unwrap();
+            (camera_trans.translation.x, camera_trans.translation.y) =
+                (trans.translation.x, trans.translation.y);
+        }
     }
 }
 ```
 
 This introduces a major Bevy feature: `Query`. A query will go fetch *all* Entities in the game that match their Component list and added filters.
 
-- `Query<&Position, With<Player>>` grants us access to all Entities with *both* `Position` and `Player`, and exposes their `Position` component for read-only access.
-- `Query<(&Position, &mut Transform), Without<Player>>` grants us access to all Entities with `Position` and `Transform`, and which do *not* contain `Player`. The `Position` component is exposed in read-only mode, while the `Transform` component is exposed in read-write (mutable) mode.
-
 Queries are always structured `Query<QueryData, QueryFilter>` where both of these are either a single parameter or multiple ones bundled in a tuple. Each one is also optional - you can have zero filters or only filters, should you desire that.
 
-Into the function body, now, we first grab the `player`'s `Position`. As the ̀`Query<&Position, With<Player>>` only fetches a single Entity, we can use the risky `get_single` which will panic should there ever be more than one `Entity` fetched by the ̀`Querỳ`.
+- `Query<(&Position, &mut Transform, Has<Player>)>` is trying to fetch every creature in the grid, checking if it's the player or not, see where it is located and edit its visual position.
 
-As for the other `Query`, it fetched a lot more entities - every wall to be exact. We loop through all of the matched entities with `iter_mut()`, calculate their (x, y) distance relative to the player's `Position`, then convert that tile offset into a graphical offset by multiplying with the tile size: 64x64 pixels. This edits the creatures' `Transform` component, moving them across the screen!
+It grants us access to all Entities with *both* `Position` and `Transform`. The `Position` component is exposed for read-only access, while `Transform` is allowed to be modified. There is also an optional `Has<Player>`, which is a boolean determining if the current Entity being accessed has the `Player` component or not.
+
+Note that this first query only has a tuple of these 3 elements. If we wanted, we could have added additional `QueryFilter` after a comma, which is the case of the second ̀`Query`:
+
+- `Query<&mut Transform, (With<Camera>, Without<Position>)>` is trying to fetch the camera viewing the scene, and to move it around.
+
+It grants us access to all Entities with `Transform` exposed for modification, with the added condition that `Camera` must be possessed by the Entity. There is, however, something peculiar here: `Without<Position>`.
+
+Bevy doesn't know that a Camera and a Creature are two different things - it only sees the components. As far as it's concerned, nothing stops us from spawning in a creature that also has a `Camera` installed. In this case, this poor mutated chimera Creature would be caught by both queries at the same time, and have its `Transform` component mutably accessed twice in a row.
+
+Those familiar with Rust's holy commandments will know that this is **unacceptable**. Try it without the `Without<Position>` filter, and the game will panic on startup.
+
+The first loop fetches the player, as well as every wall. We loop through all of the matched entities with `iter_mut()`, then multiply their `Position` x and y coordinates by 64.0. This is the size of one tile (64 pixels x 64 pixels), letting this value become a graphical offset once it is assigned to their `Transform` component's `translation` field, moving them across the screen!
+
+Then, if that Entity was the player, the camera should be displaced to follow it. As the ̀`Query<&mut Transform, (With<Camera>, Without<Position>)>` only fetches a single Entity, we can use the risky `get_single_mut` which will panic should there ever be more than one `Entity` fetched by the ̀`Querỳ`. Match the Camera's translation with the Player's translation, and the system is complete!
 
 Don't forget to register this new system.
 

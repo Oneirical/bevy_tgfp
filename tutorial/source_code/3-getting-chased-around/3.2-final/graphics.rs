@@ -38,25 +38,21 @@ fn setup_camera(mut commands: Commands) {
     });
 }
 
-/// Each frame, adjust every entity's display location to be offset
-/// according to the player's location.
+/// Each frame, adjust every entity's display location to match
+/// their position on the grid, and make the camera follow the player.
 fn adjust_transforms(
-    player: Query<&Position, With<Player>>,
-    mut npcs: Query<(&Position, &mut Transform), Without<Player>>,
+    mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
+    mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
 ) {
-    // There should only be one player on any given frame.
-    let player_pos = player.get_single().expect("0 or 2+ players");
-    // Get the player's position.
-    let (px, py) = (player_pos.x, player_pos.y);
-    // For each Position and Transform of each non-player creature...
-    for (npc_pos, mut npc_tran) in npcs.iter_mut() {
-        // Measure their offset distance from the player's location.
-        let (off_x, off_y) = (npc_pos.x - px, npc_pos.y - py);
-        // Adjust their visual position to match this offset.
-        (npc_tran.translation.x, npc_tran.translation.y) = (
-            // Multiplied by the graphical size of a tile, which is 64x64.
-            off_x as f32 * 4. * 16.,
-            off_y as f32 * 4. * 16.,
-        );
+    for (pos, mut trans, is_player) in creatures.iter_mut() {
+        // Multiplied by the graphical size of a tile, which is 64x64.
+        trans.translation.x = pos.x as f32 * 64.;
+        trans.translation.y = pos.y as f32 * 64.;
+        if is_player {
+            // The camera follows the player.
+            let mut camera_trans = camera.get_single_mut().unwrap();
+            (camera_trans.translation.x, camera_trans.translation.y) =
+                (trans.translation.x, trans.translation.y);
+        }
     }
 }
