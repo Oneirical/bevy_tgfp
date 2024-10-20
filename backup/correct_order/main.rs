@@ -5,7 +5,10 @@ mod input;
 mod map;
 mod spells;
 
-use bevy::prelude::*;
+use bevy::{
+    ecs::schedule::{LogLevel, ScheduleBuildSettings},
+    prelude::*,
+};
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;
@@ -22,6 +25,12 @@ fn main() {
             MapPlugin,
             InputPlugin,
         ))
+        .edit_schedule(FixedUpdate, |schedule| {
+            schedule.set_build_settings(ScheduleBuildSettings {
+                ambiguity_detection: LogLevel::Warn,
+                ..default()
+            });
+        })
         .run();
 }
 
@@ -35,14 +44,14 @@ pub enum OrdDir {
 
 impl OrdDir {
     pub fn as_offset(self) -> (i32, i32) {
-        let (x, y) = match self {
+        match self {
             OrdDir::Up => (0, 1),
             OrdDir::Right => (1, 0),
             OrdDir::Down => (0, -1),
             OrdDir::Left => (-1, 0),
-        };
-        (x, y)
+        }
     }
+
     pub fn as_variant(dx: i32, dy: i32) -> Self {
         match (dx, dy) {
             (0, 1) => OrdDir::Up,

@@ -13,6 +13,7 @@ impl Plugin for GraphicsPlugin {
         app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
+        app.add_systems(Update, render_new_summons);
     }
 }
 
@@ -23,7 +24,6 @@ pub struct SlideAnimation {
 
 #[derive(Resource)]
 pub struct SpriteSheetAtlas {
-    // Note the pub!
     pub handle: Handle<TextureAtlasLayout>,
 }
 
@@ -46,8 +46,6 @@ fn setup_camera(mut commands: Commands) {
     });
 }
 
-/// Each frame, adjust every entity's display location to match
-/// their position on the grid, and make the camera follow the player.
 fn adjust_transforms(
     mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
@@ -99,5 +97,13 @@ fn bring_closer_to_target_value(value: f32, adjustment: f32, target_value: f32) 
         (value + adjustment).min(target_value)
     } else {
         target_value // Value is already at target.
+    }
+}
+
+/// To avoid 1-frame flashes of newly spawned creatures, only make them appear on screen
+/// after they have been passed through adjust_transforms.
+fn render_new_summons(mut summoned_creatures: Query<&mut Visibility, Added<Position>>) {
+    for mut creature_visibility in summoned_creatures.iter_mut() {
+        *creature_visibility = Visibility::Visible;
     }
 }

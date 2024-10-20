@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Species,
-    events::{SummonCreature, TeleportEntity},
+    events::{alter_momentum, CreatureCollision, SummonCreature, TeleportEntity},
     map::{Map, Position},
     OrdDir,
 };
@@ -13,8 +13,8 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
         app.add_event::<SpellEffect>();
-        app.add_systems(Update, gather_effects);
-        app.add_systems(Update, dispatch_events);
+        app.add_systems(FixedUpdate, gather_effects.after(alter_momentum));
+        app.add_systems(FixedUpdate, dispatch_events.after(gather_effects));
     }
 }
 
@@ -40,8 +40,8 @@ pub enum Axiom {
 
     // Target the caster's tile.
     Ego,
-    // Target all orthogonally adjacent tiles to the caster.
-    Plus,
+    // Target the adjacent tile to the caster's tile, in the direction of the caster's last move.
+    Smooch,
     // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     // including the first solid tile encountered, which stops the beam.
     MomentumBeam,
@@ -61,15 +61,13 @@ impl Axiom {
             Self::Ego => {
                 synapse_data.targets.push(synapse_data.caster_position);
             }
-            // Target all orthogonally adjacent tiles to the caster.
-            Self::Plus => {
-                let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
-                for direction in adjacent {
-                    let mut new_pos = synapse_data.caster_position;
-                    let offset = direction.as_offset();
-                    new_pos.shift(offset.0, offset.1);
-                    synapse_data.targets.push(new_pos);
-                }
+            // Target the adjacent tile to the caster's tile, in the direction of the caster's
+            // last move.
+            Self::Smooch => {
+                let mut new_pos = synapse_data.caster_position;
+                let offset = synapse_data.caster_momentum.as_offset();
+                new_pos.shift(offset.0, offset.1);
+                synapse_data.targets.push(new_pos);
             }
             // Shoot a beam from the caster towards its last move, all tiles passed through
             // become targets, including the impact point.
@@ -112,10 +110,16 @@ impl Axiom {
                     while distance_travelled < 10 {
                         distance_travelled += 1;
                         // Stop dashing if a solid Creature is hit.
-                        if !map.is_passable(
+                        if let Some(collided_entity) = map.get_blocking_entity(
                             final_dash_destination.x + off_x,
                             final_dash_destination.y + off_y,
                         ) {
+                            // If a collision occured, also release a Collision event.
+                            synapse_data.effects.push(EventDispatch::CreatureCollision {
+                                attacker: *collided_entity,
+                                defender: dasher,
+                                speed: distance_travelled,
+                            });
                             break;
                         }
                         // Otherwise, keep offsetting the dashing creature's position.
@@ -130,7 +134,6 @@ impl Axiom {
                 }
                 true
             }
-            // The targeted passable tiles summon a new instance of species.
             Self::SummonCreature { species } => {
                 for position in &synapse_data.targets {
                     synapse_data.effects.push(EventDispatch::SummonCreature {
@@ -186,6 +189,7 @@ impl SynapseData {
 
 /// An enum with replicas of common game Events, to be translated into the real Events
 /// and dispatched to the main game loop.
+#[derive(Clone, Copy)]
 pub enum EventDispatch {
     TeleportEntity {
         destination: Position,
@@ -195,10 +199,15 @@ pub enum EventDispatch {
         species: Species,
         position: Position,
     },
+    CreatureCollision {
+        attacker: Entity,
+        defender: Entity,
+        speed: usize,
+    },
 }
 
 /// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
-fn gather_effects(
+pub fn gather_effects(
     mut cast_spells: EventReader<CastSpell>,
     mut sender: EventWriter<SpellEffect>,
     caster: Query<(&Position, &OrdDir)>,
@@ -243,6 +252,7 @@ pub fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
     mut summon: EventWriter<SummonCreature>,
+    mut collide: EventWriter<CreatureCollision>,
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
@@ -252,12 +262,26 @@ pub fn dispatch_events(
                     destination,
                     entity,
                 } => {
-                    teleport.send(TeleportEntity::new(*entity, destination.x, destination.y));
+                    teleport.send(TeleportEntity {
+                        destination: *destination,
+                        entity: *entity,
+                    });
                 }
                 EventDispatch::SummonCreature { species, position } => {
                     summon.send(SummonCreature {
                         species: *species,
                         position: *position,
+                    });
+                }
+                EventDispatch::CreatureCollision {
+                    attacker: attack,
+                    defender,
+                    speed,
+                } => {
+                    collide.send(CreatureCollision {
+                        attacker: *attack,
+                        defender: *defender,
+                        speed: *speed,
                     });
                 }
             };

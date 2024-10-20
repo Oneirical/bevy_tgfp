@@ -25,7 +25,6 @@ fn keyboard_input(
     mut turn_end: EventWriter<EndTurn>,
     animation_timer: Res<SlideAnimation>,
 ) {
-    // Do not accept input until the animations have finished.
     if !animation_timer.elapsed.finished() {
         return;
     }
@@ -34,7 +33,7 @@ fn keyboard_input(
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![Axiom::Ego, Axiom::Dash],
+                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
                 },
             });
             turn_end.send(EndTurn);
