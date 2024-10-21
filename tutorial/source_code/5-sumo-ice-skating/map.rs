@@ -1,14 +1,6 @@
-use std::borrow::Borrow;
+use bevy::{prelude::*, utils::HashMap};
 
-use bevy::{
-    prelude::*,
-    utils::{HashMap, HashSet},
-};
-
-use crate::{
-    creature::{Intangible, Species},
-    events::SummonCreature,
-};
+use crate::{creature::Species, events::SummonCreature};
 
 pub struct MapPlugin;
 
@@ -50,40 +42,21 @@ fn manhattan_distance(a: Position, b: Position) -> i32 {
     (a.x - b.x).abs() + (a.y - b.y).abs()
 }
 
-/// A struct with some information on a creature inside the Map.
-#[derive(PartialEq, Eq, Hash, Copy, Clone)]
-pub struct MapCreature {
-    pub entity: Entity,
-    pub is_intangible: bool,
-}
-
 /// The position of every creature, updated automatically.
 #[derive(Resource)]
 pub struct Map {
-    pub creatures: HashMap<Position, HashSet<MapCreature>>,
+    pub creatures: HashMap<Position, Entity>,
 }
 
 impl Map {
-    /// Which creatures stand on a certain tile?
-    pub fn get_creatures_at(&self, x: i32, y: i32) -> Option<&HashSet<MapCreature>> {
-        if let Some(entry) = self.creatures.get(&Position::new(x, y)) {
-            Some(&entry)
-        } else {
-            None
-        }
+    /// Which creature stands on a certain tile?
+    pub fn get_entity_at(&self, x: i32, y: i32) -> Option<&Entity> {
+        self.creatures.get(&Position::new(x, y))
     }
 
     /// Is this tile passable?
     pub fn is_passable(&self, x: i32, y: i32) -> bool {
-        if let Some(entry) = self.creatures.get(&Position::new(x, y)) {
-            // Check if there is no creature that is tangible in this tile.
-            entry
-                .iter()
-                .find(|creature| !creature.is_intangible)
-                .is_none()
-        } else {
-            true
-        }
+        self.get_entity_at(x, y).is_none()
     }
 
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
@@ -110,26 +83,13 @@ impl Map {
     }
 
     /// Move a pre-existing entity around the Map.
-    pub fn move_creature(&mut self, entity: Entity, old_pos: Position, new_pos: Position) {
-        // Get all the creatures on the old position.
-        let creatures = self.creatures.get_mut(&old_pos).unwrap();
-        // Find the specific creature which needs to be moved.
-        let target_creature = &creatures
-            .iter()
-            .find(|creature| creature.entity == entity)
-            .unwrap()
-            .clone();
-        // Remove that creature from the old position.
-        creatures.remove(target_creature);
-        // If there are no more creatures on this tile, remove the entry.
-        if creatures.is_empty() {
-            self.creatures.remove(&old_pos);
-        }
-        // Move the creature onto the new position, creating it if needed.
-        self.creatures
-            .entry(new_pos)
-            .or_default()
-            .insert(*target_creature);
+    pub fn move_creature(&mut self, old_pos: Position, new_pos: Position) {
+        // As the entity already existed in the Map's records, remove it.
+        let entity = self.creatures.remove(&old_pos).expect(&format!(
+            "The map cannot move a nonexistent Entity from {:?} to {:?}.",
+            old_pos, new_pos
+        ));
+        self.creatures.insert(new_pos, entity);
     }
 }
 
@@ -138,21 +98,13 @@ fn register_creatures(
     mut map: ResMut<Map>,
     // Any entity that has a Position that just got added to it -
     // currently only possible as a result of having just been spawned in.
-    displaced_creatures: Query<(&Position, Entity, Has<Intangible>), Added<Position>>,
+    displaced_creatures: Query<(&Position, Entity), Added<Position>>,
 ) {
-    for (position, entity, is_intangible) in displaced_creatures.iter() {
+    for (position, entity) in displaced_creatures.iter() {
         // Insert the new creature in the Map. Position implements Copy,
         // so it can be dereferenced (*), but `.clone()` would have been
         // fine too.
-        // If this key doesn't exist yet, it is created, otherwise it pushes on
-        // the HashSet.
-        map.creatures
-            .entry(*position)
-            .or_default()
-            .insert(MapCreature {
-                entity,
-                is_intangible,
-            });
+        map.creatures.insert(*position, entity);
     }
 }
 

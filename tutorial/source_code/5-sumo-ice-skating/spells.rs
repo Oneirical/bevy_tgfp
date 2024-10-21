@@ -176,10 +176,8 @@ impl SynapseData {
     fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
         let mut targeted_pairs = Vec::new();
         for target in &self.targets {
-            if let Some(creatures) = map.get_creatures_at(target.x, target.y) {
-                for creature in creatures {
-                    targeted_pairs.push((creature.entity, *target));
-                }
+            if let Some(entity) = map.get_entity_at(target.x, target.y) {
+                targeted_pairs.push((*entity, *target));
             }
         }
         targeted_pairs

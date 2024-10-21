@@ -1,3 +1,11 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 5. Sumo Ice Skating"
+date = 2024-10-20
+authors = ["Julien Robert"]
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
+
 Thrilling to be jumping, sliding and bashing in fancy acrobatics, but quite lacking in eye candy. Creatures merely blink from one point to another, without any style or intrigue. Animation is a complex topic, but making creatures properly "dash" from one point to another is certainly doable with as little as one new resource, and a rework of `adjust_transforms`.
 
 ```rust
@@ -160,7 +168,8 @@ fn bring_closer_to_target_value(value: f32, adjustment: f32, target_value: f32) 
 
 Finally, `cargo run`, and behold these smooth and graceful motions!
 
-// TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/5-sumo-ice-skating/slidedash.gif", alt="The player dashing left and right in continuous, sliding motions.",
+         position="center", style="border-radius: 8px;") }}
 
 # The Summoning Circle
 
@@ -342,7 +351,8 @@ fn player_step(
 
 `cargo run`, one more time. There we go.
 
-// TODO image
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/5-sumo-ice-skating/ominousspawner.png", alt="The cage, with a red spawner object in the centre.",
+         position="center", style="border-radius: 8px;") }}
 
 # Industrial Production
 
@@ -725,4 +735,5 @@ With this alternative, `EndTurn` will now patiently wait to be consumed instead 
 
 `cargo run`, and you should now be getting swarmed very, very fast.
 
-// TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/5-sumo-ice-skating/swarm.gif", alt="Hunters keep pouring from the centre and swarm the cage, pushing the player in a corner.",
+         position="center", style="border-radius: 8px;") }}

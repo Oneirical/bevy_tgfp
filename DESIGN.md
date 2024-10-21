@@ -63,12 +63,23 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 
 # Ideas
 
-- Make it so entities are invisible for 1 frame until the adjust_transforms function picks them up.
 
 - Spawn all new room tiles "moving from" a main "reality generator" room.
 
+# Cool Musical Words
+
+Tempo (ease of containment): Andante, Allegro, Presto, Prestissimo
+Volume (impact) Pianissimo, Piano, Forte, Fortissimo
+
+
 # Tutorial
 
-- Mention the unwieldiness of Events with 1-frame delay.
 - A Gimp tutorial for the spritesheet, inspired by the broughlike one.
-- Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere.
+- Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere. It can be noticed through one of its erratic behaviours.
+
+Kinisi
+Volume: Presto (xxx)
+Tempo: Piano (xx)
+
+*A dark blue tulip inside a simple clay pot. Its petals twist and turn like muscle, performing a pitiful caricature of nearby creatures' motions. One tempted to laugh at this display should take note of its roots, which pierce reality to draw nourishment from other dimensions.* 
+

@@ -18,10 +18,6 @@ pub struct Player;
 #[derive(Component)]
 pub struct Hunt;
 
-// This creature has no collisions with other entities.
-#[derive(Component)]
-pub struct Intangible;
-
 #[derive(Debug, Component, Clone, Copy)]
 pub enum Species {
     Player,

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{get_species_sprite, Creature, Hunt, Intangible, Player, Species},
+    creature::{get_species_sprite, Creature, Hunt, Player, Species},
     graphics::{SlideAnimation, SpriteSheetAtlas},
     map::{Map, Position},
     spells::{Axiom, CastSpell, Spell},
@@ -87,19 +87,19 @@ impl TeleportEntity {
 
 fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut creature: Query<(&mut Position, Has<Intangible>)>,
+    mut creature: Query<&mut Position>,
     mut map: ResMut<Map>,
     mut animation_timer: ResMut<SlideAnimation>,
 ) {
     for event in events.read() {
-        let (mut creature_position, is_intangible) = creature
+        let mut creature_position = creature
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
         // If motion is possible...
-        if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
+        if map.is_passable(event.destination.x, event.destination.y) {
             // ...update the Map to reflect this...
-            map.move_creature(event.entity, *creature_position, event.destination);
+            map.move_creature(*creature_position, event.destination);
             // ...begin the sliding animation...
             animation_timer.elapsed.reset();
             // ...and move that Entity to TeleportEntity's destination tile.
@@ -206,21 +206,9 @@ pub fn summon_creature(
         match &event.species {
             Species::Player => {
                 new_creature.insert(Player);
-                new_creature.insert(Intangible);
-                // Lower the Z value, so it appears underneath other creatures.
-                let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
-                transform.translation.z = -1.;
-                new_creature.insert(transform);
             }
             Species::Hunter => {
                 new_creature.insert(Hunt);
-            }
-            Species::Spawner => {
-                new_creature.insert(Intangible);
-                // Lower the Z value, so it appears underneath other creatures.
-                let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
-                transform.translation.z = -1.;
-                new_creature.insert(transform);
             }
             _ => (),
         }
