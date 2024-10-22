@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Player,
     events::{CreatureStep, EndTurn},
-    graphics::SlideAnimation,
+    graphics::{all_animations_complete, SlideAnimation},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -12,29 +12,24 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_input);
+        app.add_systems(Update, keyboard_input.run_if(all_animations_complete));
     }
 }
 
 /// Each frame, if a button is pressed, move the player 1 tile.
-fn keyboard_input(
+pub fn keyboard_input(
     player: Query<Entity, With<Player>>,
     mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
     mut spell: EventWriter<CastSpell>,
     mut turn_end: EventWriter<EndTurn>,
-    animation_timer: Res<SlideAnimation>,
 ) {
-    // Do not accept input until the animations have finished.
-    if !animation_timer.elapsed.finished() {
-        return;
-    }
     if let Ok(player) = player.get_single() {
         if input.just_pressed(KeyCode::Space) {
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![Axiom::Ego, Axiom::Dash],
+                    axioms: vec![Axiom::MomentumBeam],
                 },
             });
             turn_end.send(EndTurn);

@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Species,
     events::{SummonCreature, TeleportEntity},
+    graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
 };
@@ -89,6 +90,16 @@ impl Axiom {
                         break;
                     }
                 }
+                // Add some visual beam effects.
+                synapse_data.effects.push(EventDispatch::PlaceMagicVfx {
+                    targets: output.clone(),
+                    sequence: EffectSequence::Sequential { duration: 0.4 },
+                    effect: match synapse_data.caster_momentum {
+                        OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
+                        OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
+                    },
+                    decay: 0.5,
+                });
                 // Add these tiles to `targets`.
                 synapse_data.targets.append(&mut output);
             }
@@ -195,6 +206,12 @@ pub enum EventDispatch {
         species: Species,
         position: Position,
     },
+    PlaceMagicVfx {
+        targets: Vec<Position>,
+        sequence: EffectSequence,
+        effect: EffectType,
+        decay: f32,
+    },
 }
 
 /// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
@@ -243,6 +260,7 @@ pub fn dispatch_events(
     mut receiver: EventReader<SpellEffect>,
     mut teleport: EventWriter<TeleportEntity>,
     mut summon: EventWriter<SummonCreature>,
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
@@ -258,6 +276,19 @@ pub fn dispatch_events(
                     summon.send(SummonCreature {
                         species: *species,
                         position: *position,
+                    });
+                }
+                EventDispatch::PlaceMagicVfx {
+                    targets,
+                    sequence,
+                    effect,
+                    decay,
+                } => {
+                    magic_vfx.send(PlaceMagicVfx {
+                        targets: targets.clone(),
+                        sequence: *sequence,
+                        effect: *effect,
+                        decay: *decay,
                     });
                 }
             };

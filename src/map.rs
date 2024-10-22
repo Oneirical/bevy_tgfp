@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
@@ -137,7 +135,10 @@ pub fn register_creatures(
     mut map: ResMut<Map>,
     // Any entity that has a Position that just got added to it -
     // currently only possible as a result of having just been spawned in.
-    displaced_creatures: Query<(&Position, Entity, Has<Intangible>), Added<Position>>,
+    displaced_creatures: Query<
+        (&Position, Entity, Has<Intangible>),
+        (Added<Position>, With<Species>),
+    >,
 ) {
     for (position, entity, is_intangible) in displaced_creatures.iter() {
         // Insert the new creature in the Map. Position implements Copy,

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{map::Position, OrdDir};
+use crate::{graphics::SlideAnimation, map::Position, OrdDir};
 
 #[derive(Bundle)]
 pub struct Creature {

@@ -68,7 +68,7 @@ pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<(&mut Position, Has<Intangible>)>,
     mut map: ResMut<Map>,
-    mut animation_timer: ResMut<SlideAnimation>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
@@ -80,7 +80,9 @@ pub fn teleport_entity(
             // ...update the Map to reflect this...
             map.move_creature(event.entity, *creature_position, event.destination);
             // ...begin the sliding animation...
-            animation_timer.elapsed.reset();
+            commands.entity(event.entity).insert(SlideAnimation {
+                elapsed: Timer::from_seconds(0.2, TimerMode::Once),
+            });
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
         } else {
@@ -101,12 +103,7 @@ pub fn end_turn(
     npcs: Query<(Entity, &Position, &Species), Without<Player>>,
     player: Query<&Position, With<Player>>,
     map: Res<Map>,
-    animation_timer: Res<SlideAnimation>,
 ) {
-    // Wait for the player's action to complete before starting NPC turns.
-    if !animation_timer.elapsed.finished() {
-        return;
-    }
     for _event in events.read() {
         let player_pos = player.get_single().unwrap();
         for (creature_entity, creature_position, creature_species) in npcs.iter() {

@@ -7,16 +7,14 @@ pub struct GraphicsPlugin;
 impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteSheetAtlas>();
-        app.insert_resource(SlideAnimation {
-            elapsed: Timer::from_seconds(0.4, TimerMode::Once),
-        });
         app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
+        app.add_event::<PlaceMagicVfx>();
     }
 }
 
-#[derive(Resource)]
+#[derive(Component)]
 pub struct SlideAnimation {
     pub elapsed: Timer,
 }
@@ -39,6 +37,115 @@ impl FromWorld for SpriteSheetAtlas {
     }
 }
 
+#[derive(Bundle)]
+pub struct MagicEffect {
+    pub position: Position,
+    pub sprite: SpriteBundle,
+    pub atlas: TextureAtlas,
+    pub vfx: MagicVfx,
+}
+
+#[derive(Event)]
+pub struct PlaceMagicVfx {
+    pub targets: Vec<Position>,
+    pub sequence: EffectSequence,
+    pub effect: EffectType,
+    pub decay: f32,
+}
+
+#[derive(Clone, Copy)]
+pub enum EffectSequence {
+    Simultaneous,
+    Sequential { duration: f32 },
+}
+
+#[derive(Clone, Copy)]
+pub enum EffectType {
+    HorizontalBeam,
+    VerticalBeam,
+    RedBlast,
+}
+
+#[derive(Component)]
+pub struct MagicVfx {
+    appear: Timer,
+    decay: Timer,
+}
+
+/// Get the appropriate texture from the spritesheet depending on the effect type.
+pub fn get_effect_sprite(effect: &EffectType) -> usize {
+    match effect {
+        EffectType::HorizontalBeam => 15,
+        EffectType::VerticalBeam => 16,
+        EffectType::RedBlast => 1,
+    }
+}
+
+pub fn place_magic_effects(
+    mut events: EventReader<PlaceMagicVfx>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+) {
+    for event in events.read() {
+        for (i, target) in event.targets.iter().enumerate() {
+            commands.spawn(MagicEffect {
+                position: *target,
+                sprite: SpriteBundle {
+                    texture: asset_server.load("spritesheet.png"),
+                    transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+                    visibility: Visibility::Hidden,
+                    ..default()
+                },
+                atlas: TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: get_effect_sprite(&event.effect),
+                },
+                vfx: MagicVfx {
+                    appear: match event.sequence {
+                        EffectSequence::Simultaneous => Timer::from_seconds(0., TimerMode::Once),
+                        EffectSequence::Sequential { duration } => Timer::from_seconds(
+                            (i as f32 / event.targets.len() as f32) * duration,
+                            TimerMode::Once,
+                        ),
+                    },
+                    decay: Timer::from_seconds(event.decay, TimerMode::Once),
+                },
+            });
+        }
+    }
+}
+
+pub fn decay_magic_effects(
+    mut commands: Commands,
+    mut magic_vfx: Query<(Entity, &mut Visibility, &mut MagicVfx, &mut Sprite)>,
+    time: Res<Time>,
+) {
+    for (vfx_entity, mut vfx_vis, mut vfx_timers, mut vfx_sprite) in magic_vfx.iter_mut() {
+        if matches!(*vfx_vis, Visibility::Visible) {
+            vfx_timers.decay.tick(time.delta());
+            vfx_sprite
+                .color
+                .set_alpha(vfx_timers.decay.fraction_remaining());
+            if vfx_timers.decay.finished() {
+                commands.entity(vfx_entity).despawn();
+            }
+        } else {
+            vfx_timers.appear.tick(time.delta());
+            if vfx_timers.appear.finished() {
+                *vfx_vis = Visibility::Visible;
+            }
+        }
+    }
+}
+
+pub fn all_animations_complete(
+    magic_vfx: Query<&MagicVfx>,
+    sliding: Query<&SlideAnimation>,
+) -> bool {
+    magic_vfx.iter().len() == 0 && sliding.iter().len() == 0
+}
+
 fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2dBundle {
         transform: Transform::from_xyz(0., 0., 0.),
@@ -49,39 +156,57 @@ fn setup_camera(mut commands: Commands) {
 /// Each frame, adjust every entity's display location to match
 /// their position on the grid, and make the camera follow the player.
 fn adjust_transforms(
-    mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
+    mut creatures: Query<(
+        Entity,
+        &Position,
+        &mut Transform,
+        Option<&mut SlideAnimation>,
+        Has<Player>,
+    )>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
-    mut animation_timer: ResMut<SlideAnimation>,
     time: Res<Time>,
+    mut commands: Commands,
 ) {
-    let fraction_before_tick = animation_timer.elapsed.fraction();
-    animation_timer.elapsed.tick(time.delta());
-    // Calculate what % of the animation has elapsed during this tick.
-    let fraction_ticked = animation_timer.elapsed.fraction() - fraction_before_tick;
-    for (pos, mut trans, is_player) in creatures.iter_mut() {
-        // The distance between where a creature CURRENTLY is,
-        // and the destination of a creature's movement.
-        // Multiplied by the graphical size of a tile, which is 64x64.
-        let (dx, dy) = (
-            pos.x as f32 * 64. - trans.translation.x,
-            pos.y as f32 * 64. - trans.translation.y,
-        );
-        // The distance between the original position and the destination position.
-        let (ori_dx, ori_dy) = (
-            dx / animation_timer.elapsed.fraction_remaining(),
-            dy / animation_timer.elapsed.fraction_remaining(),
-        );
-        // The sprite approaches its destination.
-        trans.translation.x = bring_closer_to_target_value(
-            trans.translation.x,
-            ori_dx * fraction_ticked,
-            pos.x as f32 * 64.,
-        );
-        trans.translation.y = bring_closer_to_target_value(
-            trans.translation.y,
-            ori_dy * fraction_ticked,
-            pos.y as f32 * 64.,
-        );
+    for (entity, pos, mut trans, anim, is_player) in creatures.iter_mut() {
+        // If this creature is affected by an animation...
+        if let Some(mut animation_timer) = anim {
+            let fraction_before_tick = animation_timer.elapsed.fraction();
+            animation_timer.elapsed.tick(time.delta());
+            // Calculate what % of the animation has elapsed during this tick.
+            let fraction_advanced_this_frame =
+                animation_timer.elapsed.fraction() - fraction_before_tick;
+            // The distance between where a creature CURRENTLY is,
+            // and the destination of a creature's movement.
+            // Multiplied by the graphical size of a tile, which is 64x64.
+            let (dx, dy) = (
+                pos.x as f32 * 64. - trans.translation.x,
+                pos.y as f32 * 64. - trans.translation.y,
+            );
+            // The distance between the original position and the destination position.
+            let (ori_dx, ori_dy) = (
+                dx / animation_timer.elapsed.fraction_remaining(),
+                dy / animation_timer.elapsed.fraction_remaining(),
+            );
+            // The sprite approaches its destination.
+            trans.translation.x = bring_closer_to_target_value(
+                trans.translation.x,
+                ori_dx * fraction_advanced_this_frame,
+                pos.x as f32 * 64.,
+            );
+            trans.translation.y = bring_closer_to_target_value(
+                trans.translation.y,
+                ori_dy * fraction_advanced_this_frame,
+                pos.y as f32 * 64.,
+            );
+            if animation_timer.elapsed.finished() {
+                commands.entity(entity).remove::<SlideAnimation>();
+            }
+        } else {
+            // For creatures with no animation.
+            // Multiplied by the graphical size of a tile, which is 64x64.
+            trans.translation.x = pos.x as f32 * 64.;
+            trans.translation.y = pos.y as f32 * 64.;
+        }
         if is_player {
             // The camera follows the player.
             let mut camera_trans = camera.get_single_mut().unwrap();
