@@ -54,6 +54,10 @@ pub struct MapCreature {
     pub is_intangible: bool,
 }
 
+pub fn are_orthogonally_adjacent(source: Position, destination: Position) -> bool {
+    (destination.x - source.x).abs() + (destination.y - source.y).abs() == 1
+}
+
 /// The position of every creature, updated automatically.
 #[derive(Resource)]
 pub struct Map {

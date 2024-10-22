@@ -58,17 +58,32 @@ impl Axiom {
         match self {
             // Target the caster's tile.
             Self::Ego => {
+                synapse_data.effects.push(EventDispatch::PlaceMagicVfx {
+                    targets: vec![synapse_data.caster_position],
+                    sequence: EffectSequence::Sequential { duration: 0.4 },
+                    effect: EffectType::RedBlast,
+                    decay: 0.5,
+                });
                 synapse_data.targets.push(synapse_data.caster_position);
             }
             // Target all orthogonally adjacent tiles to the caster.
             Self::Plus => {
                 let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
+                let mut output = Vec::new();
                 for direction in adjacent {
                     let mut new_pos = synapse_data.caster_position;
                     let offset = direction.as_offset();
                     new_pos.shift(offset.0, offset.1);
-                    synapse_data.targets.push(new_pos);
+                    output.push(new_pos);
                 }
+                synapse_data.effects.push(EventDispatch::PlaceMagicVfx {
+                    targets: output.clone(),
+                    sequence: EffectSequence::Sequential { duration: 0.4 },
+                    effect: EffectType::RedBlast,
+                    decay: 0.5,
+                });
+                // Add these tiles to `targets`.
+                synapse_data.targets.append(&mut output);
             }
             // Shoot a beam from the caster towards its last move, all tiles passed through
             // become targets, including the impact point.

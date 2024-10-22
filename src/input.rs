@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Player,
     events::{CreatureStep, EndTurn},
-    graphics::{all_animations_complete, SlideAnimation},
+    graphics::all_animations_complete,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -29,7 +29,7 @@ pub fn keyboard_input(
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![Axiom::MomentumBeam],
+                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
                 },
             });
             turn_end.send(EndTurn);

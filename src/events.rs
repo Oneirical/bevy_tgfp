@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, Hunt, Intangible, Player, Species},
-    graphics::{SlideAnimation, SpriteSheetAtlas},
-    map::{Map, Position},
+    graphics::{AttackAnimation, SlideAnimation, SpriteSheetAtlas},
+    map::{are_orthogonally_adjacent, Map, Position},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -86,8 +86,16 @@ pub fn teleport_entity(
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
         } else {
-            // Nothing here just yet, but this is where collisions between creatures
-            // will be handled.
+            // A collision between two creatures occurs.
+            if are_orthogonally_adjacent(*creature_position, event.destination) {
+                commands.entity(event.entity).insert(AttackAnimation {
+                    elapsed: Timer::from_seconds(0.2, TimerMode::Once),
+                    direction: OrdDir::direction_towards_adjacent_tile(
+                        *creature_position,
+                        event.destination,
+                    ),
+                });
+            }
             continue;
         }
     }
@@ -181,7 +189,7 @@ pub fn summon_creature(
         match &event.species {
             Species::Player => {
                 new_creature.insert(Player);
-                new_creature.insert(Intangible);
+                // new_creature.insert(Intangible);
                 // Lower the Z value, so it appears underneath other creatures.
                 let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
                 transform.translation.z = -1.;

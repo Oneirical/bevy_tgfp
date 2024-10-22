@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{creature::Player, map::Position};
+use crate::{creature::Player, map::Position, OrdDir};
 
 pub struct GraphicsPlugin;
 
@@ -17,6 +17,12 @@ impl Plugin for GraphicsPlugin {
 #[derive(Component)]
 pub struct SlideAnimation {
     pub elapsed: Timer,
+}
+
+#[derive(Component)]
+pub struct AttackAnimation {
+    pub elapsed: Timer,
+    pub direction: OrdDir,
 }
 
 #[derive(Resource)]
@@ -64,6 +70,7 @@ pub enum EffectType {
     HorizontalBeam,
     VerticalBeam,
     RedBlast,
+    GreenBlast,
 }
 
 #[derive(Component)]
@@ -77,7 +84,8 @@ pub fn get_effect_sprite(effect: &EffectType) -> usize {
     match effect {
         EffectType::HorizontalBeam => 15,
         EffectType::VerticalBeam => 16,
-        EffectType::RedBlast => 1,
+        EffectType::RedBlast => 14,
+        EffectType::GreenBlast => 13,
     }
 }
 
@@ -142,8 +150,9 @@ pub fn decay_magic_effects(
 pub fn all_animations_complete(
     magic_vfx: Query<&MagicVfx>,
     sliding: Query<&SlideAnimation>,
+    attacking: Query<&AttackAnimation>,
 ) -> bool {
-    magic_vfx.iter().len() == 0 && sliding.iter().len() == 0
+    magic_vfx.iter().len() == 0 && sliding.iter().len() == 0 && attacking.iter().len() == 0
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -161,15 +170,50 @@ fn adjust_transforms(
         &Position,
         &mut Transform,
         Option<&mut SlideAnimation>,
+        Option<&mut AttackAnimation>,
         Has<Player>,
     )>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (entity, pos, mut trans, anim, is_player) in creatures.iter_mut() {
+    for (entity, pos, mut trans, anim, attack, is_player) in creatures.iter_mut() {
         // If this creature is affected by an animation...
-        if let Some(mut animation_timer) = anim {
+        if let Some(mut attack) = attack {
+            let (strike_translation_x, strike_translation_y) = (
+                (pos.x as f32 + attack.direction.as_offset().0 as f32 / 4.) * 64.,
+                (pos.y as f32 + attack.direction.as_offset().1 as f32 / 4.) * 64.,
+            );
+            if attack.elapsed.fraction_remaining() == 1. {
+                trans.translation.x = strike_translation_x;
+                trans.translation.y = strike_translation_y;
+            }
+            let fraction_before_tick = attack.elapsed.fraction();
+            attack.elapsed.tick(time.delta());
+            // Calculate what % of the animation has elapsed during this tick.
+            let fraction_advanced_this_frame = attack.elapsed.fraction() - fraction_before_tick;
+            // The distance between where a creature CURRENTLY is,
+            // and the destination of a creature's movement.
+            // Multiplied by the graphical size of a tile, which is 64x64.
+            let (ori_dx, ori_dy) = (
+                strike_translation_x - pos.x as f32 * 64.,
+                strike_translation_y - pos.y as f32 * 64.,
+            );
+            // The sprite approaches its destination.
+            trans.translation.x = bring_closer_to_target_value(
+                trans.translation.x,
+                ori_dx * fraction_advanced_this_frame,
+                pos.x as f32 * 64.,
+            );
+            trans.translation.y = bring_closer_to_target_value(
+                trans.translation.y,
+                ori_dy * fraction_advanced_this_frame,
+                pos.y as f32 * 64.,
+            );
+            if attack.elapsed.finished() {
+                commands.entity(entity).remove::<AttackAnimation>();
+            }
+        } else if let Some(mut animation_timer) = anim {
             let fraction_before_tick = animation_timer.elapsed.fraction();
             animation_timer.elapsed.tick(time.delta());
             // Calculate what % of the animation has elapsed during this tick.

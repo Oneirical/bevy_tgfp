@@ -13,7 +13,7 @@ use bevy::{
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;
-use map::MapPlugin;
+use map::{MapPlugin, Position};
 use sets::SetsPlugin;
 use spells::SpellPlugin;
 
@@ -63,5 +63,9 @@ impl OrdDir {
             (-1, 0) => OrdDir::Left,
             _ => panic!("Invalid offset provided."),
         }
+    }
+
+    pub fn direction_towards_adjacent_tile(source: Position, destination: Position) -> Self {
+        OrdDir::as_variant(destination.x - source.x, destination.y - source.y)
     }
 }
