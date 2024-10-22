@@ -14,14 +14,8 @@ impl Plugin for EventPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CreatureStep>();
         app.add_event::<TeleportEntity>();
-        app.add_event::<AlterMomentum>();
         app.add_event::<SummonCreature>();
         app.init_resource::<Events<EndTurn>>();
-        app.add_systems(Update, creature_step);
-        app.add_systems(Update, teleport_entity);
-        app.add_systems(Update, alter_momentum);
-        app.add_systems(Update, summon_creature);
-        app.add_systems(Update, end_turn);
     }
 }
 
@@ -31,42 +25,27 @@ pub struct CreatureStep {
     pub direction: OrdDir,
 }
 
-fn creature_step(
+pub fn creature_step(
     mut events: EventReader<CreatureStep>,
     mut teleporter: EventWriter<TeleportEntity>,
-    mut momentum: EventWriter<AlterMomentum>,
     mut turn_end: EventWriter<EndTurn>,
-    creature: Query<(&Position, Has<Player>)>,
+    mut creature: Query<(&Position, Has<Player>, &mut OrdDir)>,
 ) {
     for event in events.read() {
-        let (creature_pos, is_player) = creature.get(event.entity).unwrap();
+        let (creature_pos, is_player, mut creature_momentum) =
+            creature.get_mut(event.entity).unwrap();
         let (off_x, off_y) = event.direction.as_offset();
         teleporter.send(TeleportEntity::new(
             event.entity,
             creature_pos.x + off_x,
             creature_pos.y + off_y,
         ));
-
-        momentum.send(AlterMomentum {
-            entity: event.entity,
-            direction: event.direction,
-        });
+        // Update the direction towards which this creature is facing.
+        *creature_momentum = event.direction;
         // If this creature was the player, this will end the turn.
         if is_player {
             turn_end.send(EndTurn);
         }
-    }
-}
-
-#[derive(Event)]
-pub struct AlterMomentum {
-    pub entity: Entity,
-    pub direction: OrdDir,
-}
-
-fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&mut OrdDir>) {
-    for momentum_alteration in events.read() {
-        *creature.get_mut(momentum_alteration.entity).unwrap() = momentum_alteration.direction;
     }
 }
 
@@ -85,7 +64,7 @@ impl TeleportEntity {
     }
 }
 
-fn teleport_entity(
+pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<(&mut Position, Has<Intangible>)>,
     mut map: ResMut<Map>,
@@ -115,7 +94,7 @@ fn teleport_entity(
 #[derive(Event)]
 pub struct EndTurn;
 
-fn end_turn(
+pub fn end_turn(
     mut events: EventReader<EndTurn>,
     mut step: EventWriter<CreatureStep>,
     mut spell: EventWriter<CastSpell>,
@@ -123,7 +102,6 @@ fn end_turn(
     player: Query<&Position, With<Player>>,
     map: Res<Map>,
     animation_timer: Res<SlideAnimation>,
-    mut momentum: EventWriter<AlterMomentum>,
 ) {
     // Wait for the player's action to complete before starting NPC turns.
     if !animation_timer.elapsed.finished() {

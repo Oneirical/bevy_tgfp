@@ -13,8 +13,6 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
         app.add_event::<SpellEffect>();
-        app.add_systems(Update, gather_effects);
-        app.add_systems(Update, dispatch_events);
     }
 }
 
@@ -200,7 +198,7 @@ pub enum EventDispatch {
 }
 
 /// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
-fn gather_effects(
+pub fn gather_effects(
     mut cast_spells: EventReader<CastSpell>,
     mut sender: EventWriter<SpellEffect>,
     caster: Query<(&Position, &OrdDir)>,
