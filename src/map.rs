@@ -74,6 +74,19 @@ impl Map {
         }
     }
 
+    /// Which tangible creature stands on a certain tile?
+    pub fn get_tangible_entity_at(&self, x: i32, y: i32) -> Option<&Entity> {
+        if let Some(entry) = self.get_creatures_at(x, y) {
+            if let Some(creature) = entry.iter().find(|tangibility| !tangibility.is_intangible) {
+                Some(&creature.entity)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
     /// Is this tile passable?
     pub fn is_passable(&self, x: i32, y: i32) -> bool {
         if let Some(entry) = self.creatures.get(&Position::new(x, y)) {
@@ -143,6 +156,9 @@ pub fn register_creatures(
         (&Position, Entity, Has<Intangible>),
         (Added<Position>, With<Species>),
     >,
+    intangible_creatures: Query<(Entity, &Position), Added<Intangible>>,
+    tangible_creatures: Query<(Entity, &Position)>,
+    mut tangible_entities: RemovedComponents<Intangible>,
 ) {
     for (position, entity, is_intangible) in displaced_creatures.iter() {
         // Insert the new creature in the Map. Position implements Copy,
@@ -158,6 +174,31 @@ pub fn register_creatures(
                 is_intangible,
             });
     }
+    // Update all newly intangible creatures.
+    for (intangible_entity, intangible_position) in intangible_creatures.iter() {
+        let creatures = map.creatures.get_mut(intangible_position).unwrap();
+        let mut intangible_creature = creatures
+            .iter()
+            .find(|creature| creature.entity == intangible_entity)
+            .unwrap()
+            .clone();
+        creatures.remove(&intangible_creature);
+        intangible_creature.is_intangible = true;
+        creatures.insert(intangible_creature);
+    }
+    // Update all newly tangible creatures.
+    for entity in tangible_entities.read() {
+        let (tangible_entity, tangible_position) = tangible_creatures.get(entity).unwrap();
+        let creatures = map.creatures.get_mut(tangible_position).unwrap();
+        let mut intangible_creature = creatures
+            .iter()
+            .find(|creature| creature.entity == tangible_entity)
+            .unwrap()
+            .clone();
+        creatures.remove(&intangible_creature);
+        intangible_creature.is_intangible = false;
+        creatures.insert(intangible_creature);
+    }
 }
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
@@ -165,7 +206,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 #H......#\
                 #.......#\
                 #.......#\
-                #...S...#\
+                #.......#\
                 #.......#\
                 #...@...#\
                 #.......#\

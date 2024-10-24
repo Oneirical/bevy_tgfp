@@ -9,6 +9,7 @@ pub struct Creature {
     pub species: Species,
     pub sprite: SpriteBundle,
     pub atlas: TextureAtlas,
+    pub health: HealthBar,
 }
 
 /// Marker for the player
@@ -21,6 +22,31 @@ pub struct Hunt;
 // This creature has no collisions with other entities.
 #[derive(Component)]
 pub struct Intangible;
+
+#[derive(Component)]
+pub struct HealthBar {
+    pub deck: Vec<HealthPoint>,
+    pub repressed: Vec<HealthPoint>,
+}
+
+impl HealthBar {
+    pub fn repress(&mut self, damage: i32) -> bool {
+        for _i in 0..damage {
+            let lost = self.deck.pop();
+            if let Some(lost) = lost {
+                self.repressed.push(lost);
+            } else {
+                return true;
+            }
+            if self.deck.is_empty() {
+                return true;
+            }
+        }
+        false
+    }
+}
+
+pub struct HealthPoint;
 
 #[derive(Debug, Component, Clone, Copy)]
 pub enum Species {

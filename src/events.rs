@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{get_species_sprite, Creature, Hunt, Intangible, Player, Species},
+    creature::{
+        get_species_sprite, Creature, HealthBar, HealthPoint, Hunt, Intangible, Player, Species,
+    },
     graphics::{AttackAnimation, SlideAnimation, SpriteSheetAtlas},
     map::{are_orthogonally_adjacent, Map, Position},
     spells::{Axiom, CastSpell, Spell},
@@ -15,6 +17,8 @@ impl Plugin for EventPlugin {
         app.add_event::<CreatureStep>();
         app.add_event::<TeleportEntity>();
         app.add_event::<SummonCreature>();
+        app.add_event::<RepressionDamage>();
+        app.add_event::<BecomeIntangible>();
         app.init_resource::<Events<EndTurn>>();
     }
 }
@@ -66,6 +70,7 @@ impl TeleportEntity {
 
 pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
+    mut damage: EventWriter<RepressionDamage>,
     mut creature: Query<(&mut Position, Has<Intangible>)>,
     mut map: ResMut<Map>,
     mut commands: Commands,
@@ -88,6 +93,12 @@ pub fn teleport_entity(
         } else {
             // A collision between two creatures occurs.
             if are_orthogonally_adjacent(*creature_position, event.destination) {
+                damage.send(RepressionDamage {
+                    entity: *map
+                        .get_tangible_entity_at(event.destination.x, event.destination.y)
+                        .unwrap(),
+                    damage: 1,
+                });
                 commands.entity(event.entity).insert(AttackAnimation {
                     elapsed: Timer::from_seconds(0.2, TimerMode::Once),
                     direction: OrdDir::direction_towards_adjacent_tile(
@@ -98,6 +109,46 @@ pub fn teleport_entity(
             }
             continue;
         }
+    }
+}
+
+#[derive(Event)]
+pub struct RepressionDamage {
+    pub entity: Entity,
+    pub damage: i32,
+}
+
+pub fn repression_damage(
+    mut events: EventReader<RepressionDamage>,
+    mut damaged_creature: Query<&mut HealthBar>,
+    mut intangible: EventWriter<BecomeIntangible>,
+) {
+    for event in events.read() {
+        let mut hp = damaged_creature.get_mut(event.entity).unwrap();
+        let is_fully_repressed = hp.repress(event.damage);
+        if is_fully_repressed {
+            intangible.send(BecomeIntangible {
+                entity: event.entity,
+            });
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct BecomeIntangible {
+    pub entity: Entity,
+}
+
+// TODO: This should be a permanent status effect instead.
+pub fn become_intangible(
+    mut events: EventReader<BecomeIntangible>,
+    mut creature: Query<&mut Sprite>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        let mut color = creature.get_mut(event.entity).unwrap().color;
+        color.set_alpha(0.1);
+        commands.entity(event.entity).insert(Intangible);
     }
 }
 
@@ -184,11 +235,26 @@ pub fn summon_creature(
                 index: get_species_sprite(&event.species),
             },
             momentum: OrdDir::Up,
+            health: HealthBar {
+                deck: vec![HealthPoint, HealthPoint],
+                repressed: Vec::new(),
+            },
         });
         // Add any species-specific components.
         match &event.species {
             Species::Player => {
                 new_creature.insert(Player);
+                new_creature.insert(HealthBar {
+                    deck: vec![
+                        HealthPoint,
+                        HealthPoint,
+                        HealthPoint,
+                        HealthPoint,
+                        HealthPoint,
+                        HealthPoint,
+                    ],
+                    repressed: Vec::new(),
+                });
                 // new_creature.insert(Intangible);
                 // Lower the Z value, so it appears underneath other creatures.
                 let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
