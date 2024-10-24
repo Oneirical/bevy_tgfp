@@ -126,6 +126,7 @@ pub fn repression_damage(
 ) {
     for event in events.read() {
         let (mut hp, children) = damaged_creature.get_mut(event.entity).unwrap();
+        // Damage the creature.
         let is_fully_repressed = hp.repress(event.damage);
         if is_fully_repressed {
             intangible.send(BecomeIntangible {
@@ -133,12 +134,16 @@ pub fn repression_damage(
             });
         }
         for child in children.iter() {
+            // Get the HP bars attached to the creatures.
             let (mut hp_vis, mut hp_bar) = hp_bar.get_mut(*child).unwrap();
+            // Get the maximum HP, and the current HP.
             let max_hp = hp.deck.len() + hp.repressed.len();
             let current_hp = hp.deck.len();
+            // If this creature is at 100% or 0% HP, don't show the healthbar.
             if max_hp == current_hp || current_hp == 0 {
                 *hp_vis = Visibility::Hidden;
             } else {
+                // Otherwise, show a color-coded healthbar.
                 *hp_vis = Visibility::Visible;
                 match current_hp as f32 / max_hp as f32 {
                     0.85..1.00 => hp_bar.index = 168,
@@ -266,11 +271,6 @@ pub fn summon_creature(
             Species::Player => {
                 new_creature.insert(Player);
                 new_creature.insert(HealthBar::new(6));
-                // new_creature.insert(Intangible);
-                // Lower the Z value, so it appears underneath other creatures.
-                let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
-                transform.translation.z = -1.;
-                new_creature.insert(transform);
             }
             Species::Hunter => {
                 new_creature.insert(Hunt);

@@ -30,6 +30,7 @@ pub struct HealthBar {
 }
 
 impl HealthBar {
+    /// Create a new health container with a certain amount of points in its deck.
     pub fn new(max_hp: i32) -> Self {
         let mut deck = Vec::new();
         for _i in 0..max_hp {
@@ -40,6 +41,9 @@ impl HealthBar {
             repressed: Vec::new(),
         }
     }
+
+    /// Deal damage, shifting HealthPoints from the deck to the repressed discard.
+    /// The bool return is true if a creature was brought to 0 HP.
     pub fn repress(&mut self, damage: i32) -> bool {
         for _i in 0..damage {
             let lost = self.deck.pop();
