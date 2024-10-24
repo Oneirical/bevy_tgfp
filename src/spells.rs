@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Species,
-    events::{SummonCreature, TeleportEntity},
+    events::{RepressionDamage, SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
@@ -44,6 +44,9 @@ pub enum Axiom {
     // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     // including the first solid tile encountered, which stops the beam.
     MomentumBeam,
+    // Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
+    // including the first solid tile encountered, which stops the beam.
+    XBeam,
 
     // FUNCTIONS
 
@@ -51,6 +54,8 @@ pub enum Axiom {
     Dash,
     // The targeted passable tiles summon a new instance of species.
     SummonCreature { species: Species },
+    // Deal damage to all creatures on targeted tiles.
+    RepressionDamage { damage: i32 },
 }
 
 impl Axiom {
@@ -89,22 +94,9 @@ impl Axiom {
             // become targets, including the impact point.
             Self::MomentumBeam => {
                 // Start the beam where the caster is standing.
-                let mut start = synapse_data.caster_position;
                 // The beam travels in the direction of the caster's last move.
                 let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
-                let mut distance_travelled = 0;
-                let mut output = Vec::new();
-                // The beam has a maximum distance of 10.
-                while distance_travelled < 10 {
-                    distance_travelled += 1;
-                    start.shift(off_x, off_y);
-                    // The new tile is always added, even if it is impassable...
-                    output.push(start);
-                    // But if it is impassable, it is the last added tile.
-                    if !map.is_passable(start.x, start.y) {
-                        break;
-                    }
-                }
+                let mut output = linear_beam(synapse_data.caster_position, 10, off_x, off_y, map);
                 // Add some visual beam effects.
                 synapse_data.effects.push(EventDispatch::PlaceMagicVfx {
                     targets: output.clone(),
@@ -117,6 +109,25 @@ impl Axiom {
                 });
                 // Add these tiles to `targets`.
                 synapse_data.targets.append(&mut output);
+            }
+            // Fire 4 beams from the caster, towards the diagonal directions. Target all travelled
+            // tiles, including the first solid tile encountered, which stops the beam.
+            Self::XBeam => {
+                let diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)];
+                for (dx, dy) in diagonals {
+                    // Start the beam where the caster is standing.
+                    // The beam travels in the direction of each diagonal.
+                    let mut output = linear_beam(synapse_data.caster_position, 10, dx, dy, map);
+                    // Add some visual beam effects.
+                    synapse_data.effects.push(EventDispatch::PlaceMagicVfx {
+                        targets: output.clone(),
+                        sequence: EffectSequence::Sequential { duration: 0.4 },
+                        effect: EffectType::RedBlast,
+                        decay: 0.5,
+                    });
+                    // Add these tiles to `targets`.
+                    synapse_data.targets.append(&mut output);
+                }
             }
             _ => (),
         }
@@ -164,10 +175,42 @@ impl Axiom {
                 }
                 true
             }
+            Self::RepressionDamage { damage } => {
+                for entity in synapse_data.get_all_targeted_entities(map) {
+                    synapse_data.effects.push(EventDispatch::RepressionDamage {
+                        entity,
+                        damage: *damage,
+                    });
+                }
+                true
+            }
             // Forms (which do not have an in-game effect) return false.
             _ => false,
         }
     }
+}
+
+fn linear_beam(
+    mut start: Position,
+    max_distance: usize,
+    off_x: i32,
+    off_y: i32,
+    map: &Map,
+) -> Vec<Position> {
+    let mut distance_travelled = 0;
+    let mut output = Vec::new();
+    // The beam has a maximum distance of 10.
+    while distance_travelled < max_distance {
+        distance_travelled += 1;
+        start.shift(off_x, off_y);
+        // The new tile is always added, even if it is impassable...
+        output.push(start);
+        // But if it is impassable, it is the last added tile.
+        if !map.is_passable(start.x, start.y) {
+            break;
+        }
+    }
+    output
 }
 
 // spells.rs
@@ -195,6 +238,13 @@ impl SynapseData {
             caster_momentum,
             caster_position,
         }
+    }
+
+    fn get_all_targeted_entities(&self, map: &Map) -> Vec<Entity> {
+        self.get_all_targeted_entity_pos_pairs(map)
+            .into_iter()
+            .map(|(entity, _)| entity)
+            .collect()
     }
 
     fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
@@ -226,6 +276,10 @@ pub enum EventDispatch {
         sequence: EffectSequence,
         effect: EffectType,
         decay: f32,
+    },
+    RepressionDamage {
+        entity: Entity,
+        damage: i32,
     },
 }
 
@@ -276,6 +330,7 @@ pub fn dispatch_events(
     mut teleport: EventWriter<TeleportEntity>,
     mut summon: EventWriter<SummonCreature>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut repression_damage: EventWriter<RepressionDamage>,
 ) {
     for effect_list in receiver.read() {
         for effect in &effect_list.events {
@@ -304,6 +359,12 @@ pub fn dispatch_events(
                         sequence: *sequence,
                         effect: *effect,
                         decay: *decay,
+                    });
+                }
+                EventDispatch::RepressionDamage { entity, damage } => {
+                    repression_damage.send(RepressionDamage {
+                        entity: *entity,
+                        damage: *damage,
                     });
                 }
             };

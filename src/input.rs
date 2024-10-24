@@ -29,7 +29,16 @@ pub fn keyboard_input(
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
+                    axioms: vec![Axiom::XBeam, Axiom::RepressionDamage { damage: 1 }],
+                },
+            });
+            turn_end.send(EndTurn);
+        }
+        if input.just_pressed(KeyCode::Enter) {
+            spell.send(CastSpell {
+                caster: player,
+                spell: Spell {
+                    axioms: vec![Axiom::Ego, Axiom::Dash],
                 },
             });
             turn_end.send(EndTurn);

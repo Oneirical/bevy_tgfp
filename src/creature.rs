@@ -30,6 +30,16 @@ pub struct HealthBar {
 }
 
 impl HealthBar {
+    pub fn new(max_hp: i32) -> Self {
+        let mut deck = Vec::new();
+        for _i in 0..max_hp {
+            deck.push(HealthPoint);
+        }
+        Self {
+            deck,
+            repressed: Vec::new(),
+        }
+    }
     pub fn repress(&mut self, damage: i32) -> bool {
         for _i in 0..damage {
             let lost = self.deck.pop();

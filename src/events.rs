@@ -256,26 +256,16 @@ pub fn summon_creature(
                 index: get_species_sprite(&event.species),
             },
             momentum: OrdDir::Up,
-            health: HealthBar {
-                deck: vec![HealthPoint, HealthPoint],
-                repressed: Vec::new(),
-            },
+            health: HealthBar::new(2),
         });
         // Add any species-specific components.
         match &event.species {
+            Species::Wall => {
+                new_creature.insert(HealthBar::new(200));
+            }
             Species::Player => {
                 new_creature.insert(Player);
-                new_creature.insert(HealthBar {
-                    deck: vec![
-                        HealthPoint,
-                        HealthPoint,
-                        HealthPoint,
-                        HealthPoint,
-                        HealthPoint,
-                        HealthPoint,
-                    ],
-                    repressed: Vec::new(),
-                });
+                new_creature.insert(HealthBar::new(6));
                 // new_creature.insert(Intangible);
                 // Lower the Z value, so it appears underneath other creatures.
                 let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
