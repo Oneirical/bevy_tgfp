@@ -33,7 +33,7 @@ pub struct SpriteSheetAtlas {
 
 impl FromWorld for SpriteSheetAtlas {
     fn from_world(world: &mut World) -> Self {
-        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 80, 1, None, None);
+        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 90, 2, None, None);
         let mut texture_atlases = world
             .get_resource_mut::<Assets<TextureAtlasLayout>>()
             .unwrap();
@@ -49,6 +49,12 @@ pub struct MagicEffect {
     pub sprite: SpriteBundle,
     pub atlas: TextureAtlas,
     pub vfx: MagicVfx,
+}
+
+#[derive(Bundle)]
+pub struct HealthIndicator {
+    pub sprite: SpriteBundle,
+    pub atlas: TextureAtlas,
 }
 
 #[derive(Event)]

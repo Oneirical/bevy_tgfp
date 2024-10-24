@@ -4,7 +4,7 @@ use crate::{
     creature::{
         get_species_sprite, Creature, HealthBar, HealthPoint, Hunt, Intangible, Player, Species,
     },
-    graphics::{AttackAnimation, SlideAnimation, SpriteSheetAtlas},
+    graphics::{AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas},
     map::{are_orthogonally_adjacent, Map, Position},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
@@ -120,16 +120,37 @@ pub struct RepressionDamage {
 
 pub fn repression_damage(
     mut events: EventReader<RepressionDamage>,
-    mut damaged_creature: Query<&mut HealthBar>,
+    mut damaged_creature: Query<(&mut HealthBar, &Children)>,
+    mut hp_bar: Query<(&mut Visibility, &mut TextureAtlas)>,
     mut intangible: EventWriter<BecomeIntangible>,
 ) {
     for event in events.read() {
-        let mut hp = damaged_creature.get_mut(event.entity).unwrap();
+        let (mut hp, children) = damaged_creature.get_mut(event.entity).unwrap();
         let is_fully_repressed = hp.repress(event.damage);
         if is_fully_repressed {
             intangible.send(BecomeIntangible {
                 entity: event.entity,
             });
+        }
+        for child in children.iter() {
+            let (mut hp_vis, mut hp_bar) = hp_bar.get_mut(*child).unwrap();
+            let max_hp = hp.deck.len() + hp.repressed.len();
+            let current_hp = hp.deck.len();
+            if max_hp == current_hp || current_hp == 0 {
+                *hp_vis = Visibility::Hidden;
+            } else {
+                *hp_vis = Visibility::Visible;
+                match current_hp as f32 / max_hp as f32 {
+                    0.85..1.00 => hp_bar.index = 168,
+                    0.70..0.85 => hp_bar.index = 169,
+                    0.55..0.70 => hp_bar.index = 170,
+                    0.40..0.55 => hp_bar.index = 171,
+                    0.25..0.40 => hp_bar.index = 172,
+                    0.10..0.25 => hp_bar.index = 173,
+                    0.00..0.10 => hp_bar.index = 174,
+                    _ => panic!("That is not a possible HP %!"),
+                }
+            }
         }
     }
 }
@@ -273,5 +294,23 @@ pub fn summon_creature(
             }
             _ => (),
         }
+        // Free the borrow on Commands.
+        let new_creature_entity = new_creature.id();
+        let hp_bar = commands
+            .spawn(HealthIndicator {
+                sprite: SpriteBundle {
+                    texture: asset_server.load("spritesheet.png"),
+                    // It already inherits the increased scale from the parent.
+                    transform: Transform::from_scale(Vec3::new(1., 1., 0.)),
+                    visibility: Visibility::Hidden,
+                    ..default()
+                },
+                atlas: TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: 168,
+                },
+            })
+            .id();
+        commands.entity(new_creature_entity).add_child(hp_bar);
     }
 }
