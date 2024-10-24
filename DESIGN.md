@@ -64,6 +64,7 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 # Ideas
 
 
+- Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere. It can be noticed through one of its erratic behaviours.
 - Spawn all new room tiles "moving from" a main "reality generator" room.
 
 # Cool Musical Words
@@ -73,9 +74,10 @@ Volume (impact) Pianissimo, Piano, Forte, Fortissimo
 
 
 # Tutorial
-
+- Mention the Color imprements Copy oddity from bevy discord.
 - A Gimp tutorial for the spritesheet, inspired by the broughlike one.
-- Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere. It can be noticed through one of its erratic behaviours.
+
+# Random writing
 
 Kinisi
 Volume: Presto (xxx)

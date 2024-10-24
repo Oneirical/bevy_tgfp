@@ -146,8 +146,8 @@ pub fn become_intangible(
     mut commands: Commands,
 ) {
     for event in events.read() {
-        let mut color = creature.get_mut(event.entity).unwrap().color;
-        color.set_alpha(0.1);
+        let mut sprite = creature.get_mut(event.entity).unwrap();
+        sprite.color.set_alpha(0.1);
         commands.entity(event.entity).insert(Intangible);
     }
 }
