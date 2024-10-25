@@ -329,3 +329,24 @@ We could simply despawn the entities, but Halloween is coming up at the time I a
 pub struct Intangible;
 ```
 
+This, unfortunately, invalidates a *critical* assumption - that there could only ever be one creature per tile.
+```rust
+// map.rs
+/// A struct with some information on a creature inside the Map.
+#[derive(PartialEq, Eq, Hash, Copy, Clone)]
+pub struct MapCreature {
+    pub entity: Entity,
+    pub is_intangible: bool,
+}
+```
+
+```rust
+// map.rs
+/// The position of every creature, updated automatically.
+#[derive(Resource)]
+pub struct Map {
+    // CHANGED from Entity to HashSet<MapCreature>
+    pub creatures: HashMap<Position, HashSet<MapCreature>>,
+    // End CHANGED.    
+}
+```

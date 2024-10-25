@@ -161,9 +161,7 @@ pub fn register_creatures(
     mut tangible_entities: RemovedComponents<Intangible>,
 ) {
     for (position, entity, is_intangible) in displaced_creatures.iter() {
-        // Insert the new creature in the Map. Position implements Copy,
-        // so it can be dereferenced (*), but `.clone()` would have been
-        // fine too.
+        // Insert the new creature in the Map.
         // If this key doesn't exist yet, it is created, otherwise it pushes on
         // the HashSet.
         map.creatures
