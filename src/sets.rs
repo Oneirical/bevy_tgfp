@@ -7,17 +7,26 @@ use crate::{
     },
     graphics::{all_animations_complete, decay_magic_effects, place_magic_effects},
     map::register_creatures,
-    spells::{dispatch_events, gather_effects},
+    spells::{process_axiom, queue_up_spell, spell_stack_is_not_empty},
 };
 
 pub struct SetsPlugin;
 
 impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(Update, process_axiom);
         app.add_systems(
             FixedUpdate,
             (
-                ((creature_step, gather_effects, dispatch_events).chain()).in_set(ActionPhase),
+                ((
+                    creature_step,
+                    queue_up_spell,
+                    // FIXME: This run condition is broken. It is replaced by the "if let Some".
+                    // This might be because of the system sets.
+                    process_axiom.run_if(spell_stack_is_not_empty),
+                )
+                    .chain())
+                .in_set(ActionPhase),
                 ((
                     summon_creature,
                     repression_damage,

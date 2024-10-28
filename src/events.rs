@@ -1,9 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{
-        get_species_sprite, Creature, HealthBar, HealthPoint, Hunt, Intangible, Player, Species,
-    },
+    creature::{get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Species},
     graphics::{AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas},
     map::{are_orthogonally_adjacent, Map, Position},
     spells::{Axiom, CastSpell, Spell},
@@ -55,8 +53,8 @@ pub fn creature_step(
 
 #[derive(Event)]
 pub struct TeleportEntity {
-    destination: Position,
-    entity: Entity,
+    pub destination: Position,
+    pub entity: Entity,
 }
 
 impl TeleportEntity {
