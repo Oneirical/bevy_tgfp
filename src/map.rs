@@ -212,7 +212,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 #H...............#\
                 #...............H#\
                 #H...............#\
-                #...............H#\
+                #........X......H#\
                 #H...............#\
                 #...............H#\
                 #H...............#\
@@ -225,6 +225,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             'H' => Species::Hunter,
             '@' => Species::Player,
             'S' => Species::Spawner,
+            'X' => Species::Trap,
             _ => continue,
         };
         summon.send(SummonCreature { species, position });

@@ -72,6 +72,9 @@ pub fn teleport_entity(
     mut creature: Query<(&mut Position, Has<Intangible>)>,
     mut map: ResMut<Map>,
     mut commands: Commands,
+
+    species: Query<&Species>,
+    mut spell: EventWriter<CastSpell>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
@@ -88,6 +91,22 @@ pub fn teleport_entity(
             });
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
+            // TEMP: Test for trap logic.
+            for possible_trap in map
+                .get_creatures_at(event.destination.x, event.destination.y)
+                .unwrap()
+            {
+                if matches!(species.get(possible_trap.entity).unwrap(), Species::Trap)
+                    && !is_intangible
+                {
+                    spell.send(CastSpell {
+                        caster: possible_trap.entity,
+                        spell: Spell {
+                            axioms: vec![Axiom::XBeam, Axiom::RepressionDamage { damage: 1 }],
+                        },
+                    });
+                }
+            }
         } else {
             // A collision between two creatures occurs.
             if are_orthogonally_adjacent(*creature_position, event.destination) {
@@ -274,6 +293,14 @@ pub fn summon_creature(
                 new_creature.insert(Hunt);
             }
             Species::Spawner => {
+                new_creature.insert(Intangible);
+                // Lower the Z value, so it appears underneath other creatures.
+                let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
+                transform.translation.z = -1.;
+                new_creature.insert(transform);
+            }
+            // copypasted from above
+            Species::Trap => {
                 new_creature.insert(Intangible);
                 // Lower the Z value, so it appears underneath other creatures.
                 let mut transform = Transform::from_scale(Vec3::new(4., 4., 0.));
