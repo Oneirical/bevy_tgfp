@@ -75,6 +75,7 @@ Volume (impact) Pianissimo, Piano, Forte, Fortissimo
 
 # Tutorial
 - Mention the Color imprements Copy oddity from bevy discord.
+- Mention the exclusive system and associated weird bevy errors.
 - A Gimp tutorial for the spritesheet, inspired by the broughlike one.
 
 # Random writing
