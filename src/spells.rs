@@ -1,9 +1,10 @@
-use std::{
-    collections::VecDeque,
-    mem::{discriminant, Discriminant},
-};
+use std::mem::{discriminant, Discriminant};
 
-use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
+use bevy::{
+    ecs::system::SystemId,
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
 
 use crate::{
     creature::Species,
@@ -96,6 +97,10 @@ impl FromWorld for AxiomLibrary {
             discriminant(&Axiom::LoopBack { steps: 1 }),
             world.register_system(axiom_mutator_loop_back),
         );
+        axioms.library.insert(
+            discriminant(&Axiom::ForceCast),
+            world.register_system(axiom_mutator_force_cast),
+        );
         axioms
     }
 }
@@ -112,33 +117,33 @@ pub struct Spell {
 /// onto those tiles.
 pub enum Axiom {
     // FORMS
-
-    // Target the caster's tile.
+    /// Target the caster's tile.
     Ego,
-    // Target all orthogonally adjacent tiles to the caster.
+    /// Target all orthogonally adjacent tiles to the caster.
     Plus,
-    // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
-    // including the first solid tile encountered, which stops the beam.
+    /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
+    /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
-    // Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
-    // including the first solid tile encountered, which stops the beam.
+    /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
+    /// including the first solid tile encountered, which stops the beam.
     XBeam,
-    // Target a ring of `radius` around the caster.
+    /// Target a ring of `radius` around the caster.
     Halo { radius: i32 },
 
     // FUNCTIONS
-
-    // The targeted creatures dash in the direction of the caster's last move.
+    /// The targeted creatures dash in the direction of the caster's last move.
     Dash,
-    // The targeted passable tiles summon a new instance of species.
+    /// The targeted passable tiles summon a new instance of species.
     SummonCreature { species: Species },
-    // Deal damage to all creatures on targeted tiles.
+    /// Deal damage to all creatures on targeted tiles.
     RepressionDamage { damage: i32 },
 
     // MUTATORS
-
-    // Only once, loop backwards `steps` in the axiom queue.
+    /// Only once, loop backwards `steps` in the axiom queue.
     LoopBack { steps: usize },
+    /// Force all creatures on targeted tiles to cast the remainder of the spell.
+    /// This terminates execution of the spell.
+    ForceCast,
 }
 
 /// Target the caster's tile.
@@ -284,6 +289,25 @@ fn axiom_function_repression_damage(
     }
 }
 
+/// Force all creatures on targeted tiles to cast the remainder of the spell.
+/// This terminates execution of the spell.
+fn axiom_mutator_force_cast(
+    mut cast_spell: EventWriter<CastSpell>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    for entity in synapse_data.get_all_targeted_entities(&map) {
+        cast_spell.send(CastSpell {
+            caster: entity,
+            spell: Spell {
+                axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
+            },
+        });
+        synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+    }
+}
+
 /// The targeted creatures dash in the direction of the caster's last move.
 fn axiom_function_dash(
     mut teleport: EventWriter<TeleportEntity>,
@@ -392,7 +416,7 @@ struct SynapseData {
     /// Where a spell will act.
     targets: Vec<Position>,
     /// How a spell will act.
-    axioms: VecDeque<Axiom>,
+    axioms: Vec<Axiom>,
     /// The nth axiom currently being executed.
     step: usize,
     /// Who cast the spell.
@@ -405,6 +429,8 @@ struct SynapseData {
     // NOTE: This could be done with a Query instead, but it's accessed
     // so commonly that this field exists for convenience.
     caster_position: Position,
+    /// Flags that alter the behaviour of an active synapse.
+    synapse_flags: HashSet<SynapseFlag>,
 }
 
 impl SynapseData {
@@ -413,7 +439,7 @@ impl SynapseData {
         caster: Entity,
         caster_momentum: OrdDir,
         caster_position: Position,
-        axioms: VecDeque<Axiom>,
+        axioms: Vec<Axiom>,
     ) -> Self {
         SynapseData {
             targets: Vec::new(),
@@ -422,6 +448,7 @@ impl SynapseData {
             caster,
             caster_momentum,
             caster_position,
+            synapse_flags: HashSet::new(),
         }
     }
 
@@ -445,6 +472,13 @@ impl SynapseData {
     }
 }
 
+#[derive(Eq, PartialEq, Hash)]
+/// Flags that alter the behaviour of an active synapse.
+pub enum SynapseFlag {
+    /// Delete this synapse and abandon all future Axioms.
+    Terminate,
+}
+
 pub fn queue_up_spell(
     mut cast_spells: EventReader<CastSpell>,
     mut spell_stack: ResMut<SpellStack>,
@@ -452,7 +486,7 @@ pub fn queue_up_spell(
 ) {
     for cast_spell in cast_spells.read() {
         // First, get the list of Axioms.
-        let axioms = VecDeque::from(cast_spell.spell.axioms.clone());
+        let axioms = Vec::from(cast_spell.spell.axioms.clone());
         // And the caster's position and last move direction.
         let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
 
@@ -500,7 +534,10 @@ fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
     // Step forwards in the axiom queue.
     synapse_data.step += 1;
     // If the spell is finished, do not push it back.
-    if synapse_data.axioms.get(synapse_data.step).is_some() {
+    // The Terminate flag also prevents further execution.
+    if synapse_data.axioms.get(synapse_data.step).is_some()
+        && !synapse_data.synapse_flags.contains(&SynapseFlag::Terminate)
+    {
         spell_stack.spells.push(synapse_data);
     }
 }
