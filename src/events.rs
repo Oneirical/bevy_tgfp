@@ -19,7 +19,13 @@ impl Plugin for EventPlugin {
         app.add_event::<BecomeIntangible>();
         app.add_event::<CreatureCollision>();
         app.init_resource::<Events<EndTurn>>();
+        app.insert_resource(TurnCount { turns: 0 });
     }
+}
+
+#[derive(Resource)]
+pub struct TurnCount {
+    turns: usize,
 }
 
 #[derive(Event)]
@@ -269,8 +275,10 @@ pub fn end_turn(
     npcs: Query<(Entity, &Position, &Species), Without<Player>>,
     player: Query<&Position, With<Player>>,
     map: Res<Map>,
+    mut turn_count: ResMut<TurnCount>,
 ) {
     for _event in events.read() {
+        turn_count.turns += 1;
         let player_pos = player.get_single().unwrap();
         for (creature_entity, creature_position, creature_species) in npcs.iter() {
             match creature_species {

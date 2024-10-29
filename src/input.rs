@@ -43,7 +43,7 @@ pub fn keyboard_input(
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![Axiom::Ego, Axiom::Dash],
+                    axioms: vec![Axiom::Ego, Axiom::Dash { max_distance: 4 }],
                 },
             });
             turn_end.send(EndTurn);

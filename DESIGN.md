@@ -67,6 +67,10 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 - Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere. It can be noticed through one of its erratic behaviours.
 - Spawn all new room tiles "moving from" a main "reality generator" room.
 
+# Coding
+
+- For NPC AI, enter a game state where events get routed to systems that don't actually affect the game state but calculate heuristics.
+
 # Cool Musical Words
 
 Tempo (ease of containment): Andante, Allegro, Presto, Prestissimo

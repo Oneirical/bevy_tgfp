@@ -7,7 +7,7 @@ use bevy::{
 };
 
 use crate::{
-    creature::Species,
+    creature::{Intangible, Species},
     events::{RepressionDamage, SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
@@ -80,7 +80,7 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_halo),
         );
         axioms.library.insert(
-            discriminant(&Axiom::Dash),
+            discriminant(&Axiom::Dash { max_distance: 1 }),
             world.register_system(axiom_function_dash),
         );
         axioms.library.insert(
@@ -132,7 +132,7 @@ pub enum Axiom {
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
-    Dash,
+    Dash { max_distance: i32 },
     /// The targeted passable tiles summon a new instance of species.
     SummonCreature { species: Species },
     /// Deal damage to all creatures on targeted tiles.
@@ -311,36 +311,45 @@ fn axiom_mutator_force_cast(
 /// The targeted creatures dash in the direction of the caster's last move.
 fn axiom_function_dash(
     mut teleport: EventWriter<TeleportEntity>,
+    is_intangible: Query<Has<Intangible>>,
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
 ) {
     let synapse_data = spell_stack.spells.get(0).unwrap();
-    // For each (Entity, Position) on a targeted tile...
-    for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
-        // The dashing creature starts where it currently is standing.
-        let mut final_dash_destination = dasher_pos;
-        // It will travel in the direction of the caster's last move.
-        let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
-        // The dash has a maximum travel distance of 10.
-        let mut distance_travelled = 0;
-        while distance_travelled < 10 {
-            distance_travelled += 1;
-            // Stop dashing if a solid Creature is hit.
-            if !map.is_passable(
-                final_dash_destination.x + off_x,
-                final_dash_destination.y + off_y,
-            ) {
-                break;
+    if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
+        // For each (Entity, Position) on a targeted tile...
+        for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
+            // The dashing creature starts where it currently is standing.
+            let mut final_dash_destination = dasher_pos;
+            // It will travel in the direction of the caster's last move.
+            let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
+            // The dash has a maximum travel distance of `max_distance`.
+            let mut distance_travelled = 0;
+            // Check if the dashing creature is allowed to move through other creatures.
+            let is_intangible = is_intangible.get(dasher).unwrap();
+            while distance_travelled < max_distance {
+                distance_travelled += 1;
+                // Stop dashing if a solid Creature is hit and the dasher is not intangible.
+                if !is_intangible
+                    && !map.is_passable(
+                        final_dash_destination.x + off_x,
+                        final_dash_destination.y + off_y,
+                    )
+                {
+                    break;
+                }
+                // Otherwise, keep offsetting the dashing creature's position.
+                final_dash_destination.shift(off_x, off_y);
             }
-            // Otherwise, keep offsetting the dashing creature's position.
-            final_dash_destination.shift(off_x, off_y);
-        }
 
-        // Once finished, release the Teleport event.
-        teleport.send(TeleportEntity {
-            destination: final_dash_destination,
-            entity: dasher,
-        });
+            // Once finished, release the Teleport event.
+            teleport.send(TeleportEntity {
+                destination: final_dash_destination,
+                entity: dasher,
+            });
+        }
+    } else {
+        panic!()
     }
 }
 
