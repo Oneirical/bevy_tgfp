@@ -61,7 +61,7 @@ impl OrdDir {
             (0, -1) => OrdDir::Down,
             (1, 0) => OrdDir::Right,
             (-1, 0) => OrdDir::Left,
-            _ => panic!("Invalid offset provided."),
+            _ => panic!("Invalid offset provided: {dx}, {dy}"),
         }
     }
 

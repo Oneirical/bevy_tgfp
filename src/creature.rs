@@ -80,6 +80,6 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Hunter => 4,
         Species::Trap => 12,
         Species::Spawner => 75,
-        Species::Crate => 18,
+        Species::Crate => 19,
     }
 }

@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     events::{
-        become_intangible, creature_step, end_turn, repression_damage, summon_creature,
-        teleport_entity,
+        become_intangible, creature_collision, creature_step, end_turn, repression_damage,
+        summon_creature, teleport_entity,
     },
     graphics::{all_animations_complete, decay_magic_effects, place_magic_effects},
     map::register_creatures,
@@ -29,10 +29,11 @@ impl Plugin for SetsPlugin {
                 .in_set(ActionPhase),
                 ((
                     summon_creature,
-                    repression_damage,
-                    become_intangible,
                     register_creatures,
                     teleport_entity,
+                    creature_collision,
+                    repression_damage,
+                    become_intangible,
                 )
                     .chain())
                 .in_set(ResolutionPhase),

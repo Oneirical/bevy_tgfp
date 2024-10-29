@@ -17,7 +17,74 @@ impl Plugin for EventPlugin {
         app.add_event::<SummonCreature>();
         app.add_event::<RepressionDamage>();
         app.add_event::<BecomeIntangible>();
+        app.add_event::<CreatureCollision>();
         app.init_resource::<Events<EndTurn>>();
+    }
+}
+
+#[derive(Event)]
+pub struct CreatureCollision {
+    /// The Entity which walked into another.
+    pub entity_responsible: Entity,
+    /// The position of the Entity which walked into another.
+    pub responsible_position: Position,
+    /// The Entity which has been collided with.
+    pub collides_with: Entity,
+    /// The position of the Entity which has been collided with.
+    /// Necessary, as otherwise this creature could move after
+    /// being collided with, resulting in an unexpected offset.
+    pub collided_position: Position,
+}
+
+pub fn creature_collision(
+    mut events: EventReader<CreatureCollision>,
+    mut teleporter: EventWriter<TeleportEntity>,
+    mut damage: EventWriter<RepressionDamage>,
+    species: Query<&Species>,
+    mut commands: Commands,
+    map: Res<Map>,
+) {
+    for event in events.read() {
+        let direction = OrdDir::direction_towards_adjacent_tile(
+            event.responsible_position,
+            event.collided_position,
+        );
+        // A collision between two creatures occurs.
+        if are_orthogonally_adjacent(event.responsible_position, event.collided_position) {
+            let species = species.get(event.collides_with).unwrap();
+            // If a Crate exists and can be pushed...
+            // Not checking for passability would result in infinite loops
+            // when pushing onto solid objects, resulting in them getting "drilled".
+            if matches!(&species, Species::Crate)
+                && map.is_passable(
+                    event.collided_position.x + direction.as_offset().0,
+                    event.collided_position.y + direction.as_offset().1,
+                )
+            {
+                teleporter.send(TeleportEntity {
+                    destination: Position::new(
+                        event.collided_position.x + direction.as_offset().0,
+                        event.collided_position.y + direction.as_offset().1,
+                    ),
+                    entity: event.collides_with,
+                });
+                teleporter.send(TeleportEntity {
+                    destination: event.collided_position,
+                    entity: event.entity_responsible,
+                });
+            } else {
+                damage.send(RepressionDamage {
+                    entity: event.collides_with,
+                    damage: 1,
+                });
+                commands
+                    .entity(event.entity_responsible)
+                    .insert(AttackAnimation {
+                        elapsed: Timer::from_seconds(0.2, TimerMode::Once),
+                        direction,
+                    });
+            }
+        }
     }
 }
 
@@ -68,22 +135,26 @@ impl TeleportEntity {
 
 pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut damage: EventWriter<RepressionDamage>,
     mut creature: Query<(&mut Position, Has<Intangible>)>,
     mut map: ResMut<Map>,
     mut commands: Commands,
 
     species: Query<&Species>,
+
+    mut collision: EventWriter<CreatureCollision>,
     mut spell: EventWriter<CastSpell>,
-    mut teleporter: EventWriter<TeleportEntity>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
+        // A creature cannot teleport onto itself.
+        if *creature_position == event.destination {
+            continue;
+        }
         // If motion is possible...
-        if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
+        else if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
             // ...update the Map to reflect this...
             map.move_creature(event.entity, *creature_position, event.destination);
             // ...begin the sliding animation...
@@ -110,48 +181,14 @@ pub fn teleport_entity(
                 }
             }
         } else {
-            // A collision between two creatures occurs.
-            if are_orthogonally_adjacent(*creature_position, event.destination) {
-                let collided_entity = *map
+            collision.send(CreatureCollision {
+                entity_responsible: event.entity,
+                collides_with: *map
                     .get_tangible_entity_at(event.destination.x, event.destination.y)
-                    .unwrap();
-                let species = species.get(collided_entity).unwrap();
-                // FIXME: Crate pushing logic
-                // This should be offshored into an Attack event and a Push event.
-                if matches!(&species, Species::Crate) {
-                    let offset = OrdDir::direction_towards_adjacent_tile(
-                        *creature_position,
-                        event.destination,
-                    )
-                    .as_offset();
-                    teleporter.send(TeleportEntity {
-                        destination: Position::new(
-                            event.destination.x + offset.0,
-                            event.destination.y + offset.1,
-                        ),
-                        entity: collided_entity,
-                    });
-                    teleporter.send(TeleportEntity {
-                        destination: Position::new(event.destination.x, event.destination.y),
-                        entity: event.entity,
-                    });
-                } else {
-                    damage.send(RepressionDamage {
-                        entity: *map
-                            .get_tangible_entity_at(event.destination.x, event.destination.y)
-                            .unwrap(),
-                        damage: 1,
-                    });
-                    commands.entity(event.entity).insert(AttackAnimation {
-                        elapsed: Timer::from_seconds(0.2, TimerMode::Once),
-                        direction: OrdDir::direction_towards_adjacent_tile(
-                            *creature_position,
-                            event.destination,
-                        ),
-                    });
-                }
-            }
-            continue;
+                    .unwrap(),
+                responsible_position: *creature_position,
+                collided_position: event.destination,
+            });
         }
     }
 }

@@ -29,10 +29,7 @@ pub fn keyboard_input(
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![
-                        Axiom::Halo { radius: 4 },
-                        Axiom::RepressionDamage { damage: 1 },
-                    ],
+                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
                 },
             });
             turn_end.send(EndTurn);
