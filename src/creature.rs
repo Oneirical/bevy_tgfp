@@ -69,6 +69,7 @@ pub enum Species {
     Hunter,
     Spawner,
     Trap,
+    Crate,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -79,5 +80,6 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Hunter => 4,
         Species::Trap => 12,
         Species::Spawner => 75,
+        Species::Crate => 18,
     }
 }

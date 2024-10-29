@@ -75,6 +75,7 @@ pub fn teleport_entity(
 
     species: Query<&Species>,
     mut spell: EventWriter<CastSpell>,
+    mut teleporter: EventWriter<TeleportEntity>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
@@ -91,6 +92,7 @@ pub fn teleport_entity(
             });
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
+
             // TEMP: Test for trap logic.
             for possible_trap in map
                 .get_creatures_at(event.destination.x, event.destination.y)
@@ -110,19 +112,44 @@ pub fn teleport_entity(
         } else {
             // A collision between two creatures occurs.
             if are_orthogonally_adjacent(*creature_position, event.destination) {
-                damage.send(RepressionDamage {
-                    entity: *map
-                        .get_tangible_entity_at(event.destination.x, event.destination.y)
-                        .unwrap(),
-                    damage: 1,
-                });
-                commands.entity(event.entity).insert(AttackAnimation {
-                    elapsed: Timer::from_seconds(0.2, TimerMode::Once),
-                    direction: OrdDir::direction_towards_adjacent_tile(
+                let collided_entity = *map
+                    .get_tangible_entity_at(event.destination.x, event.destination.y)
+                    .unwrap();
+                let species = species.get(collided_entity).unwrap();
+                // FIXME: Crate pushing logic
+                // This should be offshored into an Attack event and a Push event.
+                if matches!(&species, Species::Crate) {
+                    let offset = OrdDir::direction_towards_adjacent_tile(
                         *creature_position,
                         event.destination,
-                    ),
-                });
+                    )
+                    .as_offset();
+                    teleporter.send(TeleportEntity {
+                        destination: Position::new(
+                            event.destination.x + offset.0,
+                            event.destination.y + offset.1,
+                        ),
+                        entity: collided_entity,
+                    });
+                    teleporter.send(TeleportEntity {
+                        destination: Position::new(event.destination.x, event.destination.y),
+                        entity: event.entity,
+                    });
+                } else {
+                    damage.send(RepressionDamage {
+                        entity: *map
+                            .get_tangible_entity_at(event.destination.x, event.destination.y)
+                            .unwrap(),
+                        damage: 1,
+                    });
+                    commands.entity(event.entity).insert(AttackAnimation {
+                        elapsed: Timer::from_seconds(0.2, TimerMode::Once),
+                        direction: OrdDir::direction_towards_adjacent_tile(
+                            *creature_position,
+                            event.destination,
+                        ),
+                    });
+                }
             }
             continue;
         }
