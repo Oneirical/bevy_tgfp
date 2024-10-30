@@ -47,7 +47,9 @@ impl Plugin for SetsPlugin {
                 ActionPhase,
                 ResolutionPhase,
                 AnimationPhase,
-                TurnPhase.run_if(all_animations_complete),
+                TurnPhase
+                    .run_if(all_animations_complete)
+                    .run_if(not(spell_stack_is_not_empty)),
             )
                 .chain(),
         );

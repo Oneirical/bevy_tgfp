@@ -12,7 +12,7 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_input.run_if(all_animations_complete));
+        app.add_systems(Update, keyboard_input);
     }
 }
 
@@ -32,7 +32,7 @@ pub fn keyboard_input(
                     axioms: vec![
                         Axiom::Halo { radius: 3 },
                         Axiom::ForceCast,
-                        Axiom::Halo { radius: 3 },
+                        Axiom::Plus,
                         Axiom::RepressionDamage { damage: 1 },
                     ],
                 },

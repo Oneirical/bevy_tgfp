@@ -148,7 +148,7 @@ pub enum Axiom {
 
 /// Target the caster's tile.
 fn axiom_form_ego(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     magic_vfx.send(PlaceMagicVfx {
         targets: vec![synapse_data.caster_position],
         sequence: EffectSequence::Sequential { duration: 0.4 },
@@ -160,7 +160,7 @@ fn axiom_form_ego(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: Re
 
 /// Target all orthogonally adjacent tiles to the caster.
 fn axiom_form_plus(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
     let mut output = Vec::new();
     for direction in adjacent {
@@ -186,7 +186,7 @@ fn axiom_form_momentum_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     // Start the beam where the caster is standing.
     // The beam travels in the direction of the caster's last move.
     let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
@@ -212,7 +212,7 @@ fn axiom_form_xbeam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     let diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)];
     for (dx, dy) in diagonals {
         // Start the beam where the caster is standing.
@@ -232,7 +232,7 @@ fn axiom_form_xbeam(
 
 /// Target a ring of `radius` around the caster.
 fn axiom_form_halo(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     if let Axiom::Halo { radius } = synapse_data.axioms[synapse_data.step] {
         let mut circle = circle_around(&synapse_data.caster_position, radius);
         // Sort by clockwise rotation.
@@ -260,7 +260,7 @@ fn axiom_function_summon_creature(
     mut summon: EventWriter<SummonCreature>,
     spell_stack: Res<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.get(0).unwrap();
+    let synapse_data = spell_stack.spells.last().unwrap();
     if let Axiom::SummonCreature { species } = synapse_data.axioms[synapse_data.step] {
         for position in &synapse_data.targets {
             summon.send(SummonCreature {
@@ -279,7 +279,7 @@ fn axiom_function_repression_damage(
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.get(0).unwrap();
+    let synapse_data = spell_stack.spells.last().unwrap();
     if let Axiom::RepressionDamage { damage } = synapse_data.axioms[synapse_data.step] {
         for entity in synapse_data.get_all_targeted_entities(&map) {
             repression_damage.send(RepressionDamage { entity, damage });
@@ -296,7 +296,7 @@ fn axiom_mutator_force_cast(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     for entity in synapse_data.get_all_targeted_entities(&map) {
         cast_spell.send(CastSpell {
             caster: entity,
@@ -304,8 +304,8 @@ fn axiom_mutator_force_cast(
                 axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
             },
         });
-        synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
     }
+    synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
 }
 
 /// The targeted creatures dash in the direction of the caster's last move.
@@ -315,7 +315,7 @@ fn axiom_function_dash(
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.get(0).unwrap();
+    let synapse_data = spell_stack.spells.last().unwrap();
     if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
         // For each (Entity, Position) on a targeted tile...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
@@ -355,7 +355,7 @@ fn axiom_function_dash(
 
 /// Only once, loop backwards `steps` in the axiom queue.
 fn axiom_mutator_loop_back(mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.get_mut(0).unwrap();
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
     if let Axiom::LoopBack { steps } = synapse_data.axioms[synapse_data.step] {
         // Remove the LoopBack.
         synapse_data.axioms.remove(synapse_data.step);
@@ -420,6 +420,7 @@ fn angle_from_center(center: &Position, point: &Position) -> f64 {
     (delta_y as f64).atan2(delta_x as f64)
 }
 
+#[derive(Debug)]
 /// The tracker of everything which determines how a certain spell will act.
 struct SynapseData {
     /// Where a spell will act.
@@ -481,7 +482,7 @@ impl SynapseData {
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, Debug, PartialEq, Hash)]
 /// Flags that alter the behaviour of an active synapse.
 pub enum SynapseFlag {
     /// Delete this synapse and abandon all future Axioms.
@@ -525,7 +526,7 @@ pub fn process_axiom(
     spell_stack: Res<SpellStack>,
 ) {
     // Get the most recently added spell, if it exists.
-    if let Some(synapse_data) = spell_stack.spells.get(0) {
+    if let Some(synapse_data) = spell_stack.spells.last() {
         // Get its first axiom.
         let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
         // Launch the axiom, which will send out some Events (if it's a Function,
