@@ -76,6 +76,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_xbeam),
         );
         axioms.library.insert(
+            discriminant(&Axiom::CrossBeam),
+            world.register_system(axiom_form_cross_beam),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Halo { radius: 1 }),
             world.register_system(axiom_form_halo),
         );
@@ -124,6 +128,9 @@ pub enum Axiom {
     /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
+    /// Fire 4 beams from the caster, towards the orthogonal directions. Target all travelled tiles,
+    /// including the first solid tile encountered, which stops the beam.
+    CrossBeam,
     /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     XBeam,
@@ -205,6 +212,35 @@ fn axiom_form_momentum_beam(
     synapse_data.targets.append(&mut output);
 }
 
+/// Fire 4 beams from the caster, towards the orthogonal directions. Target all travelled tiles,
+/// including the first solid tile encountered, which stops the beam.
+fn axiom_form_cross_beam(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let orthogonals = [OrdDir::Up, OrdDir::Left, OrdDir::Down, OrdDir::Right];
+    for orthogonal in orthogonals {
+        let (dx, dy) = orthogonal.as_offset();
+        // Start the beam where the caster is standing.
+        // The beam travels in the direction of each orthogonal.
+        let mut output = linear_beam(synapse_data.caster_position, 10, dx, dy, &map);
+        // Add some visual beam effects.
+        magic_vfx.send(PlaceMagicVfx {
+            targets: output.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.4 },
+            effect: match orthogonal {
+                OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
+                OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
+            },
+            decay: 0.5,
+        });
+        // Add these tiles to `targets`.
+        synapse_data.targets.append(&mut output);
+    }
+}
+
 /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
 /// including the first solid tile encountered, which stops the beam.
 fn axiom_form_xbeam(
@@ -241,7 +277,7 @@ fn axiom_form_halo(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: R
             let angle_b = angle_from_center(&synapse_data.caster_position, b);
             angle_a.partial_cmp(&angle_b).unwrap()
         });
-        // Add some visual beam effects.
+        // Add some visual halo effects.
         magic_vfx.send(PlaceMagicVfx {
             targets: circle.clone(),
             sequence: EffectSequence::Sequential { duration: 0.4 },

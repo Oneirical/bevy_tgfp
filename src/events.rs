@@ -181,7 +181,7 @@ pub fn teleport_entity(
                     spell.send(CastSpell {
                         caster: possible_trap.entity,
                         spell: Spell {
-                            axioms: vec![Axiom::XBeam, Axiom::RepressionDamage { damage: 1 }],
+                            axioms: vec![Axiom::CrossBeam, Axiom::RepressionDamage { damage: 1 }],
                         },
                     });
                 }
