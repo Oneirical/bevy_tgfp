@@ -9,8 +9,7 @@ impl Plugin for GraphicsPlugin {
         app.init_resource::<SpriteSheetAtlas>();
         app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
-        app.add_systems(Update, adjust_transforms);
-        app.add_event::<PlaceMagicVfx>();
+        app.init_resource::<Events<PlaceMagicVfx>>();
     }
 }
 
@@ -170,7 +169,7 @@ fn setup_camera(mut commands: Commands) {
 
 /// Each frame, adjust every entity's display location to match
 /// their position on the grid, and make the camera follow the player.
-fn adjust_transforms(
+pub fn adjust_transforms(
     mut creatures: Query<(
         Entity,
         &Position,

@@ -40,11 +40,10 @@ pub struct SpellStack {
 
 impl FromWorld for SpellStack {
     fn from_world(world: &mut World) -> Self {
-        let stack = SpellStack {
+        SpellStack {
             spells: Vec::new(),
             cleanup_id: world.register_system(cleanup_last_axiom),
-        };
-        stack
+        }
     }
 }
 
@@ -532,7 +531,7 @@ pub fn queue_up_spell(
 ) {
     for cast_spell in cast_spells.read() {
         // First, get the list of Axioms.
-        let axioms = Vec::from(cast_spell.spell.axioms.clone());
+        let axioms = cast_spell.spell.axioms.clone();
         // And the caster's position and last move direction.
         let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
 
@@ -549,8 +548,11 @@ pub fn queue_up_spell(
     }
 }
 
-pub fn spell_stack_is_not_empty(spell_stack: Res<SpellStack>) -> bool {
-    !spell_stack.spells.is_empty()
+pub fn all_spells_complete(
+    incoming_spells: EventReader<CastSpell>,
+    spell_stack: Res<SpellStack>,
+) -> bool {
+    spell_stack.spells.is_empty() && incoming_spells.is_empty()
 }
 
 /// Pops the most recently added spell (re-adding it at the end if it's not complete yet).

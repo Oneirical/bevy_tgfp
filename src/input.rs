@@ -4,6 +4,7 @@ use crate::{
     creature::Player,
     events::{CreatureStep, EndTurn},
     graphics::all_animations_complete,
+    sets::TurnProgression,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -12,7 +13,10 @@ pub struct InputPlugin;
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_input);
+        app.add_systems(
+            Update,
+            keyboard_input.run_if(in_state(TurnProgression::Animating)),
+        );
     }
 }
 
@@ -23,8 +27,19 @@ pub fn keyboard_input(
     input: Res<ButtonInput<KeyCode>>,
     mut spell: EventWriter<CastSpell>,
     mut turn_end: EventWriter<EndTurn>,
+    mut next_state: ResMut<NextState<TurnProgression>>,
 ) {
     if let Ok(player) = player.get_single() {
+        if input.any_just_pressed([
+            KeyCode::Space,
+            KeyCode::KeyW,
+            KeyCode::KeyS,
+            KeyCode::KeyA,
+            KeyCode::KeyD,
+            KeyCode::Enter,
+        ]) {
+            next_state.set(TurnProgression::PlayerTurn);
+        }
         if input.just_pressed(KeyCode::Space) {
             spell.send(CastSpell {
                 caster: player,

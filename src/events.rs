@@ -4,6 +4,7 @@ use crate::{
     creature::{get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Species},
     graphics::{AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas},
     map::{are_orthogonally_adjacent, Map, Position},
+    sets::TurnProgression,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -276,8 +277,16 @@ pub fn end_turn(
     player: Query<&Position, With<Player>>,
     map: Res<Map>,
     mut turn_count: ResMut<TurnCount>,
+    state: Res<State<TurnProgression>>,
+    mut next_state: ResMut<NextState<TurnProgression>>,
 ) {
+    if matches!(state.get(), TurnProgression::NpcTurn) {
+        next_state.set(TurnProgression::Animating);
+        return;
+    }
     for _event in events.read() {
+        assert!(matches!(state.get(), TurnProgression::PlayerTurn));
+        next_state.set(TurnProgression::NpcTurn);
         turn_count.turns += 1;
         let player_pos = player.get_single().unwrap();
         for (creature_entity, creature_position, creature_species) in npcs.iter() {
