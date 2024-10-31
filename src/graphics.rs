@@ -16,17 +16,23 @@ impl Plugin for GraphicsPlugin {
 #[derive(Component)]
 pub struct SlideAnimation {
     pub elapsed: Timer,
+    pub appear: Timer,
 }
 
 #[derive(Component)]
 pub struct AttackAnimation {
     pub elapsed: Timer,
+    pub appear: Timer,
     pub direction: OrdDir,
 }
 
 #[derive(Resource)]
+pub struct AnimationDelay {
+    pub delay: f32,
+}
+
+#[derive(Resource)]
 pub struct SpriteSheetAtlas {
-    // Note the pub!
     pub handle: Handle<TextureAtlasLayout>,
 }
 
@@ -62,6 +68,7 @@ pub struct PlaceMagicVfx {
     pub sequence: EffectSequence,
     pub effect: EffectType,
     pub decay: f32,
+    pub appear: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -116,9 +123,11 @@ pub fn place_magic_effects(
                 },
                 vfx: MagicVfx {
                     appear: match event.sequence {
-                        EffectSequence::Simultaneous => Timer::from_seconds(0., TimerMode::Once),
+                        EffectSequence::Simultaneous => {
+                            Timer::from_seconds(event.appear, TimerMode::Once)
+                        }
                         EffectSequence::Sequential { duration } => Timer::from_seconds(
-                            (i as f32 / event.targets.len() as f32) * duration,
+                            (i as f32 / event.targets.len() as f32) * duration + event.appear,
                             TimerMode::Once,
                         ),
                     },
@@ -185,70 +194,78 @@ pub fn adjust_transforms(
     for (entity, pos, mut trans, anim, attack, is_player) in creatures.iter_mut() {
         // If this creature is affected by an animation...
         if let Some(mut attack) = attack {
-            let (strike_translation_x, strike_translation_y) = (
-                (pos.x as f32 + attack.direction.as_offset().0 as f32 / 4.) * 64.,
-                (pos.y as f32 + attack.direction.as_offset().1 as f32 / 4.) * 64.,
-            );
-            if attack.elapsed.fraction_remaining() == 1. {
-                trans.translation.x = strike_translation_x;
-                trans.translation.y = strike_translation_y;
-            }
-            let fraction_before_tick = attack.elapsed.fraction();
-            attack.elapsed.tick(time.delta());
-            // Calculate what % of the animation has elapsed during this tick.
-            let fraction_advanced_this_frame = attack.elapsed.fraction() - fraction_before_tick;
-            // The distance between where a creature CURRENTLY is,
-            // and the destination of a creature's movement.
-            // Multiplied by the graphical size of a tile, which is 64x64.
-            let (ori_dx, ori_dy) = (
-                strike_translation_x - pos.x as f32 * 64.,
-                strike_translation_y - pos.y as f32 * 64.,
-            );
-            // The sprite approaches its destination.
-            trans.translation.x = bring_closer_to_target_value(
-                trans.translation.x,
-                ori_dx * fraction_advanced_this_frame,
-                pos.x as f32 * 64.,
-            );
-            trans.translation.y = bring_closer_to_target_value(
-                trans.translation.y,
-                ori_dy * fraction_advanced_this_frame,
-                pos.y as f32 * 64.,
-            );
-            if attack.elapsed.finished() {
-                commands.entity(entity).remove::<AttackAnimation>();
+            if !attack.appear.finished() {
+                attack.appear.tick(time.delta());
+            } else {
+                let (strike_translation_x, strike_translation_y) = (
+                    (pos.x as f32 + attack.direction.as_offset().0 as f32 / 4.) * 64.,
+                    (pos.y as f32 + attack.direction.as_offset().1 as f32 / 4.) * 64.,
+                );
+                if attack.elapsed.fraction_remaining() == 1. {
+                    trans.translation.x = strike_translation_x;
+                    trans.translation.y = strike_translation_y;
+                }
+                let fraction_before_tick = attack.elapsed.fraction();
+                attack.elapsed.tick(time.delta());
+                // Calculate what % of the animation has elapsed during this tick.
+                let fraction_advanced_this_frame = attack.elapsed.fraction() - fraction_before_tick;
+                // The distance between where a creature CURRENTLY is,
+                // and the destination of a creature's movement.
+                // Multiplied by the graphical size of a tile, which is 64x64.
+                let (ori_dx, ori_dy) = (
+                    strike_translation_x - pos.x as f32 * 64.,
+                    strike_translation_y - pos.y as f32 * 64.,
+                );
+                // The sprite approaches its destination.
+                trans.translation.x = bring_closer_to_target_value(
+                    trans.translation.x,
+                    ori_dx * fraction_advanced_this_frame,
+                    pos.x as f32 * 64.,
+                );
+                trans.translation.y = bring_closer_to_target_value(
+                    trans.translation.y,
+                    ori_dy * fraction_advanced_this_frame,
+                    pos.y as f32 * 64.,
+                );
+                if attack.elapsed.finished() {
+                    commands.entity(entity).remove::<AttackAnimation>();
+                }
             }
         } else if let Some(mut animation_timer) = anim {
-            let fraction_before_tick = animation_timer.elapsed.fraction();
-            animation_timer.elapsed.tick(time.delta());
-            // Calculate what % of the animation has elapsed during this tick.
-            let fraction_advanced_this_frame =
-                animation_timer.elapsed.fraction() - fraction_before_tick;
-            // The distance between where a creature CURRENTLY is,
-            // and the destination of a creature's movement.
-            // Multiplied by the graphical size of a tile, which is 64x64.
-            let (dx, dy) = (
-                pos.x as f32 * 64. - trans.translation.x,
-                pos.y as f32 * 64. - trans.translation.y,
-            );
-            // The distance between the original position and the destination position.
-            let (ori_dx, ori_dy) = (
-                dx / animation_timer.elapsed.fraction_remaining(),
-                dy / animation_timer.elapsed.fraction_remaining(),
-            );
-            // The sprite approaches its destination.
-            trans.translation.x = bring_closer_to_target_value(
-                trans.translation.x,
-                ori_dx * fraction_advanced_this_frame,
-                pos.x as f32 * 64.,
-            );
-            trans.translation.y = bring_closer_to_target_value(
-                trans.translation.y,
-                ori_dy * fraction_advanced_this_frame,
-                pos.y as f32 * 64.,
-            );
-            if animation_timer.elapsed.finished() {
-                commands.entity(entity).remove::<SlideAnimation>();
+            if !animation_timer.appear.finished() {
+                animation_timer.appear.tick(time.delta());
+            } else {
+                let fraction_before_tick = animation_timer.elapsed.fraction();
+                animation_timer.elapsed.tick(time.delta());
+                // Calculate what % of the animation has elapsed during this tick.
+                let fraction_advanced_this_frame =
+                    animation_timer.elapsed.fraction() - fraction_before_tick;
+                // The distance between where a creature CURRENTLY is,
+                // and the destination of a creature's movement.
+                // Multiplied by the graphical size of a tile, which is 64x64.
+                let (dx, dy) = (
+                    pos.x as f32 * 64. - trans.translation.x,
+                    pos.y as f32 * 64. - trans.translation.y,
+                );
+                // The distance between the original position and the destination position.
+                let (ori_dx, ori_dy) = (
+                    dx / animation_timer.elapsed.fraction_remaining(),
+                    dy / animation_timer.elapsed.fraction_remaining(),
+                );
+                // The sprite approaches its destination.
+                trans.translation.x = bring_closer_to_target_value(
+                    trans.translation.x,
+                    ori_dx * fraction_advanced_this_frame,
+                    pos.x as f32 * 64.,
+                );
+                trans.translation.y = bring_closer_to_target_value(
+                    trans.translation.y,
+                    ori_dy * fraction_advanced_this_frame,
+                    pos.y as f32 * 64.,
+                );
+                if animation_timer.elapsed.finished() {
+                    commands.entity(entity).remove::<SlideAnimation>();
+                }
             }
         } else {
             // For creatures with no animation.

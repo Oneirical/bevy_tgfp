@@ -9,7 +9,7 @@ use bevy::{
 use crate::{
     creature::{Intangible, Species},
     events::{RepressionDamage, SummonCreature, TeleportEntity},
-    graphics::{EffectSequence, EffectType, PlaceMagicVfx},
+    graphics::{AnimationDelay, EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
 };
@@ -153,19 +153,29 @@ pub enum Axiom {
 }
 
 /// Target the caster's tile.
-fn axiom_form_ego(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: ResMut<SpellStack>) {
+fn axiom_form_ego(
+    mut animation_delay: ResMut<AnimationDelay>,
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     magic_vfx.send(PlaceMagicVfx {
         targets: vec![synapse_data.caster_position],
         sequence: EffectSequence::Sequential { duration: 0.4 },
         effect: EffectType::RedBlast,
         decay: 0.5,
+        appear: animation_delay.delay,
     });
+    animation_delay.delay += 0.1;
     synapse_data.targets.push(synapse_data.caster_position);
 }
 
 /// Target all orthogonally adjacent tiles to the caster.
-fn axiom_form_plus(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: ResMut<SpellStack>) {
+fn axiom_form_plus(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    mut animation_delay: ResMut<AnimationDelay>,
+) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
     let mut output = Vec::new();
@@ -180,7 +190,9 @@ fn axiom_form_plus(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: R
         sequence: EffectSequence::Sequential { duration: 0.4 },
         effect: EffectType::RedBlast,
         decay: 0.5,
+        appear: animation_delay.delay,
     });
+    animation_delay.delay += 0.1;
     // Add these tiles to `targets`.
     synapse_data.targets.append(&mut output);
 }
@@ -191,6 +203,7 @@ fn axiom_form_momentum_beam(
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
+    mut animation_delay: ResMut<AnimationDelay>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     // Start the beam where the caster is standing.
@@ -206,7 +219,9 @@ fn axiom_form_momentum_beam(
             OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
         },
         decay: 0.5,
+        appear: animation_delay.delay,
     });
+    animation_delay.delay += 0.1;
     // Add these tiles to `targets`.
     synapse_data.targets.append(&mut output);
 }
@@ -217,6 +232,7 @@ fn axiom_form_cross_beam(
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
+    mut animation_delay: ResMut<AnimationDelay>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let orthogonals = [OrdDir::Up, OrdDir::Left, OrdDir::Down, OrdDir::Right];
@@ -234,7 +250,9 @@ fn axiom_form_cross_beam(
                 OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
             },
             decay: 0.5,
+            appear: animation_delay.delay,
         });
+        animation_delay.delay += 0.1;
         // Add these tiles to `targets`.
         synapse_data.targets.append(&mut output);
     }
@@ -246,6 +264,7 @@ fn axiom_form_xbeam(
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
+    mut animation_delay: ResMut<AnimationDelay>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)];
@@ -259,14 +278,20 @@ fn axiom_form_xbeam(
             sequence: EffectSequence::Sequential { duration: 0.4 },
             effect: EffectType::RedBlast,
             decay: 0.5,
+            appear: animation_delay.delay,
         });
+        animation_delay.delay += 0.1;
         // Add these tiles to `targets`.
         synapse_data.targets.append(&mut output);
     }
 }
 
 /// Target a ring of `radius` around the caster.
-fn axiom_form_halo(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: ResMut<SpellStack>) {
+fn axiom_form_halo(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    mut animation_delay: ResMut<AnimationDelay>,
+) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     if let Axiom::Halo { radius } = synapse_data.axioms[synapse_data.step] {
         let mut circle = circle_around(&synapse_data.caster_position, radius);
@@ -282,7 +307,9 @@ fn axiom_form_halo(mut magic_vfx: EventWriter<PlaceMagicVfx>, mut spell_stack: R
             sequence: EffectSequence::Sequential { duration: 0.4 },
             effect: EffectType::GreenBlast,
             decay: 0.5,
+            appear: animation_delay.delay,
         });
+        animation_delay.delay += 0.1;
         // Add these tiles to `targets`.
         synapse_data.targets.append(&mut circle);
     } else {

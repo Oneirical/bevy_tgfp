@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Species},
-    graphics::{AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas},
+    graphics::{
+        AnimationDelay, AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas,
+    },
     map::{are_orthogonally_adjacent, Map, Position},
     sets::TurnProgression,
     spells::{Axiom, CastSpell, Spell},
@@ -50,6 +52,7 @@ pub fn creature_collision(
     species: Query<&Species>,
     mut commands: Commands,
     map: Res<Map>,
+    mut animation_delay: ResMut<AnimationDelay>,
 ) {
     for event in events.read() {
         let direction = OrdDir::direction_towards_adjacent_tile(
@@ -88,8 +91,10 @@ pub fn creature_collision(
                     .entity(event.entity_responsible)
                     .insert(AttackAnimation {
                         elapsed: Timer::from_seconds(0.2, TimerMode::Once),
+                        appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
                         direction,
                     });
+                animation_delay.delay += 0.1;
             }
         }
     }
@@ -150,6 +155,7 @@ pub fn teleport_entity(
 
     mut collision: EventWriter<CreatureCollision>,
     mut spell: EventWriter<CastSpell>,
+    mut animation_delay: ResMut<AnimationDelay>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
@@ -167,7 +173,9 @@ pub fn teleport_entity(
             // ...begin the sliding animation...
             commands.entity(event.entity).insert(SlideAnimation {
                 elapsed: Timer::from_seconds(0.2, TimerMode::Once),
+                appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
             });
+            animation_delay.delay += 0.1;
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
 
