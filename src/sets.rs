@@ -9,7 +9,7 @@ use crate::{
         adjust_transforms, all_animations_complete, decay_magic_effects, place_magic_effects,
     },
     map::register_creatures,
-    spells::{all_spells_complete, process_axiom, queue_up_spell},
+    spells::{all_spells_complete, cast_new_spell, process_axiom},
 };
 
 pub struct SetsPlugin;
@@ -21,15 +21,7 @@ impl Plugin for SetsPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                ((
-                    creature_step,
-                    queue_up_spell,
-                    // FIXME: This run condition is broken. It is replaced by the "if let Some".
-                    // This might be because of the system sets.
-                    process_axiom.run_if(not(all_spells_complete)),
-                )
-                    .chain())
-                .in_set(ActionPhase),
+                ((creature_step, cast_new_spell, process_axiom).chain()).in_set(ActionPhase),
                 ((
                     summon_creature,
                     register_creatures,

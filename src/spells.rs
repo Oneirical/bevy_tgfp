@@ -34,7 +34,9 @@ pub struct CastSpell {
 #[derive(Resource)]
 /// The current spells being executed.
 pub struct SpellStack {
+    /// The stack of spells, last in, first out.
     spells: Vec<SynapseData>,
+    /// A system used to clean up the last spells after each Axiom is processed.
     cleanup_id: SystemId,
 }
 
@@ -157,17 +159,19 @@ fn axiom_form_ego(
     mut animation_delay: ResMut<AnimationDelay>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
     magic_vfx.send(PlaceMagicVfx {
-        targets: vec![synapse_data.caster_position],
+        targets: vec![caster_position],
         sequence: EffectSequence::Sequential { duration: 0.4 },
         effect: EffectType::RedBlast,
         decay: 0.5,
         appear: animation_delay.delay,
     });
     animation_delay.delay += 0.1;
-    synapse_data.targets.push(synapse_data.caster_position);
+    synapse_data.targets.push(caster_position);
 }
 
 /// Target all orthogonally adjacent tiles to the caster.
@@ -175,12 +179,14 @@ fn axiom_form_plus(
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     mut animation_delay: ResMut<AnimationDelay>,
+    position: Query<&Position>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
     let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
     let mut output = Vec::new();
     for direction in adjacent {
-        let mut new_pos = synapse_data.caster_position;
+        let mut new_pos = caster_position;
         let offset = direction.as_offset();
         new_pos.shift(offset.0, offset.1);
         output.push(new_pos);
@@ -204,17 +210,20 @@ fn axiom_form_momentum_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     mut animation_delay: ResMut<AnimationDelay>,
+    position_and_momentum: Query<(&Position, &OrdDir)>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let (caster_position, caster_momentum) =
+        position_and_momentum.get(synapse_data.caster).unwrap();
     // Start the beam where the caster is standing.
     // The beam travels in the direction of the caster's last move.
-    let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
-    let mut output = linear_beam(synapse_data.caster_position, 10, off_x, off_y, &map);
+    let (off_x, off_y) = caster_momentum.as_offset();
+    let mut output = linear_beam(*caster_position, 10, off_x, off_y, &map);
     // Add some visual beam effects.
     magic_vfx.send(PlaceMagicVfx {
         targets: output.clone(),
         sequence: EffectSequence::Sequential { duration: 0.4 },
-        effect: match synapse_data.caster_momentum {
+        effect: match caster_momentum {
             OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
             OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
         },
@@ -233,14 +242,16 @@ fn axiom_form_cross_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     mut animation_delay: ResMut<AnimationDelay>,
+    position: Query<&Position>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
     let orthogonals = [OrdDir::Up, OrdDir::Left, OrdDir::Down, OrdDir::Right];
     for orthogonal in orthogonals {
         let (dx, dy) = orthogonal.as_offset();
         // Start the beam where the caster is standing.
         // The beam travels in the direction of each orthogonal.
-        let mut output = linear_beam(synapse_data.caster_position, 10, dx, dy, &map);
+        let mut output = linear_beam(caster_position, 10, dx, dy, &map);
         // Add some visual beam effects.
         magic_vfx.send(PlaceMagicVfx {
             targets: output.clone(),
@@ -265,13 +276,15 @@ fn axiom_form_xbeam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     mut animation_delay: ResMut<AnimationDelay>,
+    position: Query<&Position>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
     let diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)];
     for (dx, dy) in diagonals {
         // Start the beam where the caster is standing.
         // The beam travels in the direction of each diagonal.
-        let mut output = linear_beam(synapse_data.caster_position, 10, dx, dy, &map);
+        let mut output = linear_beam(caster_position, 10, dx, dy, &map);
         // Add some visual beam effects.
         magic_vfx.send(PlaceMagicVfx {
             targets: output.clone(),
@@ -291,14 +304,16 @@ fn axiom_form_halo(
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     mut animation_delay: ResMut<AnimationDelay>,
+    position: Query<&Position>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
     if let Axiom::Halo { radius } = synapse_data.axioms[synapse_data.step] {
-        let mut circle = circle_around(&synapse_data.caster_position, radius);
+        let mut circle = circle_around(caster_position, radius);
         // Sort by clockwise rotation.
         circle.sort_by(|a, b| {
-            let angle_a = angle_from_center(&synapse_data.caster_position, a);
-            let angle_b = angle_from_center(&synapse_data.caster_position, b);
+            let angle_a = angle_from_center(caster_position, a);
+            let angle_b = angle_from_center(caster_position, b);
             angle_a.partial_cmp(&angle_b).unwrap()
         });
         // Add some visual halo effects.
@@ -376,15 +391,17 @@ fn axiom_function_dash(
     is_intangible: Query<Has<Intangible>>,
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
+    momentum: Query<&OrdDir>,
 ) {
     let synapse_data = spell_stack.spells.last().unwrap();
+    let caster_momentum = momentum.get(synapse_data.caster).unwrap();
     if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
         // For each (Entity, Position) on a targeted tile...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
             // The dashing creature starts where it currently is standing.
             let mut final_dash_destination = dasher_pos;
             // It will travel in the direction of the caster's last move.
-            let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
+            let (off_x, off_y) = caster_momentum.as_offset();
             // The dash has a maximum travel distance of `max_distance`.
             let mut distance_travelled = 0;
             // Check if the dashing creature is allowed to move through other creatures.
@@ -493,33 +510,18 @@ struct SynapseData {
     step: usize,
     /// Who cast the spell.
     caster: Entity,
-    /// In which direction did the caster move the last time they did so?
-    // NOTE: This could be done with a Query instead, but it's accessed
-    // so commonly that this field exists for convenience.
-    caster_momentum: OrdDir,
-    /// Where is the caster on the map?
-    // NOTE: This could be done with a Query instead, but it's accessed
-    // so commonly that this field exists for convenience.
-    caster_position: Position,
     /// Flags that alter the behaviour of an active synapse.
     synapse_flags: HashSet<SynapseFlag>,
 }
 
 impl SynapseData {
     /// Create a blank SynapseData.
-    fn new(
-        caster: Entity,
-        caster_momentum: OrdDir,
-        caster_position: Position,
-        axioms: Vec<Axiom>,
-    ) -> Self {
+    fn new(caster: Entity, axioms: Vec<Axiom>) -> Self {
         SynapseData {
             targets: Vec::new(),
             axioms,
             step: 0,
             caster,
-            caster_momentum,
-            caster_position,
             synapse_flags: HashSet::new(),
         }
     }
@@ -551,25 +553,16 @@ pub enum SynapseFlag {
     Terminate,
 }
 
-pub fn queue_up_spell(
+pub fn cast_new_spell(
     mut cast_spells: EventReader<CastSpell>,
     mut spell_stack: ResMut<SpellStack>,
-    caster: Query<(&Position, &OrdDir)>,
 ) {
     for cast_spell in cast_spells.read() {
         // First, get the list of Axioms.
         let axioms = cast_spell.spell.axioms.clone();
-        // And the caster's position and last move direction.
-        let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
-
         // Create a new synapse to start "rolling down the hill" accumulating targets and
         // dispatching events.
-        let synapse_data = SynapseData::new(
-            cast_spell.caster,
-            *caster_momentum,
-            *caster_position,
-            axioms,
-        );
+        let synapse_data = SynapseData::new(cast_spell.caster, axioms);
         // Send it off for processing - right away, for the spell stack is "last in, first out."
         spell_stack.spells.push(synapse_data);
     }
@@ -582,9 +575,8 @@ pub fn all_spells_complete(
     spell_stack.spells.is_empty() && incoming_spells.is_empty()
 }
 
-/// Pops the most recently added spell (re-adding it at the end if it's not complete yet).
-/// Pops the next axiom, and runs its effects.
-/// This will not run if `spell_stack_is_empty`.
+/// Get the most recently added spell (re-adding it at the end if it's not complete yet).
+/// Get the next axiom, and runs its effects.
 pub fn process_axiom(
     mut commands: Commands,
     axioms: Res<AxiomLibrary>,

@@ -44,8 +44,6 @@ fn main() {
 }
 ```
 
-**It is important to add `SpellPlugin` as the first plugin** for the sake of this tutorial. This will cause a minor bug later on, which will be explained and fixed afterwards.
-
 # D.I.Y. Wizard
 
 Now, we may start to populate this new plugin with some starting structs and enums. I named the individual components that form a `Spell` "`Axiom`" because:
@@ -75,14 +73,12 @@ pub struct Spell {
 /// onto those tiles.
 pub enum Axiom {
     // FORMS
-
-    // Target the caster's tile.
+    /// Target the caster's tile.
     Ego,
 
     // FUNCTIONS
-
-    // The targeted creatures dash in the direction of the caster's last move.
-    Dash,
+    /// The targeted creatures dash in the direction of the caster's last move.
+    Dash { max_distance: i32 },
 }
 ```
 
@@ -90,7 +86,7 @@ We will begin with the very simple spell **"Ego, Dash"**. When cast, the caster 
 
 The implementation will rely on a struct with yet another cute name: Synapses. Named after the transmission of signals between neurons, they are like a snowball rolling down a hill and accumulating debris.
 
-When a new `SynapseData` is created, it is blank except for the fact that it knows its `caster`, how the caster moved last turn (`caster_momentum`) and where that caster is (`caster_position`). It still has no tiles to target, and no effects to execute onto the game. As it "rolls" down the list of `Axiom`s, it will accumulate `targets` and `effects` to execute on those targets. The `effects` are simply replicas of Events, like "teleport this entity here" or "summon this entity here" - named `EventDispatch`.
+When a new `SynapseData` is created, it is blank except for the fact that it knows its `caster`. It still has no tiles to target (`targets` is an empty vector), and is on the first step of its execution (`step` is `0`). As it "rolls" down the list of `Axiom`s, it will accumulate `targets` - tiles where the spell effect happen.
 
 ```rust
 // spells.rs
@@ -99,123 +95,219 @@ struct SynapseData {
     /// Where a spell will act.
     targets: Vec<Position>,
     /// How a spell will act.
-    effects: Vec<EventDispatch>,
+    axioms: Vec<Axiom>,
+    /// The nth axiom currently being executed.
+    step: usize,
     /// Who cast the spell.
     caster: Entity,
-    /// In which direction did the caster move the last time they did so?
-    caster_momentum: OrdDir,
-    /// Where is the caster on the map?
-    caster_position: Position,
+    /// Flags that alter the behaviour of an active synapse.
+    synapse_flags: HashSet<SynapseFlag>,
 }
 
 impl SynapseData {
     /// Create a blank SynapseData.
-    fn new(caster: Entity, caster_momentum: OrdDir, caster_position: Position) -> Self {
+    fn new(caster: Entity, axioms: Vec<Axiom>) -> Self {
         SynapseData {
             targets: Vec::new(),
-            effects: Vec::new(),
+            axioms,
+            step: 0,
             caster,
-            caster_momentum,
-            caster_position,
+            synapse_flags: HashSet::new(),
         }
     }
 }
-
-/// An enum with replicas of common game Events, to be translated into the real Events
-/// and dispatched to the main game loop.
-pub enum EventDispatch {
-    TeleportEntity {
-        destination: Position,
-        entity: Entity,
-    },
-}
 ```
 
-Now, a prototype Bevy system can be written to handle all of this.
+Each ̀synapse is like a customer at a restaurant - when a spell is cast, it is added to a `SpellStack`. The most recently added spells are handled first, which is not the hallmark of great customer service. This is because spells will later be capable of having chain reactions...
+
+For example, dashing onto a trap which triggers when it is stepped on should resolve the trap effects before continuing with the dash spell.
 
 ```rust
 // spells.rs
-/// Work through the list of Axioms of a spell, translating it into Events to launch onto the game.
-fn gather_effects(
+pub fn cast_new_spell(
     mut cast_spells: EventReader<CastSpell>,
-    mut sender: EventWriter<SpellEffect>,
-    caster: Query<(&Position, &OrdDir)>,
-    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
 ) {
     for cast_spell in cast_spells.read() {
         // First, get the list of Axioms.
-        let axioms = &cast_spell.spell.axioms;
-        // And the caster's position and last move direction.
-        let (caster_position, caster_momentum) = caster.get(cast_spell.caster).unwrap();
-
-        // Create a new synapse to start "rolling down the hill" accumulating targets and effects.
-        let mut synapse_data =
-            SynapseData::new(cast_spell.caster, *caster_momentum, *caster_position);
-
-        // Loop through each axiom.
-        for axiom in axioms.iter() {
-            // For Forms, add targets.
-            axiom.target(&mut synapse_data, &map);
-            // For Functions, add effects that operate on those targets.
-            axiom.execute(&mut synapse_data, &map);
-        }
-
-        // Once all Axioms are processed, dispatch everything to the system that will translate
-        // all effects into proper events.
-        sender.send(SpellEffect {
-            events: synapse_data.effects,
-        });
+        let axioms = cast_spell.spell.axioms.clone();
+        // Create a new synapse to start "rolling down the hill" accumulating targets and
+        // dispatching events.
+        let synapse_data = SynapseData::new(cast_spell.caster, axioms);
+        // Send it off for processing - right away, for the spell stack is "last in, first out."
+        spell_stack.spells.push(synapse_data);
     }
 }
 ```
 
-You may have noticed the following:
-
-1. The yet uninitialized `SpellEffect` event.
-2. The `OrdDir` struct is not a component and does not appear on any entities, meaning `Query<(&Position, &OrdDir)>` will return nothing.
-3. `axiom.target` and `axiom.execute` functions not yet existing.
-
-Let us work through these problems one by one.
-
-## 1. Transforming Spell Effects into Events
-
-Our spell effects currently do nothing - they are only replicas of real Events, such as `TeleportEntity`. They need to be translated into the real deal.
+Each tick, we'll get the most recently added spell, and where it currently is in its execution (its `step`). We'll get the corresponding ̀`Axiom` - for example, being at step 0 in `[Axiom::Ego, Axiom::Dash]` will result in running `Axiom::Ego`. Then, we'll run a matching **one-shot system** - a Bevy feature I will soon demonstrate.
 
 ```rust
 // spells.rs
+/// Get the most recently added spell (re-adding it at the end if it's not complete yet).
+/// Get the next axiom, and runs its effects.
+pub fn process_axiom(
+    mut commands: Commands,
+    axioms: Res<AxiomLibrary>,
+    spell_stack: Res<SpellStack>,
+) {
+    // Get the most recently added spell, if it exists.
+    if let Some(synapse_data) = spell_stack.spells.last() {
+        // Get its first axiom.
+        let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
+        // Launch the axiom, which will send out some Events (if it's a Function,
+        // which affect the game world) or add some target tiles (if it's a Form, which
+        // decides where the Functions will take place.)
+        commands.run_system(*axioms.library.get(&discriminant(axiom)).unwrap());
+        // Clean up afterwards, continuing the spell execution.
+        commands.run_system(spell_stack.cleanup_id);
+    }
+}
+```
 
-#[derive(Event)]
-/// An event dictating that a list of Events must be sent to the game loop
-/// after the completion of a spell.
-pub struct SpellEffect {
-    events: Vec<EventDispatch>,
+But first, how *do* we match the `Axiom` with the corresponding one-shot system? It uses `mem::discriminant` - which should be imported right away, and an `AxiomLibrary` resource.
+
+```rust
+// spells.rs
+#[derive(Resource)]
+/// All available Axioms and their corresponding systems.
+pub struct AxiomLibrary {
+    pub library: HashMap<Discriminant<Axiom>, SystemId>,
 }
 
-/// Translate a list of EventDispatch into their "real" Event counterparts and send them off
-/// into the main game loop to modify the game's creatures.
-pub fn dispatch_events(
-    mut receiver: EventReader<SpellEffect>,
-    mut teleport: EventWriter<TeleportEntity>,
-) {
-    for effect_list in receiver.read() {
-        for effect in &effect_list.events {
-            // Each EventDispatch enum is translated into its Event counterpart.
-            match effect {
-                EventDispatch::TeleportEntity {
-                    destination,
-                    entity,
-                } => {
-                    teleport.send(TeleportEntity::new(*entity, destination.x, destination.y));
-                }
-            };
+impl FromWorld for AxiomLibrary {
+    fn from_world(world: &mut World) -> Self {
+        let mut axioms = AxiomLibrary {
+            library: HashMap::new(),
+        };
+        axioms.library.insert(
+            discriminant(&Axiom::Ego),
+            world.register_system(axiom_form_ego),
+        axioms.library.insert(
+            discriminant(&Axiom::Dash { max_distance: 1 }),
+            world.register_system(axiom_function_dash),
+        );
+        axioms
+    }
+}
+```
+
+We use discriminants, because each `Axiom` can possibly have extra fields like `max_distance`, and we wish to differentiate them by variant regardless of their inner contents. We link each one with its own one-shot system, currently `axiom_form_ego` and `axiom_function_dash`. These systems - which are not yet implemented - are registered into the `World`, Bevy's term for the struct which contains... well, everything. Each time a ̀`Query` is ran, behind the scenes, it reaches into the `World` to look up entities similarly to SQL queries!
+
+Now, for the `SpellStack`:
+
+```rust
+// spells.rs
+#[derive(Resource)]
+/// The current spells being executed.
+pub struct SpellStack {
+    /// The stack of spells, last in, first out.
+    spells: Vec<SynapseData>,
+    /// A system used to clean up the last spells after each Axiom is processed.
+    cleanup_id: SystemId,
+}
+
+impl FromWorld for SpellStack {
+    fn from_world(world: &mut World) -> Self {
+        SpellStack {
+            spells: Vec::new(),
+            cleanup_id: world.register_system(cleanup_last_axiom),
         }
     }
 }
 ```
 
-With this new system, every completed spell with dispatch all corresponding Events once it is concluded!
+One more one-shot system to be implemented later, `cleanup_last_axiom`. Let's get started with ̀`Ego` and `Dash`.
 
-## 2. Tracking Creatures' Last Move (Momentum)
+```rust
+// spells.rs
+/// Target the caster's tile.
+fn axiom_form_ego(
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    // Get the currently executed spell.
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    // Get the caster's position.
+    let caster_position = *position.get(synapse_data.caster).unwrap();
+    // Add that caster's position to the targets.
+    synapse_data.targets.push(caster_position);
+}
+```
+
+```rust
+/// Target the caster's tile.
+fn axiom_form_ego(
+    mut animation_delay: ResMut<AnimationDelay>,
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
+    magic_vfx.send(PlaceMagicVfx {
+        targets: vec![caster_position],
+        sequence: EffectSequence::Sequential { duration: 0.4 },
+        effect: EffectType::RedBlast,
+        decay: 0.5,
+        appear: animation_delay.delay,
+    });
+    animation_delay.delay += 0.1;
+    synapse_data.targets.push(caster_position);
+}
+```
+
+```rust
+// spells.rs
+/// The targeted creatures dash in the direction of the caster's last move.
+fn axiom_function_dash(
+    mut teleport: EventWriter<TeleportEntity>,
+    is_intangible: Query<Has<Intangible>>,
+    map: Res<Map>,
+    spell_stack: Res<SpellStack>,
+    momentum: Query<&OrdDir>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let caster_momentum = momentum.get(synapse_data.caster).unwrap();
+    if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
+        // For each (Entity, Position) on a targeted tile...
+        for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
+            // The dashing creature starts where it currently is standing.
+            let mut final_dash_destination = dasher_pos;
+            // It will travel in the direction of the caster's last move.
+            let (off_x, off_y) = caster_momentum.as_offset();
+            // The dash has a maximum travel distance of `max_distance`.
+            let mut distance_travelled = 0;
+            // Check if the dashing creature is allowed to move through other creatures.
+            let is_intangible = is_intangible.get(dasher).unwrap();
+            while distance_travelled < max_distance {
+                distance_travelled += 1;
+                // Stop dashing if a solid Creature is hit and the dasher is not intangible.
+                if !is_intangible
+                    && !map.is_passable(
+                        final_dash_destination.x + off_x,
+                        final_dash_destination.y + off_y,
+                    )
+                {
+                    break;
+                }
+                // Otherwise, keep offsetting the dashing creature's position.
+                final_dash_destination.shift(off_x, off_y);
+            }
+
+            // Once finished, release the Teleport event.
+            teleport.send(TeleportEntity {
+                destination: final_dash_destination,
+                entity: dasher,
+            });
+        }
+    } else {
+        panic!()
+    }
+}
+```
+
+##  Weaving Magic From Motion (OrdDir momentum component)
 
 `OrdDir` already exists, but it is currently nothing but a simple enum. It could be elevated into a much greater `Component`...
 
