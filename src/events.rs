@@ -94,7 +94,7 @@ pub fn creature_collision(
                         appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
                         direction,
                     });
-                animation_delay.delay += 0.1;
+                animation_delay.delay += 0.05;
             }
         }
     }
@@ -175,7 +175,7 @@ pub fn teleport_entity(
                 elapsed: Timer::from_seconds(0.2, TimerMode::Once),
                 appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
             });
-            animation_delay.delay += 0.1;
+            animation_delay.delay += 0.05;
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
 

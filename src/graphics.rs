@@ -8,6 +8,7 @@ impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteSheetAtlas>();
         app.insert_resource(Msaa::Off);
+        app.insert_resource(AnimationDelay { delay: 0. });
         app.add_systems(Startup, setup_camera);
         app.init_resource::<Events<PlaceMagicVfx>>();
     }

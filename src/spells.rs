@@ -161,7 +161,9 @@ fn axiom_form_ego(
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
 ) {
+    // Get the currently executed spell.
     let synapse_data = spell_stack.spells.last_mut().unwrap();
+    // Get the caster's position.
     let caster_position = *position.get(synapse_data.caster).unwrap();
     magic_vfx.send(PlaceMagicVfx {
         targets: vec![caster_position],
@@ -171,6 +173,7 @@ fn axiom_form_ego(
         appear: animation_delay.delay,
     });
     animation_delay.delay += 0.1;
+    // Add that caster's position to the targets.
     synapse_data.targets.push(caster_position);
 }
 
@@ -526,6 +529,7 @@ impl SynapseData {
         }
     }
 
+    /// Get the Entity of each creature standing on a tile inside `targets`.
     fn get_all_targeted_entities(&self, map: &Map) -> Vec<Entity> {
         self.get_all_targeted_entity_pos_pairs(map)
             .into_iter()
@@ -533,6 +537,7 @@ impl SynapseData {
             .collect()
     }
 
+    /// Get the Entity of each creature standing on a tile inside `targets` and its position.
     fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
         let mut targeted_pairs = Vec::new();
         for target in &self.targets {

@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     creature::Player,
     events::{CreatureStep, EndTurn},
-    graphics::all_animations_complete,
+    graphics::{all_animations_complete, AnimationDelay},
     sets::TurnProgression,
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
@@ -28,6 +28,7 @@ pub fn keyboard_input(
     mut spell: EventWriter<CastSpell>,
     mut turn_end: EventWriter<EndTurn>,
     mut next_state: ResMut<NextState<TurnProgression>>,
+    mut animation_delay: ResMut<AnimationDelay>,
 ) {
     if let Ok(player) = player.get_single() {
         if input.any_just_pressed([
@@ -39,17 +40,13 @@ pub fn keyboard_input(
             KeyCode::Enter,
         ]) {
             next_state.set(TurnProgression::PlayerTurn);
+            animation_delay.delay = 0.;
         }
         if input.just_pressed(KeyCode::Space) {
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![
-                        Axiom::Halo { radius: 3 },
-                        Axiom::ForceCast,
-                        Axiom::Plus,
-                        Axiom::RepressionDamage { damage: 1 },
-                    ],
+                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
                 },
             });
             turn_end.send(EndTurn);

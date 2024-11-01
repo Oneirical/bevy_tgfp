@@ -115,6 +115,27 @@ impl SynapseData {
             synapse_flags: HashSet::new(),
         }
     }
+
+    /// Get the Entity of each creature standing on a tile inside `targets`.
+    fn get_all_targeted_entities(&self, map: &Map) -> Vec<Entity> {
+        self.get_all_targeted_entity_pos_pairs(map)
+            .into_iter()
+            .map(|(entity, _)| entity)
+            .collect()
+    }
+
+    /// Get the Entity of each creature standing on a tile inside `targets` and its position.
+    fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
+        let mut targeted_pairs = Vec::new();
+        for target in &self.targets {
+            if let Some(creatures) = map.get_creatures_at(target.x, target.y) {
+                for creature in creatures {
+                    targeted_pairs.push((creature.entity, *target));
+                }
+            }
+        }
+        targeted_pairs
+    }
 }
 ```
 
@@ -217,7 +238,7 @@ impl FromWorld for SpellStack {
 }
 ```
 
-One more one-shot system to be implemented later, `cleanup_last_axiom`. Let's get started with ̀`Ego` and `Dash`.
+One more one-shot system to be implemented later, `cleanup_last_axiom`. Let's get started with ̀`Ego` and `Dash`'s one-shot systems. Called with `commands.run_system`, these are detached from the scheduled `Startup` and `Update`, being ran only when demanded. They will never be ran in parallel with another system, which can, in some cases, be a performance bottleneck - but it's exactly what we need for this use-case.
 
 ```rust
 // spells.rs
@@ -235,27 +256,7 @@ fn axiom_form_ego(
 }
 ```
 
-```rust
-/// Target the caster's tile.
-fn axiom_form_ego(
-    mut animation_delay: ResMut<AnimationDelay>,
-    mut magic_vfx: EventWriter<PlaceMagicVfx>,
-    mut spell_stack: ResMut<SpellStack>,
-    position: Query<&Position>,
-) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
-    let caster_position = *position.get(synapse_data.caster).unwrap();
-    magic_vfx.send(PlaceMagicVfx {
-        targets: vec![caster_position],
-        sequence: EffectSequence::Sequential { duration: 0.4 },
-        effect: EffectType::RedBlast,
-        decay: 0.5,
-        appear: animation_delay.delay,
-    });
-    animation_delay.delay += 0.1;
-    synapse_data.targets.push(caster_position);
-}
-```
+Dashing is a significantly more involved process.
 
 ```rust
 // spells.rs
@@ -427,28 +428,6 @@ fn player_step(
 
 ## 3. Actually Making The Spell Do Something
 
-Now, for the true main course...
-
-```rust
-// spells.rs
-impl Axiom {
-    fn target(&self, synapse_data: &mut SynapseData, map: &Map) {
-        match self {
-            // Target the caster's tile.
-            Self::Ego => {
-                synapse_data.targets.push(synapse_data.caster_position);
-            }
-            _ => (),
-        }
-    }
-}
-```
-
-The ̀`target` function should handle all potential "Forms" in a spell targeting certain tiles. Anything that isn't a "Form" gets flushed down the final `_ => ()`.
-
-`Ego` is quite simple. Push the `caster_position` into the `targets`, done.
-
-As for `Dash`... it is a little more involved. Its implementation will reside inside another `impl Axiom` function, `execute`.
 
 ```rust
 // events.rs
