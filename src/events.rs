@@ -217,7 +217,7 @@ pub struct RepressionDamage {
 pub fn repression_damage(
     mut events: EventReader<RepressionDamage>,
     mut damaged_creature: Query<(&mut HealthBar, &Children)>,
-    mut hp_bar: Query<(&mut Visibility, &mut TextureAtlas)>,
+    mut hp_bar: Query<&mut TextureAtlas>,
     mut intangible: EventWriter<BecomeIntangible>,
 ) {
     for event in events.read() {
@@ -231,16 +231,28 @@ pub fn repression_damage(
         }
         for child in children.iter() {
             // Get the HP bars attached to the creatures.
-            let (mut hp_vis, mut hp_bar) = hp_bar.get_mut(*child).unwrap();
+            let mut hp_bar = hp_bar.get_mut(*child).unwrap();
             // Get the maximum HP, and the current HP.
             let max_hp = hp.deck.len() + hp.repressed.len();
             let current_hp = hp.deck.len();
             // If this creature is at 100% or 0% HP, don't show the healthbar.
             if max_hp == current_hp || current_hp == 0 {
-                *hp_vis = Visibility::Hidden;
+                /*
+                HACK: This used to alter the Visibility of the healthbars. However,
+                This caused an extremely niche bug where only certain creatures, in
+                certain extremely specific map formations, would fail to display their
+                health bar, flashing it for a brief moment and hiding it again. Fetching
+                their Visibility or even ViewVisibility manually made it seem like everything
+                was fine, even though no health bars were displaying on screen.
+
+                The reason this happens is because even though the Children health bar's Z-level
+                is supposed to be above the Parent creature, the health bar still displays
+                underneath the wall sprite. Not a problem with other creatures, which have
+                transparent pixels at the bottom of their sprite.
+                */
+                hp_bar.index = 167;
             } else {
                 // Otherwise, show a color-coded healthbar.
-                *hp_vis = Visibility::Visible;
                 match current_hp as f32 / max_hp as f32 {
                     0.85..1.00 => hp_bar.index = 168,
                     0.70..0.85 => hp_bar.index = 169,
@@ -405,13 +417,13 @@ pub fn summon_creature(
                 sprite: SpriteBundle {
                     texture: asset_server.load("spritesheet.png"),
                     // It already inherits the increased scale from the parent.
-                    transform: Transform::from_scale(Vec3::new(1., 1., 0.)),
-                    visibility: Visibility::Hidden,
+                    // The Z-value is increased so it always appears on top of the creature.
+                    transform: Transform::from_xyz(0., 0., 9.),
                     ..default()
                 },
                 atlas: TextureAtlas {
                     layout: atlas_layout.handle.clone(),
-                    index: 168,
+                    index: 167,
                 },
             })
             .id();
