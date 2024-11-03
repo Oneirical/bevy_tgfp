@@ -246,41 +246,23 @@ pub fn adjust_transforms(
                     commands.entity(entity).remove::<AttackAnimation>();
                 }
             }
-        } else if let Some(mut animation_timer) = anim {
-            if !animation_timer.appear.finished() {
-                animation_timer.appear.tick(time.delta());
+        } else if anim.is_some() {
+            // Multiplied by the graphical size of a tile, which is 64x64.
+            // The sprite approaches its destination.
+            let current_translation = trans.translation;
+            let target_translation = Vec3::new(pos.x as f32 * 64., pos.y as f32 * 64., 0.);
+            // The creature is more than 0.5 pixels away from its destination - smooth animation.
+            if ((target_translation.x - current_translation.x).abs()
+                + (target_translation.y - current_translation.y).abs())
+                > 0.5
+            {
+                trans.translation = trans.translation.lerp(
+                    Vec3::new(pos.x as f32 * 64., pos.y as f32 * 64., 0.),
+                    5. * time.delta_seconds(),
+                );
+            // Otherwise, the animation is over - clip the creature onto the grid.
             } else {
-                let fraction_before_tick = animation_timer.elapsed.fraction();
-                animation_timer.elapsed.tick(time.delta());
-                // Calculate what % of the animation has elapsed during this tick.
-                let fraction_advanced_this_frame =
-                    animation_timer.elapsed.fraction() - fraction_before_tick;
-                // The distance between where a creature CURRENTLY is,
-                // and the destination of a creature's movement.
-                // Multiplied by the graphical size of a tile, which is 64x64.
-                let (dx, dy) = (
-                    pos.x as f32 * 64. - trans.translation.x,
-                    pos.y as f32 * 64. - trans.translation.y,
-                );
-                // The distance between the original position and the destination position.
-                let (ori_dx, ori_dy) = (
-                    dx / animation_timer.elapsed.fraction_remaining(),
-                    dy / animation_timer.elapsed.fraction_remaining(),
-                );
-                // The sprite approaches its destination.
-                trans.translation.x = bring_closer_to_target_value(
-                    trans.translation.x,
-                    ori_dx * fraction_advanced_this_frame,
-                    pos.x as f32 * 64.,
-                );
-                trans.translation.y = bring_closer_to_target_value(
-                    trans.translation.y,
-                    ori_dy * fraction_advanced_this_frame,
-                    pos.y as f32 * 64.,
-                );
-                if animation_timer.elapsed.finished() {
-                    commands.entity(entity).remove::<SlideAnimation>();
-                }
+                commands.entity(entity).remove::<SlideAnimation>();
             }
         } else {
             // For creatures with no animation.
