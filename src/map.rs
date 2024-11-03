@@ -224,11 +224,11 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 #.......#\
                 #..#.#..#\
                 ##..#..##\
-                #...@...#\
-                ##.....##\
-                #.......#\
-                #.E1234.#\
-                #########";
+                E...@...#\
+                1#.....##\
+                2.......#\
+                3.......#\
+                4########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
         let species = match tile_char {

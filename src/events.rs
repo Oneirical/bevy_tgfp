@@ -131,13 +131,12 @@ pub fn tail_attach(
                         && !has_segment_component
                 });
                 for segment in segments {
-                    if attached_this_tick.contains(&attacher_entity) {
+                    if attached_this_tick.contains(&segment.entity) {
                         continue;
                     }
                     commands.entity(attacher_entity).insert(TailSegment {
                         next: segment.entity,
                     });
-                    dbg!(segment.entity);
                     commands.entity(attacher_entity).remove::<TailAttacher>();
                     commands
                         .entity(segment.entity)
