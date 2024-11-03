@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{ecs::system::SystemId, prelude::*};
 
 use crate::{creature::Player, map::Position, OrdDir};
 
@@ -7,6 +7,7 @@ pub struct GraphicsPlugin;
 impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteSheetAtlas>();
+        app.init_resource::<WaypointSystem>();
         app.insert_resource(Msaa::Off);
         app.insert_resource(AnimationDelay { delay: 0. });
         app.add_systems(Startup, setup_camera);
@@ -16,15 +17,7 @@ impl Plugin for GraphicsPlugin {
 
 #[derive(Component)]
 pub struct SlideAnimation {
-    pub elapsed: Timer,
-    pub appear: Timer,
-}
-
-#[derive(Component)]
-pub struct AttackAnimation {
-    pub elapsed: Timer,
-    pub appear: Timer,
-    pub direction: OrdDir,
+    pub waypoints: Vec<Vec3>,
 }
 
 #[derive(Resource)]
@@ -179,9 +172,8 @@ pub fn decay_magic_effects(
 pub fn all_animations_complete(
     magic_vfx: Query<&MagicVfx>,
     sliding: Query<&SlideAnimation>,
-    attacking: Query<&AttackAnimation>,
 ) -> bool {
-    magic_vfx.iter().len() == 0 && sliding.iter().len() == 0 && attacking.iter().len() == 0
+    magic_vfx.iter().len() == 0 && sliding.iter().len() == 0
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -189,6 +181,47 @@ fn setup_camera(mut commands: Commands) {
         transform: Transform::from_xyz(0., 0., 0.),
         ..default()
     });
+}
+
+#[derive(Resource)]
+pub struct WaypointSystem {
+    pub add_waypoint: SystemId<Waypoint>,
+}
+
+impl FromWorld for WaypointSystem {
+    fn from_world(world: &mut World) -> Self {
+        WaypointSystem {
+            add_waypoint: world.register_system(add_waypoint),
+        }
+    }
+}
+
+pub struct Waypoint {
+    entity: Entity,
+    destination: Vec3,
+}
+
+impl Waypoint {
+    pub fn new(entity: Entity, destination: Vec3) -> Self {
+        Waypoint {
+            entity,
+            destination,
+        }
+    }
+}
+
+pub fn add_waypoint(
+    In(waypoint): In<Waypoint>,
+    mut commands: Commands,
+    mut animation: Query<&mut SlideAnimation>,
+) {
+    if let Ok(mut anim) = animation.get_mut(waypoint.entity) {
+        anim.waypoints.push(waypoint.destination);
+    } else {
+        commands.entity(waypoint.entity).insert(SlideAnimation {
+            waypoints: vec![waypoint.destination],
+        });
+    }
 }
 
 /// Each frame, adjust every entity's display location to match
@@ -199,68 +232,30 @@ pub fn adjust_transforms(
         &Position,
         &mut Transform,
         Option<&mut SlideAnimation>,
-        Option<&mut AttackAnimation>,
         Has<Player>,
     )>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
     time: Res<Time>,
     mut commands: Commands,
 ) {
-    for (entity, pos, mut trans, anim, attack, is_player) in creatures.iter_mut() {
+    for (entity, pos, mut trans, anim, is_player) in creatures.iter_mut() {
         // If this creature is affected by an animation...
-        if let Some(mut attack) = attack {
-            if !attack.appear.finished() {
-                attack.appear.tick(time.delta());
-            } else {
-                let (strike_translation_x, strike_translation_y) = (
-                    (pos.x as f32 + attack.direction.as_offset().0 as f32 / 4.) * 64.,
-                    (pos.y as f32 + attack.direction.as_offset().1 as f32 / 4.) * 64.,
-                );
-                if attack.elapsed.fraction_remaining() == 1. {
-                    trans.translation.x = strike_translation_x;
-                    trans.translation.y = strike_translation_y;
-                }
-                let fraction_before_tick = attack.elapsed.fraction();
-                attack.elapsed.tick(time.delta());
-                // Calculate what % of the animation has elapsed during this tick.
-                let fraction_advanced_this_frame = attack.elapsed.fraction() - fraction_before_tick;
-                // The distance between where a creature CURRENTLY is,
-                // and the destination of a creature's movement.
-                // Multiplied by the graphical size of a tile, which is 64x64.
-                let (ori_dx, ori_dy) = (
-                    strike_translation_x - pos.x as f32 * 64.,
-                    strike_translation_y - pos.y as f32 * 64.,
-                );
-                // The sprite approaches its destination.
-                trans.translation.x = bring_closer_to_target_value(
-                    trans.translation.x,
-                    ori_dx * fraction_advanced_this_frame,
-                    pos.x as f32 * 64.,
-                );
-                trans.translation.y = bring_closer_to_target_value(
-                    trans.translation.y,
-                    ori_dy * fraction_advanced_this_frame,
-                    pos.y as f32 * 64.,
-                );
-                if attack.elapsed.finished() {
-                    commands.entity(entity).remove::<AttackAnimation>();
-                }
-            }
-        } else if anim.is_some() {
+        if let Some(mut anim) = anim {
             // Multiplied by the graphical size of a tile, which is 64x64.
             // The sprite approaches its destination.
             let current_translation = trans.translation;
-            let target_translation = Vec3::new(pos.x as f32 * 64., pos.y as f32 * 64., 0.);
+            let target_translation = anim.waypoints.first().unwrap();
             // The creature is more than 0.5 pixels away from its destination - smooth animation.
             if ((target_translation.x - current_translation.x).abs()
                 + (target_translation.y - current_translation.y).abs())
                 > 0.5
             {
-                trans.translation = trans.translation.lerp(
-                    Vec3::new(pos.x as f32 * 64., pos.y as f32 * 64., 0.),
-                    5. * time.delta_seconds(),
-                );
+                trans.translation = trans
+                    .translation
+                    .lerp(*target_translation, 10. * time.delta_seconds());
             // Otherwise, the animation is over - clip the creature onto the grid.
+            } else if anim.waypoints.len() > 1 {
+                anim.waypoints.remove(0);
             } else {
                 commands.entity(entity).remove::<SlideAnimation>();
             }
@@ -276,16 +271,5 @@ pub fn adjust_transforms(
             (camera_trans.translation.x, camera_trans.translation.y) =
                 (trans.translation.x, trans.translation.y);
         }
-    }
-}
-
-fn bring_closer_to_target_value(value: f32, adjustment: f32, target_value: f32) -> f32 {
-    let adjustment = adjustment.abs();
-    if value > target_value {
-        (value - adjustment).max(target_value)
-    } else if value < target_value {
-        (value + adjustment).min(target_value)
-    } else {
-        target_value // Value is already at target.
     }
 }

@@ -41,6 +41,10 @@ impl Position {
     pub fn shift(&mut self, dx: i32, dy: i32) {
         (self.x, self.y) = (self.x + dx, self.y + dy);
     }
+
+    pub fn as_translation(&self) -> Vec3 {
+        Vec3::new(self.x as f32 * 64., self.y as f32 * 64., 0.)
+    }
 }
 
 fn manhattan_distance(a: Position, b: Position) -> i32 {
@@ -248,7 +252,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 #.........................#\
                 #........T.......T........#\
                 #.........................#\
-                #............E............#\
+                #.........................#\
                 #............T............#\
                 #............T............#\
                 #............T............#\

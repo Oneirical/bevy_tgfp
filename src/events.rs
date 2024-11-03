@@ -8,8 +8,8 @@ use crate::{
         TailAttacher, TailSegment,
     },
     graphics::{
-        AnimationDelay, AttackAnimation, AxiomCrateIcon, AxiomCrateIconBundle, HealthIndicator,
-        HealthIndicatorBundle, SlideAnimation, SpriteSheetAtlas,
+        AxiomCrateIcon, AxiomCrateIconBundle, HealthIndicator, HealthIndicatorBundle,
+        SpriteSheetAtlas, Waypoint, WaypointSystem,
     },
     map::{are_orthogonally_adjacent, Map, Position},
     sets::TurnProgression,
@@ -59,7 +59,7 @@ pub fn creature_collision(
     pushable: Query<Has<Pushable>>,
     mut commands: Commands,
     map: Res<Map>,
-    mut animation_delay: ResMut<AnimationDelay>,
+    waypoint_system: Res<WaypointSystem>,
 ) {
     for event in events.read() {
         // A collision between two creatures occurs.
@@ -97,14 +97,23 @@ pub fn creature_collision(
                     entity: event.collides_with,
                     damage: 1,
                 });
-                commands
-                    .entity(event.entity_responsible)
-                    .insert(AttackAnimation {
-                        elapsed: Timer::from_seconds(0.2, TimerMode::Once),
-                        appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
-                        direction,
-                    });
-                // animation_delay.delay += 0.05;
+
+                let current_translation = event.responsible_position.as_translation();
+                let attack_translation = Vec3::new(
+                    current_translation.x + 16. * direction.as_offset().0 as f32,
+                    current_translation.y + 16. * direction.as_offset().1 as f32,
+                    0.,
+                );
+
+                commands.run_system_with_input(
+                    waypoint_system.add_waypoint,
+                    Waypoint::new(event.entity_responsible, attack_translation),
+                );
+
+                commands.run_system_with_input(
+                    waypoint_system.add_waypoint,
+                    Waypoint::new(event.entity_responsible, current_translation),
+                );
             }
         }
     }
@@ -241,6 +250,8 @@ pub fn teleport_entity(
 
     species: Query<&Species>,
 
+    waypoint_system: Res<WaypointSystem>,
+
     mut collision: EventWriter<CreatureCollision>,
     mut spell: EventWriter<CastSpell>,
 
@@ -261,11 +272,10 @@ pub fn teleport_entity(
             // ...update the Map to reflect this...
             map.move_creature(event.entity, *creature_position, event.destination);
             // ...begin the sliding animation...
-            commands.entity(event.entity).insert(SlideAnimation {
-                elapsed: Timer::from_seconds(0.2, TimerMode::Once),
-                appear: Timer::from_seconds(0., TimerMode::Once),
-            });
-            // animation_delay.delay += 0.05;
+            commands.run_system_with_input(
+                waypoint_system.add_waypoint,
+                Waypoint::new(event.entity, event.destination.as_translation()),
+            );
             if let Ok(tail_follow) = tail_follow.get(event.entity) {
                 tail_follow_event.send(TailFollow {
                     destination: *creature_position,
