@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::{
     events::{
         become_intangible, creature_collision, creature_step, end_turn, repression_damage,
-        summon_creature, teleport_entity,
+        summon_creature, tail_attach, tail_follow, teleport_entity,
     },
     graphics::{
         adjust_transforms, all_animations_complete, decay_magic_effects, place_magic_effects,
@@ -25,10 +25,12 @@ impl Plugin for SetsPlugin {
                 ((
                     summon_creature,
                     register_creatures,
+                    tail_attach,
                     teleport_entity,
                     creature_collision,
                     repression_damage,
                     become_intangible,
+                    tail_follow,
                 )
                     .chain())
                 .in_set(ResolutionPhase),

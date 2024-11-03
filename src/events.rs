@@ -1,7 +1,12 @@
-use bevy::prelude::*;
+use std::mem::discriminant;
+
+use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
-    creature::{get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Species},
+    creature::{
+        get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Species, TailAttacher,
+        TailSegment,
+    },
     graphics::{
         AnimationDelay, AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas,
     },
@@ -21,6 +26,7 @@ impl Plugin for EventPlugin {
         app.add_event::<RepressionDamage>();
         app.add_event::<BecomeIntangible>();
         app.add_event::<CreatureCollision>();
+        app.add_event::<TailFollow>();
         app.init_resource::<Events<EndTurn>>();
         app.insert_resource(TurnCount { turns: 0 });
     }
@@ -94,7 +100,53 @@ pub fn creature_collision(
                         appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
                         direction,
                     });
-                animation_delay.delay += 0.05;
+                // animation_delay.delay += 0.05;
+            }
+        }
+    }
+}
+
+pub fn tail_attach(
+    mut commands: Commands,
+    map: Res<Map>,
+    segment_check: Query<(&Species, Has<TailSegment>)>,
+    attachers: Query<(Entity, &Position, &TailAttacher)>,
+    position_overwrite: Query<&Position>,
+) {
+    for (attacher_entity, attacher_position, tail_attacher) in attachers.iter() {
+        let mut attacher_entity = attacher_entity;
+        let mut attacher_position = attacher_position;
+        let species = tail_attacher.species;
+        let mut tail_attached_this_loop = true;
+        let mut attached_this_tick = HashSet::new();
+        while tail_attached_this_loop {
+            tail_attached_this_loop = false;
+            let potential_segments =
+                map.get_orthogonal_neighbouring_creatures(attacher_position.x, attacher_position.y);
+            if let Some(potential_segments) = potential_segments {
+                let segments = potential_segments.iter().filter(|potential_segment| {
+                    let (potential_segment_species, has_segment_component) =
+                        segment_check.get(potential_segment.entity).unwrap();
+                    discriminant(&species) == discriminant(potential_segment_species)
+                        && !has_segment_component
+                });
+                for segment in segments {
+                    if attached_this_tick.contains(&attacher_entity) {
+                        continue;
+                    }
+                    commands.entity(attacher_entity).insert(TailSegment {
+                        next: segment.entity,
+                    });
+                    dbg!(segment.entity);
+                    commands.entity(attacher_entity).remove::<TailAttacher>();
+                    commands
+                        .entity(segment.entity)
+                        .insert(TailAttacher { species });
+                    attached_this_tick.insert(attacher_entity);
+                    attacher_entity = segment.entity;
+                    attacher_position = position_overwrite.get(attacher_entity).unwrap();
+                    tail_attached_this_loop = true;
+                }
             }
         }
     }
@@ -131,6 +183,24 @@ pub fn creature_step(
 }
 
 #[derive(Event)]
+pub struct TailFollow {
+    pub destination: Position,
+    pub entity: Entity,
+}
+
+pub fn tail_follow(
+    mut events: EventReader<TailFollow>,
+    mut teleporter: EventWriter<TeleportEntity>,
+) {
+    for event in events.read() {
+        teleporter.send(TeleportEntity {
+            destination: event.destination,
+            entity: event.entity,
+        });
+    }
+}
+
+#[derive(Event)]
 pub struct TeleportEntity {
     pub destination: Position,
     pub entity: Entity,
@@ -155,7 +225,9 @@ pub fn teleport_entity(
 
     mut collision: EventWriter<CreatureCollision>,
     mut spell: EventWriter<CastSpell>,
-    mut animation_delay: ResMut<AnimationDelay>,
+
+    tail_follow: Query<&TailSegment>,
+    mut tail_follow_event: EventWriter<TailFollow>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
@@ -173,9 +245,15 @@ pub fn teleport_entity(
             // ...begin the sliding animation...
             commands.entity(event.entity).insert(SlideAnimation {
                 elapsed: Timer::from_seconds(0.2, TimerMode::Once),
-                appear: Timer::from_seconds(animation_delay.delay, TimerMode::Once),
+                appear: Timer::from_seconds(0., TimerMode::Once),
             });
-            animation_delay.delay += 0.05;
+            // animation_delay.delay += 0.05;
+            if let Ok(tail_follow) = tail_follow.get(event.entity) {
+                tail_follow_event.send(TailFollow {
+                    destination: *creature_position,
+                    entity: tail_follow.next,
+                });
+            }
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
 
@@ -311,7 +389,7 @@ pub fn end_turn(
         let player_pos = player.get_single().unwrap();
         for (creature_entity, creature_position, creature_species) in npcs.iter() {
             match creature_species {
-                Species::Hunter => {
+                Species::Hunter | Species::EpsilonHead => {
                     // Try to find a tile that gets the hunter closer to the player.
                     if let Some(move_target) =
                         map.best_manhattan_move(*creature_position, *player_pos)
@@ -385,6 +463,12 @@ pub fn summon_creature(
         match &event.species {
             Species::Wall => {
                 new_creature.insert(HealthBar::new(200));
+            }
+            Species::EpsilonHead => {
+                new_creature.insert(Hunt);
+                new_creature.insert(TailAttacher {
+                    species: Species::EpsilonTail,
+                });
             }
             Species::Player => {
                 new_creature.insert(Player);

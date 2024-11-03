@@ -172,7 +172,7 @@ fn axiom_form_ego(
         decay: 0.5,
         appear: animation_delay.delay,
     });
-    animation_delay.delay += 0.1;
+    // animation_delay.delay += 0.1;
     // Add that caster's position to the targets.
     synapse_data.targets.push(caster_position);
 }
@@ -201,7 +201,7 @@ fn axiom_form_plus(
         decay: 0.5,
         appear: animation_delay.delay,
     });
-    animation_delay.delay += 0.1;
+    // animation_delay.delay += 0.1;
     // Add these tiles to `targets`.
     synapse_data.targets.append(&mut output);
 }
@@ -233,7 +233,7 @@ fn axiom_form_momentum_beam(
         decay: 0.5,
         appear: animation_delay.delay,
     });
-    animation_delay.delay += 0.1;
+    // animation_delay.delay += 0.1;
     // Add these tiles to `targets`.
     synapse_data.targets.append(&mut output);
 }
@@ -266,7 +266,7 @@ fn axiom_form_cross_beam(
             decay: 0.5,
             appear: animation_delay.delay,
         });
-        animation_delay.delay += 0.1;
+        // animation_delay.delay += 0.1;
         // Add these tiles to `targets`.
         synapse_data.targets.append(&mut output);
     }
@@ -296,7 +296,7 @@ fn axiom_form_xbeam(
             decay: 0.5,
             appear: animation_delay.delay,
         });
-        animation_delay.delay += 0.1;
+        // animation_delay.delay += 0.1;
         // Add these tiles to `targets`.
         synapse_data.targets.append(&mut output);
     }
@@ -327,7 +327,7 @@ fn axiom_form_halo(
             decay: 0.5,
             appear: animation_delay.delay,
         });
-        animation_delay.delay += 0.1;
+        // animation_delay.delay += 0.1;
         // Add these tiles to `targets`.
         synapse_data.targets.append(&mut circle);
     } else {

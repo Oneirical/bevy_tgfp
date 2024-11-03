@@ -29,6 +29,16 @@ pub struct HealthBar {
     pub repressed: Vec<HealthPoint>,
 }
 
+#[derive(Component)]
+pub struct TailSegment {
+    pub next: Entity,
+}
+
+#[derive(Component)]
+pub struct TailAttacher {
+    pub species: Species,
+}
+
 impl HealthBar {
     /// Create a new health container with a certain amount of points in its deck.
     pub fn new(max_hp: i32) -> Self {
@@ -70,6 +80,8 @@ pub enum Species {
     Spawner,
     Trap,
     Crate,
+    EpsilonHead,
+    EpsilonTail,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -81,5 +93,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Trap => 12,
         Species::Spawner => 75,
         Species::Crate => 19,
+        Species::EpsilonHead => 67,
+        Species::EpsilonTail => 68,
     }
 }

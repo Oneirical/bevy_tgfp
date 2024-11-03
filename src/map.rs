@@ -74,6 +74,31 @@ impl Map {
         }
     }
 
+    /// Which creatures neighbour a certain tile?
+    pub fn get_orthogonal_neighbouring_creatures(
+        &self,
+        x: i32,
+        y: i32,
+    ) -> Option<HashSet<MapCreature>> {
+        let neighbours = [
+            Position::new(x, y + 1),
+            Position::new(x, y - 1),
+            Position::new(x + 1, y),
+            Position::new(x - 1, y),
+        ];
+        let mut output: HashSet<MapCreature> = HashSet::new();
+        for neighbour in neighbours {
+            if let Some(neighbouring_creatures) = self.creatures.get(&neighbour) {
+                output.extend(neighbouring_creatures);
+            }
+        }
+        if output.is_empty() {
+            None
+        } else {
+            Some(output)
+        }
+    }
+
     /// Which tangible creature stands on a certain tile?
     pub fn get_tangible_entity_at(&self, x: i32, y: i32) -> Option<&Entity> {
         if let Some(entry) = self.get_creatures_at(x, y) {
@@ -196,13 +221,13 @@ pub fn register_creatures(
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let cage = "#########\
-                #H.....H#\
+                #.......#\
                 #..#.#..#\
                 ##..#..##\
                 #...@...#\
                 ##.....##\
-                #..##C..#\
-                #....#..#\
+                #.......#\
+                #.E1234.#\
                 #########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
@@ -213,6 +238,8 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             'S' => Species::Spawner,
             'X' => Species::Trap,
             'C' => Species::Crate,
+            'E' => Species::EpsilonHead,
+            '1' | '2' | '3' | '4' => Species::EpsilonTail,
             _ => continue,
         };
         summon.send(SummonCreature { species, position });
