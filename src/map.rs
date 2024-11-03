@@ -265,7 +265,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             '@' => Species::Player,
             'S' => Species::Spawner,
             'X' => Species::Trap,
-            'C' => Species::Crate,
+            'C' => Species::AxiomCrate,
             'E' => Species::EpsilonHead,
             'T' => Species::EpsilonTail,
             _ => continue,

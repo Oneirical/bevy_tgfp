@@ -4,11 +4,12 @@ use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
     creature::{
-        get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Species, TailAttacher,
-        TailSegment,
+        get_species_sprite, Creature, HealthBar, Hunt, Intangible, Player, Pushable, Species,
+        TailAttacher, TailSegment,
     },
     graphics::{
-        AnimationDelay, AttackAnimation, HealthIndicator, SlideAnimation, SpriteSheetAtlas,
+        AnimationDelay, AttackAnimation, AxiomCrateIcon, AxiomCrateIconBundle, HealthIndicator,
+        HealthIndicatorBundle, SlideAnimation, SpriteSheetAtlas,
     },
     map::{are_orthogonally_adjacent, Map, Position},
     sets::TurnProgression,
@@ -55,7 +56,7 @@ pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut teleporter: EventWriter<TeleportEntity>,
     mut damage: EventWriter<RepressionDamage>,
-    species: Query<&Species>,
+    pushable: Query<Has<Pushable>>,
     mut commands: Commands,
     map: Res<Map>,
     mut animation_delay: ResMut<AnimationDelay>,
@@ -68,11 +69,10 @@ pub fn creature_collision(
                 event.responsible_position,
                 event.collided_position,
             );
-            let species = species.get(event.collides_with).unwrap();
-            // If a Crate exists and can be pushed...
+            // If this creature exists and can be pushed...
             // Not checking for passability would result in infinite loops
             // when pushing onto solid objects, resulting in them getting "drilled".
-            if matches!(&species, Species::Crate)
+            if pushable.get(event.collides_with).unwrap()
                 && map.is_passable(
                     event.collided_position.x + direction.as_offset().0,
                     event.collided_position.y + direction.as_offset().1,
@@ -313,7 +313,7 @@ pub struct RepressionDamage {
 pub fn repression_damage(
     mut events: EventReader<RepressionDamage>,
     mut damaged_creature: Query<(&mut HealthBar, &Children)>,
-    mut hp_bar: Query<&mut TextureAtlas>,
+    mut hp_bar: Query<&mut TextureAtlas, With<HealthIndicator>>,
     mut intangible: EventWriter<BecomeIntangible>,
 ) {
     for event in events.read() {
@@ -327,37 +327,38 @@ pub fn repression_damage(
         }
         for child in children.iter() {
             // Get the HP bars attached to the creatures.
-            let mut hp_bar = hp_bar.get_mut(*child).unwrap();
-            // Get the maximum HP, and the current HP.
-            let max_hp = hp.deck.len() + hp.repressed.len();
-            let current_hp = hp.deck.len();
-            // If this creature is at 100% or 0% HP, don't show the healthbar.
-            if max_hp == current_hp || current_hp == 0 {
-                /*
-                HACK: This used to alter the Visibility of the healthbars. However,
-                This caused an extremely niche bug where only certain creatures, in
-                certain extremely specific map formations, would fail to display their
-                health bar, flashing it for a brief moment and hiding it again. Fetching
-                their Visibility or even ViewVisibility manually made it seem like everything
-                was fine, even though no health bars were displaying on screen.
+            if let Ok(mut hp_bar) = hp_bar.get_mut(*child) {
+                // Get the maximum HP, and the current HP.
+                let max_hp = hp.deck.len() + hp.repressed.len();
+                let current_hp = hp.deck.len();
+                // If this creature is at 100% or 0% HP, don't show the healthbar.
+                if max_hp == current_hp || current_hp == 0 {
+                    /*
+                    HACK: This used to alter the Visibility of the healthbars. However,
+                    This caused an extremely niche bug where only certain creatures, in
+                    certain extremely specific map formations, would fail to display their
+                    health bar, flashing it for a brief moment and hiding it again. Fetching
+                    their Visibility or even ViewVisibility manually made it seem like everything
+                    was fine, even though no health bars were displaying on screen.
 
-                The reason this happens is because even though the Children health bar's Z-level
-                is supposed to be above the Parent creature, the health bar still displays
-                underneath the wall sprite. Not a problem with other creatures, which have
-                transparent pixels at the bottom of their sprite.
-                */
-                hp_bar.index = 167;
-            } else {
-                // Otherwise, show a color-coded healthbar.
-                match current_hp as f32 / max_hp as f32 {
-                    0.85..1.00 => hp_bar.index = 168,
-                    0.70..0.85 => hp_bar.index = 169,
-                    0.55..0.70 => hp_bar.index = 170,
-                    0.40..0.55 => hp_bar.index = 171,
-                    0.25..0.40 => hp_bar.index = 172,
-                    0.10..0.25 => hp_bar.index = 173,
-                    0.00..0.10 => hp_bar.index = 174,
-                    _ => panic!("That is not a possible HP %!"),
+                    The reason this happens is because even though the Children health bar's Z-level
+                    is supposed to be above the Parent creature, the health bar still displays
+                    underneath the wall sprite. Not a problem with other creatures, which have
+                    transparent pixels at the bottom of their sprite.
+                    */
+                    hp_bar.index = 197;
+                } else {
+                    // Otherwise, show a color-coded healthbar.
+                    match current_hp as f32 / max_hp as f32 {
+                        0.85..1.00 => hp_bar.index = 198,
+                        0.70..0.85 => hp_bar.index = 199,
+                        0.55..0.70 => hp_bar.index = 200,
+                        0.40..0.55 => hp_bar.index = 201,
+                        0.25..0.40 => hp_bar.index = 202,
+                        0.10..0.25 => hp_bar.index = 203,
+                        0.00..0.10 => hp_bar.index = 204,
+                        _ => panic!("That is not a possible HP %!"),
+                    }
                 }
             }
         }
@@ -482,6 +483,10 @@ pub fn summon_creature(
             Species::Wall => {
                 new_creature.insert(HealthBar::new(200));
             }
+            Species::AxiomCrate => {
+                new_creature.insert(Pushable);
+                new_creature.insert(Axiom::Ego);
+            }
             Species::EpsilonHead => {
                 new_creature.insert(Hunt);
                 new_creature.insert(TailAttacher {
@@ -514,19 +519,38 @@ pub fn summon_creature(
         }
         // Free the borrow on Commands.
         let new_creature_entity = new_creature.id();
+        if matches!(&event.species, Species::AxiomCrate) {
+            let axiom_icon = commands
+                .spawn(AxiomCrateIconBundle {
+                    sprite: SpriteBundle {
+                        texture: asset_server.load("spritesheet.png"),
+                        // Its scale should be smaller than the parent.
+                        transform: Transform::from_scale(Vec3::new(0.75, 0.75, 0.)),
+                        ..default()
+                    },
+                    atlas: TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: Axiom::get_sprite(&Axiom::Ego),
+                    },
+                    marker: AxiomCrateIcon,
+                })
+                .id();
+            commands.entity(new_creature_entity).add_child(axiom_icon);
+        }
         let hp_bar = commands
-            .spawn(HealthIndicator {
+            .spawn(HealthIndicatorBundle {
                 sprite: SpriteBundle {
                     texture: asset_server.load("spritesheet.png"),
                     // It already inherits the increased scale from the parent.
                     // The Z-value is increased so it always appears on top of the creature.
-                    transform: Transform::from_xyz(0., 0., 9.),
+                    transform: Transform::from_xyz(0., 0., 0.),
                     ..default()
                 },
                 atlas: TextureAtlas {
                     layout: atlas_layout.handle.clone(),
-                    index: 167,
+                    index: 197,
                 },
+                marker: HealthIndicator,
             })
             .id();
         commands.entity(new_creature_entity).add_child(hp_bar);

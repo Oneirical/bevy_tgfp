@@ -117,7 +117,7 @@ pub struct Spell {
     pub axioms: Vec<Axiom>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Component)]
 /// There are Form axioms, which target certain tiles, and Function axioms, which execute an effect
 /// onto those tiles.
 pub enum Axiom {
@@ -152,6 +152,14 @@ pub enum Axiom {
     /// Force all creatures on targeted tiles to cast the remainder of the spell.
     /// This terminates execution of the spell.
     ForceCast,
+}
+
+impl Axiom {
+    pub fn get_sprite(&self) -> usize {
+        match self {
+            _ => 0,
+        }
+    }
 }
 
 /// Target the caster's tile.
@@ -399,7 +407,7 @@ fn axiom_function_dash(
     let synapse_data = spell_stack.spells.last().unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
     if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
-        // For each (Entity, Position) on a targeted tile...
+        // For each (Entity, Position) on a targeted tile with a creature on it...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
             // The dashing creature starts where it currently is standing.
             let mut final_dash_destination = dasher_pos;
@@ -431,6 +439,8 @@ fn axiom_function_dash(
             });
         }
     } else {
+        // This should NEVER trigger. This system was chosen to run because the
+        // next axiom in the SpellStack explicitly requested it by being an Axiom::Dash.
         panic!()
     }
 }
@@ -457,13 +467,13 @@ fn linear_beam(
 ) -> Vec<Position> {
     let mut distance_travelled = 0;
     let mut output = Vec::new();
-    // The beam has a maximum distance of 10.
+    // The beam has a maximum distance of max_distance.
     while distance_travelled < max_distance {
         distance_travelled += 1;
         start.shift(off_x, off_y);
         // The new tile is always added, even if it is impassable...
         output.push(start);
-        // But if it is impassable, it is the last added tile.
+        // But if it is impassable, the beam stops.
         if !map.is_passable(start.x, start.y) {
             break;
         }

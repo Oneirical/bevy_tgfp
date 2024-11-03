@@ -19,9 +19,13 @@ pub struct Player;
 #[derive(Component)]
 pub struct Hunt;
 
-// This creature has no collisions with other entities.
+/// This creature has no collisions with other entities.
 #[derive(Component)]
 pub struct Intangible;
+
+/// This creature is pushed instead of melee attacked when collided with.
+#[derive(Component)]
+pub struct Pushable;
 
 #[derive(Component)]
 pub struct HealthBar {
@@ -79,7 +83,7 @@ pub enum Species {
     Hunter,
     Spawner,
     Trap,
-    Crate,
+    AxiomCrate,
     EpsilonHead,
     EpsilonTail,
 }
@@ -92,7 +96,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Hunter => 4,
         Species::Trap => 12,
         Species::Spawner => 75,
-        Species::Crate => 19,
+        Species::AxiomCrate => 111,
         Species::EpsilonHead => 67,
         Species::EpsilonTail => 68,
     }

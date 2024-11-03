@@ -17,7 +17,6 @@ pub struct SetsPlugin;
 impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_state(TurnProgression::Animating);
-        app.add_systems(Update, process_axiom);
         app.add_systems(
             FixedUpdate,
             (

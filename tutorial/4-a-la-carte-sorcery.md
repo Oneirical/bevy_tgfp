@@ -256,14 +256,13 @@ fn axiom_form_ego(
 }
 ```
 
-Dashing is a significantly more involved process.
+Dashing is a significantly more involved process. For each creature standing on a tile targeted by a Form (in this case, the Player only - Ego is cast by the Player, and selects itself), they are commanded to dash in the direction of the Player's last step. This is done by effectively shooting a "beam" forwards, propagating through empty tiles until it hits an impassable one.
 
 ```rust
 // spells.rs
 /// The targeted creatures dash in the direction of the caster's last move.
 fn axiom_function_dash(
     mut teleport: EventWriter<TeleportEntity>,
-    is_intangible: Query<Has<Intangible>>,
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
     momentum: Query<&OrdDir>,
@@ -271,7 +270,7 @@ fn axiom_function_dash(
     let synapse_data = spell_stack.spells.last().unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
     if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
-        // For each (Entity, Position) on a targeted tile...
+        // For each (Entity, Position) on a targeted tile with a creature on it...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
             // The dashing creature starts where it currently is standing.
             let mut final_dash_destination = dasher_pos;
@@ -279,13 +278,10 @@ fn axiom_function_dash(
             let (off_x, off_y) = caster_momentum.as_offset();
             // The dash has a maximum travel distance of `max_distance`.
             let mut distance_travelled = 0;
-            // Check if the dashing creature is allowed to move through other creatures.
-            let is_intangible = is_intangible.get(dasher).unwrap();
             while distance_travelled < max_distance {
                 distance_travelled += 1;
                 // Stop dashing if a solid Creature is hit and the dasher is not intangible.
-                if !is_intangible
-                    && !map.is_passable(
+                if !map.is_passable(
                         final_dash_destination.x + off_x,
                         final_dash_destination.y + off_y,
                     )
@@ -303,10 +299,14 @@ fn axiom_function_dash(
             });
         }
     } else {
+        // This should NEVER trigger. This system was chosen to run because the
+        // next axiom in the SpellStack explicitly requested it by being an Axiom::Dash.
         panic!()
     }
 }
 ```
+
+This is almost perfect, aside from the fact that we have absolutely no idea what the Player's last step direction was... And that's what `OrdDir` is for!
 
 ##  Weaving Magic From Motion (OrdDir momentum component)
 
@@ -377,35 +377,19 @@ fn spawn_cage(
 }
 ```
 
-All good, but all Creatures are now eternally "facing" upwards regardless of their actions. Let us track this with a new `Event`.
-
-```rust
-// events.rs
-#[derive(Event)]
-pub struct AlterMomentum {
-    pub entity: Entity,
-    pub direction: OrdDir,
-}
-
-fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&mut OrdDir>) {
-    for momentum_alteration in events.read() {
-        *creature.get_mut(momentum_alteration.entity).unwrap() = momentum_alteration.direction;
-    }
-}
-```
-
-This event receives its trigger, right now, from when the player steps. It won't track any other creatures... for now.
+All good, but all Creatures are now eternally "facing" upwards regardless of their actions. Let us adjust this, at least for only the Player... for now.
 
 ```rust
 // events.rs
 fn player_step(
     mut events: EventReader<PlayerStep>,
     mut teleporter: EventWriter<TeleportEntity>,
-    mut momentum: EventWriter<AlterMomentum>, // NEW!
-    player: Query<(Entity, &Position), With<Player>>,
+    mut player: Query<(Entity, &Position, &mut OrdDir), With<Player>>,
     hunters: Query<(Entity, &Position), With<Hunt>>,
     map: Res<Map>,
 ) {
+        let (player_entity, player_pos, mut player_momentum) // CHANGED - New mutable player_momentum
+            = player.get_single_mut().expect("0 or 2+ players"); // CHANGED - get_single_mut
         // SNIP
         teleporter.send(TeleportEntity::new(
             player_entity,
@@ -413,10 +397,8 @@ fn player_step(
             player_pos.y + off_y,
         ));
         // NEW!
-        momentum.send(AlterMomentum {
-            entity: player_entity,
-            direction: event.direction,
-        });
+        // Update the direction towards which this creature is facing.
+        *player_momentum = event.direction;
         // End NEW.
 
         for (hunter_entity, hunter_pos) in hunters.iter() {
@@ -426,76 +408,33 @@ fn player_step(
 }
 ```
 
-## 3. Actually Making The Spell Do Something
+## The Cleanup
 
-
-```rust
-// events.rs
-impl Axiom {
-    // SNIP
-    /// Execute Function-type Axioms. Returns true if this produced an actual effect.
-    fn execute(&self, synapse_data: &mut SynapseData, map: &Map) -> bool {
-        match self {
-            Self::Dash => {
-                // For each (Entity, Position) on a targeted tile...
-                for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
-                    // The dashing creature starts where it currently is standing.
-                    let mut final_dash_destination = dasher_pos;
-                    // It will travel in the direction of the caster's last move.
-                    let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
-                    // The dash has a maximum travel distance of 10.
-                    let mut distance_travelled = 0;
-                    while distance_travelled < 10 {
-                        distance_travelled += 1;
-                        // Stop dashing if a solid Creature is hit.
-                        if !map.is_passable(
-                            final_dash_destination.x + off_x,
-                            final_dash_destination.y + off_y,
-                        ) {
-                            break;
-                        }
-                        // Otherwise, keep offsetting the dashing creature's position.
-                        final_dash_destination.shift(off_x, off_y);
-                    }
-
-                    // Once finished, release the Teleport event.
-                    synapse_data.effects.push(EventDispatch::TeleportEntity {
-                        destination: final_dash_destination,
-                        entity: dasher,
-                    });
-                }
-                true
-            }
-            // Forms (which do not have an in-game effect) return false.
-            _ => false,
-        }
-    }
- }
-```
-
-There is only one unimplemented function in this block, `get_all_targeted_entity_pos_pairs`, which inspects the `Map` to pull out all the corresponding key-value pairs.
+Remember this? `commands.run_system(spell_stack.cleanup_id);` Running Axioms is fine and all, but we'll also want to progress through the list so we aren't stuck selecting the player's tile for eternity.
 
 ```rust
-// spells.rs
-impl SynapseData {
-
-    // SNIP
-
-    fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
-        let mut targeted_pairs = Vec::new();
-        for target in &self.targets {
-            if let Some(entity) = map.get_entity_at(target.x, target.y) {
-                targeted_pairs.push((*entity, *target));
-            }
-        }
-        targeted_pairs
+fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
+    // Get the currently executed spell, removing it temporarily.
+    let mut synapse_data = spell_stack.spells.pop().unwrap();
+    // Step forwards in the axiom queue.
+    synapse_data.step += 1;
+    // If the spell is finished, do not push it back.
+    if synapse_data.axioms.get(synapse_data.step).is_some() {
+        spell_stack.spells.push(synapse_data);
     }
 }
 ```
 
+The `step` advances, and the spell is removed if it is finished. Therefore, a typical spell would run like this:
+
+- Step 0, run Ego. Select the Player.
+- Cleanup. Move to step 1, the spell isn't finished yet.
+- Step 1, run Dash. The Player teleports.
+- Cleanup, Move to step 2. There is no Axiom at index 2, and the spell is deleted.
+
 # The Test Run
 
-After all this, the first spell **Ego, Dash** is ready to enter our grimoire - and while that was a lot, future spell effects will be a lot easier to implement from now on. Simply add more entries in the `match` statements of `target` and `execute`!
+After all this, the first spell **Ego, Dash** is ready to enter our grimoire - and while that was a lot, future spell effects will be a lot easier to implement from now on. Simply add more entries in the `AxiomLibrary` with one-shot systems to match!
 
 One last thing: actually casting it.
 
@@ -530,27 +469,14 @@ This is extremely easy to forget and is mostly indicated by "struct is never con
 With that said:
 
 ```rust
-// events.rs
-impl Plugin for EventPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<PlayerStep>();
-        app.add_event::<TeleportEntity>();
-        app.add_event::<AlterMomentum>(); // NEW!
-        app.add_systems(Update, player_step);
-        app.add_systems(Update, teleport_entity);
-        app.add_systems(Update, alter_momentum); // NEW!
-    }
-}
-```
-
-```rust
 // spells.rs
 impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<CastSpell>();
-        app.add_event::<SpellEffect>();
-        app.add_systems(Update, gather_effects);
-        app.add_systems(Update, dispatch_events);
+        app.init_resource::<SpellStack>();
+        app.init_resource::<AxiomLibrary>();
+        app.add_systems(Update, cast_new_spell);
+        app.add_systems(Update, process_axiom);
     }
 }
 ```
@@ -593,13 +519,12 @@ The player dashing around is fun and good... but what about a projectile that kn
 // spells.rs
 pub enum Axiom {
     // FORMS
-
-    // Target the caster's tile.
+    /// Target the caster's tile.
     Ego,
 
     // NEW!
-    // Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
-    // including the first solid tile encountered, which stops the beam.
+    /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
+    /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
     // End NEW.
 
@@ -610,56 +535,64 @@ pub enum Axiom {
 It, of course, receives its own implementation.
 
 ```rust
-// spells.rs
-    fn target(&self, synapse_data: &mut SynapseData, map: &Map) {
-        match self {
-        // SNIP
-        // NEW!
-            // Shoot a beam from the caster towards its last move, all tiles passed through
-            // become targets, including the impact point.
-            Self::MomentumBeam => {
-                // Start the beam where the caster is standing.
-                let mut start = synapse_data.caster_position;
-                // The beam travels in the direction of the caster's last move.
-                let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
-                let mut distance_travelled = 0;
-                let mut output = Vec::new();
-                // The beam has a maximum distance of 10.
-                while distance_travelled < 10 {
-                    distance_travelled += 1;
-                    start.shift(off_x, off_y);
-                    // The new tile is always added, even if it is impassable...
-                    output.push(start);
-                    // But if it is impassable, it is the last added tile.
-                    if !map.is_passable(start.x, start.y) {
-                        break;
-                    }
-                }
-                // Add these tiles to `targets`.
-                synapse_data.targets.append(&mut output);
-            }
-        // End NEW.
+/// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
+/// including the first solid tile encountered, which stops the beam.
+fn axiom_form_momentum_beam(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+    mut animation_delay: ResMut<AnimationDelay>,
+    position_and_momentum: Query<(&Position, &OrdDir)>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let (caster_position, caster_momentum) =
+        position_and_momentum.get(synapse_data.caster).unwrap();
+    // Start the beam where the caster is standing.
+    // The beam travels in the direction of the caster's last move.
+    let (off_x, off_y) = caster_momentum.as_offset();
+    let mut output = linear_beam(*caster_position, 10, off_x, off_y, &map);
+    // Add these tiles to `targets`.
+    synapse_data.targets.append(&mut output);
+}
+
+
+fn linear_beam(
+    mut start: Position,
+    max_distance: usize,
+    off_x: i32,
+    off_y: i32,
+    map: &Map,
+) -> Vec<Position> {
+    let mut distance_travelled = 0;
+    let mut output = Vec::new();
+    // The beam has a maximum distance of max_distance.
+    while distance_travelled < max_distance {
+        distance_travelled += 1;
+        start.shift(off_x, off_y);
+        // The new tile is always added, even if it is impassable...
+        output.push(start);
+        // But if it is impassable, the beam stops.
+        if !map.is_passable(start.x, start.y) {
+            break;
         }
     }
+    output
+}
 ```
 
 You may notice that this is extremely similar to the `Dash` logic... Its differences are the inclusion of the final impact tile (which is solid), and how it collects all travelled tiles in an output vector, added to `targets`.
 
 ```rust
-// Do not add this block, it is merely a demonstration.
-// The dashing creature starts where it currently is standing.
-let mut final_dash_destination = dasher_pos;
-// It will travel in the direction of the caster's last move.
-let (off_x, off_y) = synapse_data.caster_momentum.as_offset();
-// The dash has a maximum travel distance of 10.
+// Do not add this block, it is already included.
 let mut distance_travelled = 0;
-while distance_travelled < 10 {
+while distance_travelled < max_distance {
     distance_travelled += 1;
-    // Stop dashing if a solid Creature is hit.
+    // Stop dashing if a solid Creature is hit and the dasher is not intangible.
     if !map.is_passable(
-        final_dash_destination.x + off_x,
-        final_dash_destination.y + off_y,
-    ) {
+            final_dash_destination.x + off_x,
+            final_dash_destination.y + off_y,
+        )
+    {
         break;
     }
     // Otherwise, keep offsetting the dashing creature's position.
@@ -667,42 +600,9 @@ while distance_travelled < 10 {
 }
 ```
 
-In software development, "don't repeat yourself" is a common wisdom, but in games development, sometimes, it must be done within reason. Think, what if we add later a magic forcefield that blocks beams but not movement? In that case, if we had done something like this to adhere to "don't repeat yourself":
+In software development, "don't repeat yourself" is a common wisdom, but in games development, sometimes, it must be done within reason. There might be intangible creatures later capable of moving through solid blocks (a purely theoretical concern which will totally not be the subject of a future chapter). In this case, their dashes must move through walls, and their beams must not.
 
-```rust
-// Do not add this block, it is merely a demonstration.
-Self::Dash => {
-    for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(map) {
-        // Create a fake synapse just to use a beam.
-        let mut artificial_synapse = SynapseData::new_from_synapse(synapse_data);
-        // Set the fake synapse's caster and caster position to be the targeted creatures.
-        (
-            artificial_synapse.caster,
-            artificial_synapse.caster_position,
-        ) = (dasher, dasher_pos);
-        // Fire the beam with the caster's momentum.
-        Self::MomentumBeam.target(&mut artificial_synapse, map);
-        // Get the penultimate tile, aka the last passable tile in the beam's path.
-        let destination_tile = artificial_synapse
-            .targets
-            .get(artificial_synapse.targets.len().wrapping_sub(2));
-        // If that penultimate tile existed, teleport to it.
-        if let Some(destination_tile) = destination_tile {
-            synapse_data.effects.push(EventDispatch::TeleportEntity {
-                destination: *destination_tile,
-                entity: dasher,
-            });
-        }
-    }
-    true
-}
-```
-
-Here, a fake beam is invented, which needs a fake "synapse" to go alongside it. This "beam" is fired for the sole purpose of finding the penultimate tile in its path (the ultimate tile is the solid impact point). This is the tile where the affected dash to.
-
-Should the "anti beam forcefield" be invented later, this would need an added exception, potentially implemented as an extra parameter passed to the `target` function... lots of complexity for not much reward.
-
-And just like that, with only 11 added lines of code (which were very similar to our `Dash` implementation), the projectile is ready:
+And just like that, with only 1 new one-shot-system (which was very similar to our `Dash` implementation), the projectile is ready:
 
 ```rust
 // input.rs
