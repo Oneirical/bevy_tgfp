@@ -220,15 +220,15 @@ pub fn register_creatures(
 }
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
-    let cage = "#########\
+    let cage = "########T\
                 #.......#\
                 #..#.#..#\
                 ##..#..##\
-                E...@...#\
-                1#.....##\
-                2.......#\
-                3.......#\
-                4########";
+                E...@...E\
+                T#.....#T\
+                T.......T\
+                T.......#\
+                T#######T";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
         let species = match tile_char {
@@ -239,7 +239,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             'X' => Species::Trap,
             'C' => Species::Crate,
             'E' => Species::EpsilonHead,
-            '1' | '2' | '3' | '4' => Species::EpsilonTail,
+            'T' => Species::EpsilonTail,
             _ => continue,
         };
         summon.send(SummonCreature { species, position });

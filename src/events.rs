@@ -61,12 +61,13 @@ pub fn creature_collision(
     mut animation_delay: ResMut<AnimationDelay>,
 ) {
     for event in events.read() {
-        let direction = OrdDir::direction_towards_adjacent_tile(
-            event.responsible_position,
-            event.collided_position,
-        );
         // A collision between two creatures occurs.
         if are_orthogonally_adjacent(event.responsible_position, event.collided_position) {
+            // This will fail should they not be orthogonally adjacent.
+            let direction = OrdDir::direction_towards_adjacent_tile(
+                event.responsible_position,
+                event.collided_position,
+            );
             let species = species.get(event.collides_with).unwrap();
             // If a Crate exists and can be pushed...
             // Not checking for passability would result in infinite loops
@@ -77,6 +78,7 @@ pub fn creature_collision(
                     event.collided_position.y + direction.as_offset().1,
                 )
             {
+                // Push the Crate.
                 teleporter.send(TeleportEntity {
                     destination: Position::new(
                         event.collided_position.x + direction.as_offset().0,
@@ -84,11 +86,13 @@ pub fn creature_collision(
                     ),
                     entity: event.collides_with,
                 });
+                // Get the pusher to follow up.
                 teleporter.send(TeleportEntity {
                     destination: event.collided_position,
                     entity: event.entity_responsible,
                 });
             } else {
+                // Melee attack!
                 damage.send(RepressionDamage {
                     entity: event.collides_with,
                     damage: 1,
@@ -106,38 +110,53 @@ pub fn creature_collision(
     }
 }
 
+/// Attach new tail segments to worm or snake-like creatures.
 pub fn tail_attach(
     mut commands: Commands,
     map: Res<Map>,
-    segment_check: Query<(&Species, Has<TailSegment>)>,
+    segment_check: Query<(&Species, Has<TailSegment>, Has<TailAttacher>)>,
     attachers: Query<(Entity, &Position, &TailAttacher)>,
     position_overwrite: Query<&Position>,
 ) {
     for (attacher_entity, attacher_position, tail_attacher) in attachers.iter() {
+        // All of these are re-assigned, as they will change dynamically as the tail attacher
+        // spreads.
         let mut attacher_entity = attacher_entity;
         let mut attacher_position = attacher_position;
+        // The species of the segments we are looking for.
         let species = tail_attacher.species;
         let mut tail_attached_this_loop = true;
+        // We mustn't attach the same segment twice. Track which ones are already attached.
         let mut attached_this_tick = HashSet::new();
+        // Break the loop if we fail to attach anything new.
         while tail_attached_this_loop {
             tail_attached_this_loop = false;
+            // Get all the neighbouring creatures.
             let potential_segments =
                 map.get_orthogonal_neighbouring_creatures(attacher_position.x, attacher_position.y);
             if let Some(potential_segments) = potential_segments {
+                // Retain only segments with the correct species and which aren't already a segment.
                 let segments = potential_segments.iter().filter(|potential_segment| {
-                    let (potential_segment_species, has_segment_component) =
+                    let (potential_segment_species, has_segment_component, has_attacher_component) =
                         segment_check.get(potential_segment.entity).unwrap();
                     discriminant(&species) == discriminant(potential_segment_species)
                         && !has_segment_component
+                        && !has_attacher_component
                 });
                 for segment in segments {
+                    // Avoid attaching segments already done in a previous loop iteration.
+                    // This is here instead of in the iterator filter to satisfy the borrow
+                    // checker.
                     if attached_this_tick.contains(&segment.entity) {
                         continue;
                     }
+                    // The attacher creature stops being an attacher as it connects to the new
+                    // segment.
                     commands.entity(attacher_entity).insert(TailSegment {
                         next: segment.entity,
                     });
                     commands.entity(attacher_entity).remove::<TailAttacher>();
+                    // That new segment is the attacher now, ready to connect to new segments.
                     commands
                         .entity(segment.entity)
                         .insert(TailAttacher { species });
