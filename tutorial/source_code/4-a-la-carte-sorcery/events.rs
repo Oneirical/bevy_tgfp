@@ -12,10 +12,8 @@ impl Plugin for EventPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<PlayerStep>();
         app.add_event::<TeleportEntity>();
-        app.add_event::<AlterMomentum>();
         app.add_systems(Update, player_step);
         app.add_systems(Update, teleport_entity);
-        app.add_systems(Update, alter_momentum);
     }
 }
 
@@ -27,12 +25,12 @@ pub struct PlayerStep {
 fn player_step(
     mut events: EventReader<PlayerStep>,
     mut teleporter: EventWriter<TeleportEntity>,
-    mut momentum: EventWriter<AlterMomentum>,
-    player: Query<(Entity, &Position), With<Player>>,
+    mut player: Query<(Entity, &Position, &mut OrdDir), With<Player>>,
     hunters: Query<(Entity, &Position), With<Hunt>>,
     map: Res<Map>,
 ) {
-    let (player_entity, player_pos) = player.get_single().expect("0 or 2+ players");
+    let (player_entity, player_pos, mut player_momentum) =
+        player.get_single_mut().expect("0 or 2+ players");
     for event in events.read() {
         let (off_x, off_y) = event.direction.as_offset();
         teleporter.send(TeleportEntity::new(
@@ -41,10 +39,9 @@ fn player_step(
             player_pos.y + off_y,
         ));
 
-        momentum.send(AlterMomentum {
-            entity: player_entity,
-            direction: event.direction,
-        });
+        // Update the direction towards which this creature is facing.
+        *player_momentum = event.direction;
+
         for (hunter_entity, hunter_pos) in hunters.iter() {
             // Try to find a tile that gets the hunter closer to the player.
             if let Some(move_target) = map.best_manhattan_move(*hunter_pos, *player_pos) {
@@ -59,21 +56,9 @@ fn player_step(
 }
 
 #[derive(Event)]
-pub struct AlterMomentum {
-    pub entity: Entity,
-    pub direction: OrdDir,
-}
-
-fn alter_momentum(mut events: EventReader<AlterMomentum>, mut creature: Query<&mut OrdDir>) {
-    for momentum_alteration in events.read() {
-        *creature.get_mut(momentum_alteration.entity).unwrap() = momentum_alteration.direction;
-    }
-}
-
-#[derive(Event)]
 pub struct TeleportEntity {
-    destination: Position,
-    entity: Entity,
+    pub destination: Position,
+    pub entity: Entity,
 }
 
 impl TeleportEntity {

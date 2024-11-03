@@ -543,8 +543,8 @@ The first problem is that motion, in our game, is currently only supported by `p
 // events.rs
 #[derive(Event)]
 pub struct TeleportEntity {
-    destination: Position,
-    entity: Entity,
+    pub destination: Position,
+    pub entity: Entity,
 }
 
 impl TeleportEntity {

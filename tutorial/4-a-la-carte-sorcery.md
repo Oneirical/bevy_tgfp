@@ -100,8 +100,6 @@ struct SynapseData {
     step: usize,
     /// Who cast the spell.
     caster: Entity,
-    /// Flags that alter the behaviour of an active synapse.
-    synapse_flags: HashSet<SynapseFlag>,
 }
 
 impl SynapseData {
@@ -112,26 +110,15 @@ impl SynapseData {
             axioms,
             step: 0,
             caster,
-            synapse_flags: HashSet::new(),
         }
-    }
-
-    /// Get the Entity of each creature standing on a tile inside `targets`.
-    fn get_all_targeted_entities(&self, map: &Map) -> Vec<Entity> {
-        self.get_all_targeted_entity_pos_pairs(map)
-            .into_iter()
-            .map(|(entity, _)| entity)
-            .collect()
     }
 
     /// Get the Entity of each creature standing on a tile inside `targets` and its position.
     fn get_all_targeted_entity_pos_pairs(&self, map: &Map) -> Vec<(Entity, Position)> {
         let mut targeted_pairs = Vec::new();
         for target in &self.targets {
-            if let Some(creatures) = map.get_creatures_at(target.x, target.y) {
-                for creature in creatures {
-                    targeted_pairs.push((creature.entity, *target));
-                }
+            if let Some(creature) = map.get_entity_at(target.x, target.y) {
+                targeted_pairs.push((*creature, *target));
             }
         }
         targeted_pairs
@@ -204,6 +191,7 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::Ego),
             world.register_system(axiom_form_ego),
+        );
         axioms.library.insert(
             discriminant(&Axiom::Dash { max_distance: 1 }),
             world.register_system(axiom_function_dash),
@@ -384,7 +372,7 @@ All good, but all Creatures are now eternally "facing" upwards regardless of the
 fn player_step(
     mut events: EventReader<PlayerStep>,
     mut teleporter: EventWriter<TeleportEntity>,
-    mut player: Query<(Entity, &Position, &mut OrdDir), With<Player>>,
+    mut player: Query<(Entity, &Position, &mut OrdDir), With<Player>>, // CHANGED - mutable, and with &mut OrdDir
     hunters: Query<(Entity, &Position), With<Hunt>>,
     map: Res<Map>,
 ) {
@@ -452,7 +440,7 @@ fn keyboard_input(
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::Ego, Axiom::Dash],
+                axioms: vec![Axiom::Ego, Axiom::Dash { max_distance: 5 }],
             },
         });
     }
@@ -538,10 +526,8 @@ It, of course, receives its own implementation.
 /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
 /// including the first solid tile encountered, which stops the beam.
 fn axiom_form_momentum_beam(
-    mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
-    mut animation_delay: ResMut<AnimationDelay>,
     position_and_momentum: Query<(&Position, &OrdDir)>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
@@ -602,6 +588,23 @@ while distance_travelled < max_distance {
 
 In software development, "don't repeat yourself" is a common wisdom, but in games development, sometimes, it must be done within reason. There might be intangible creatures later capable of moving through solid blocks (a purely theoretical concern which will totally not be the subject of a future chapter). In this case, their dashes must move through walls, and their beams must not.
 
+Back to the implemention. Add this new `Axiom` to the `AxiomLibrary`.
+
+```rust
+impl FromWorld for AxiomLibrary {
+    fn from_world(world: &mut World) -> Self {
+        // SNIP
+        // NEW!
+        axioms.library.insert(
+            discriminant(&Axiom::MomentumBeam),
+            world.register_system(axiom_form_momentum_beam),
+        );
+        // End NEW.
+        // SNIP
+    }
+}
+```
+
 And just like that, with only 1 new one-shot-system (which was very similar to our `Dash` implementation), the projectile is ready:
 
 ```rust
@@ -610,7 +613,7 @@ And just like that, with only 1 new one-shot-system (which was very similar to o
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::MomentumBeam, Axiom::Dash],
+                axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
             },
         });
     }

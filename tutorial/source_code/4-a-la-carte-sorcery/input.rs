@@ -18,15 +18,15 @@ impl Plugin for InputPlugin {
 /// Each frame, if a button is pressed, move the player 1 tile.
 fn keyboard_input(
     player: Query<Entity, With<Player>>,
+    mut spell: EventWriter<CastSpell>,
     mut events: EventWriter<PlayerStep>,
     input: Res<ButtonInput<KeyCode>>,
-    mut spell: EventWriter<CastSpell>,
 ) {
     if input.just_pressed(KeyCode::Space) {
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::Ego, Axiom::Dash],
+                axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
             },
         });
     }

@@ -53,8 +53,8 @@ fn player_step(
 
 #[derive(Event)]
 pub struct TeleportEntity {
-    destination: Position,
-    entity: Entity,
+    pub destination: Position,
+    pub entity: Entity,
 }
 
 impl TeleportEntity {
