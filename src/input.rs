@@ -46,7 +46,18 @@ pub fn keyboard_input(
             spell.send(CastSpell {
                 caster: player,
                 spell: Spell {
-                    axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
+                    axioms: vec![
+                        Axiom::Halo { radius: 4 },
+                        Axiom::RandomCasterTeleport,
+                        Axiom::PurgeTargets,
+                        Axiom::Plus,
+                        Axiom::RepressionDamage { damage: 1 },
+                        Axiom::PurgeTargets,
+                        Axiom::LoopBack { steps: 6 },
+                        Axiom::LoopBack { steps: 6 },
+                        Axiom::LoopBack { steps: 6 },
+                        Axiom::LoopBack { steps: 6 },
+                    ],
                 },
             });
             turn_end.send(EndTurn);

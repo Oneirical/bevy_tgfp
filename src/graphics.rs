@@ -91,6 +91,7 @@ pub enum EffectType {
     VerticalBeam,
     RedBlast,
     GreenBlast,
+    XCross,
 }
 
 #[derive(Component)]
@@ -106,6 +107,7 @@ pub fn get_effect_sprite(effect: &EffectType) -> usize {
         EffectType::VerticalBeam => 16,
         EffectType::RedBlast => 14,
         EffectType::GreenBlast => 13,
+        EffectType::XCross => 1,
     }
 }
 
@@ -241,7 +243,6 @@ pub fn adjust_transforms(
     for (entity, pos, mut trans, anim, is_player) in creatures.iter_mut() {
         // If this creature is affected by an animation...
         if let Some(mut anim) = anim {
-            // Multiplied by the graphical size of a tile, which is 64x64.
             // The sprite approaches its destination.
             let current_translation = trans.translation;
             let target_translation = anim.waypoints.first().unwrap();

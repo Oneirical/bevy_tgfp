@@ -1,11 +1,5 @@
 use std::mem::{discriminant, Discriminant};
 
-use bevy::{
-    ecs::system::SystemId,
-    prelude::*,
-    utils::{HashMap, HashSet},
-};
-
 use crate::{
     creature::{Intangible, Species},
     events::{RepressionDamage, SummonCreature, TeleportEntity},
@@ -13,6 +7,14 @@ use crate::{
     map::{Map, Position},
     OrdDir,
 };
+use bevy::{
+    ecs::system::SystemId,
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
+use rand::seq::IteratorRandom;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
 pub struct SpellPlugin;
 
@@ -85,6 +87,14 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_halo),
         );
         axioms.library.insert(
+            discriminant(&Axiom::PurgeTargets),
+            world.register_system(axiom_form_purge_targets),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::KeepOneRandom),
+            world.register_system(axiom_form_keep_one_random),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Dash { max_distance: 1 }),
             world.register_system(axiom_function_dash),
         );
@@ -97,6 +107,10 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::RepressionDamage { damage: 1 }),
             world.register_system(axiom_function_repression_damage),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::RandomCasterTeleport),
+            world.register_system(axiom_function_random_caster_teleport),
         );
         axioms.library.insert(
             discriminant(&Axiom::LoopBack { steps: 1 }),
@@ -137,6 +151,10 @@ pub enum Axiom {
     XBeam,
     /// Target a ring of `radius` around the caster.
     Halo { radius: i32 },
+    /// Delete all targets.
+    PurgeTargets,
+    /// Delete all targets except one random one.
+    KeepOneRandom,
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
@@ -145,6 +163,8 @@ pub enum Axiom {
     SummonCreature { species: Species },
     /// Deal damage to all creatures on targeted tiles.
     RepressionDamage { damage: i32 },
+    /// Teleport the caster to one random empty available target, if it exists.
+    RandomCasterTeleport,
 
     // MUTATORS
     /// Only once, loop backwards `steps` in the axiom queue.
@@ -343,6 +363,42 @@ fn axiom_form_halo(
     }
 }
 
+/// Delete all targets.
+fn axiom_form_purge_targets(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    magic_vfx.send(PlaceMagicVfx {
+        targets: synapse_data.targets.clone(),
+        sequence: EffectSequence::Simultaneous,
+        effect: EffectType::XCross,
+        decay: 0.5,
+        appear: 0.,
+    });
+    synapse_data.targets.clear();
+}
+
+/// Delete all targets except one random one.
+fn axiom_form_keep_one_random(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let mut rng = thread_rng();
+    if let Some(saved) = synapse_data.targets.clone().choose(&mut rng) {
+        synapse_data.targets.retain(|&target| target == *saved);
+        magic_vfx.send(PlaceMagicVfx {
+            targets: synapse_data.targets.clone(),
+            sequence: EffectSequence::Simultaneous,
+            effect: EffectType::XCross,
+            decay: 0.5,
+            appear: 0.,
+        });
+        synapse_data.targets = vec![*saved];
+    }
+}
+
 /// The targeted passable tiles summon a new instance of species.
 fn axiom_function_summon_creature(
     mut summon: EventWriter<SummonCreature>,
@@ -374,6 +430,26 @@ fn axiom_function_repression_damage(
         }
     } else {
         panic!()
+    }
+}
+
+/// Teleport the caster to one random empty available target, if it exists.
+fn axiom_function_random_caster_teleport(
+    map: Res<Map>,
+    spell_stack: Res<SpellStack>,
+    mut teleport: EventWriter<TeleportEntity>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let mut rng = thread_rng();
+    let available = synapse_data
+        .targets
+        .iter()
+        .filter(|tile| map.is_passable(tile.x, tile.y));
+    if let Some(destination) = available.choose(&mut rng) {
+        teleport.send(TeleportEntity {
+            destination: *destination,
+            entity: synapse_data.caster,
+        });
     }
 }
 
@@ -451,8 +527,9 @@ fn axiom_mutator_loop_back(mut spell_stack: ResMut<SpellStack>) {
     if let Axiom::LoopBack { steps } = synapse_data.axioms[synapse_data.step] {
         // Remove the LoopBack.
         synapse_data.axioms.remove(synapse_data.step);
-        // Rewind back n steps, + 1 because the cleanup will add one step by default.
-        synapse_data.step = synapse_data.step.saturating_sub(steps + 1);
+        // Rewind back n steps. Prevent the cleanup from adding one step by default.
+        synapse_data.step = synapse_data.step.saturating_sub(steps);
+        synapse_data.synapse_flags.insert(SynapseFlag::NoStep);
     } else {
         panic!()
     }
@@ -566,6 +643,9 @@ impl SynapseData {
 pub enum SynapseFlag {
     /// Delete this synapse and abandon all future Axioms.
     Terminate,
+    /// Do not advance the step counter. Only runs once, is deleted instead of incrementing
+    /// the step counter.
+    NoStep,
 }
 
 pub fn cast_new_spell(
@@ -613,8 +693,12 @@ pub fn process_axiom(
 fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
     // Get the currently executed spell, removing it temporarily.
     let mut synapse_data = spell_stack.spells.pop().unwrap();
-    // Step forwards in the axiom queue.
-    synapse_data.step += 1;
+    // Step forwards in the axiom queue, if it is allowed.
+    if synapse_data.synapse_flags.contains(&SynapseFlag::NoStep) {
+        synapse_data.synapse_flags.remove(&SynapseFlag::NoStep);
+    } else {
+        synapse_data.step += 1;
+    }
     // If the spell is finished, do not push it back.
     // The Terminate flag also prevents further execution.
     if synapse_data.axioms.get(synapse_data.step).is_some()
