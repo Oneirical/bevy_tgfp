@@ -449,6 +449,8 @@ fn register_creatures(
 
 The most unique part about this new system is the ̀`Added` filter, which fetches only entities who have newly received the `Position` component and not been handled by this system yet. Right now, it means all newly created creatures will be processed by this system once, and then ignored afterwards.
 
+Note! This is not the case here, but running `commands.entity(entity).insert(Position::new(5, 5))` on a creature that already has a `Position` component will *overwrite* the current `Position` with the new value, and this will *not* count as an addition for the purpose of `Added`. 
+
 Register it.
 
 ```rust

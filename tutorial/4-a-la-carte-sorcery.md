@@ -1,3 +1,11 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 4. À la Carte Sorcery"
+date = 2024-10-05
+authors = ["Julien Robert"]
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
+
 With our only unique skill of note being moving around, it's hard to feel emotionally invested in these poor critters running in circles forever in an unbreakable cage. An inevitable component of fantasy gaming is required: magic.
 
 Now, with the way the system is currently set up, "pressing this button to dash forwards 4 spaces" would be extremely easy. We can do better - a system which would normally be painful to implement, but which takes advantage of Rust's pattern matching and enums, as well as Bevy's system ordering... Enter - **Spell Crafting**.
@@ -497,7 +505,8 @@ And there's just one last thing I'd like to change for now: knocking down the li
 
 Try again. `cargo run`. Pressing the space bar will now allow you to escape your sticky little friend!
 
-// TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/4-a-la-carte-sorcery/egodash.gif", alt="The player getting chased by the Hunter, until the player dashes out of the way and strikes the wall.",
+         position="center", style="border-radius: 8px;") }}
 
 # Intermediate Wizardry 201 
 
@@ -620,3 +629,6 @@ And just like that, with only 1 new one-shot-system (which was very similar to o
 ```
 
 `cargo run`. Not only can you teach your sticky companion some manners, you can even break the walls of the cage, and escape into the abyss beyond.
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/4-a-la-carte-sorcery/beamdash.gif", alt="The player getting chased by the Hunter, who gets repelled by a burst of knockback. Then, the player knocks a wall back and escapes the cage.",
+         position="center", style="border-radius: 8px;") }}
