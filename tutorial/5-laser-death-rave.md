@@ -1,65 +1,6 @@
-use bevy::prelude::*;
 
-use crate::{creature::Player, map::Position};
 
-pub struct GraphicsPlugin;
-
-impl Plugin for GraphicsPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<SpriteSheetAtlas>();
-        app.add_event::<PlaceMagicVfx>();
-        app.insert_resource(Msaa::Off);
-        app.add_systems(Startup, setup_camera);
-        app.add_systems(Update, adjust_transforms);
-        app.add_systems(Update, place_magic_effects);
-        app.add_systems(Update, decay_magic_effects);
-    }
-}
-
-#[derive(Resource)]
-pub struct SpriteSheetAtlas {
-    // Note the pub!
-    pub handle: Handle<TextureAtlasLayout>,
-}
-
-impl FromWorld for SpriteSheetAtlas {
-    fn from_world(world: &mut World) -> Self {
-        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 100, 2, None, None);
-        let mut texture_atlases = world
-            .get_resource_mut::<Assets<TextureAtlasLayout>>()
-            .unwrap();
-        Self {
-            handle: texture_atlases.add(layout),
-        }
-    }
-}
-
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle {
-        transform: Transform::from_xyz(0., 0., 0.),
-        ..default()
-    });
-}
-
-/// Each frame, adjust every entity's display location to match
-/// their position on the grid, and make the camera follow the player.
-fn adjust_transforms(
-    mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
-    mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
-) {
-    for (pos, mut trans, is_player) in creatures.iter_mut() {
-        // Multiplied by the graphical size of a tile, which is 64x64.
-        trans.translation.x = pos.x as f32 * 64.;
-        trans.translation.y = pos.y as f32 * 64.;
-        if is_player {
-            // The camera follows the player.
-            let mut camera_trans = camera.get_single_mut().unwrap();
-            (camera_trans.translation.x, camera_trans.translation.y) =
-                (trans.translation.x, trans.translation.y);
-        }
-    }
-}
-
+```rust
 // graphics.rs
 #[derive(Bundle)]
 pub struct MagicEffect {
@@ -124,7 +65,9 @@ pub fn get_effect_sprite(effect: &EffectType) -> usize {
         EffectType::XCross => 1,
     }
 }
+```
 
+```rust
 // graphics.rs
 pub fn place_magic_effects(
     mut events: EventReader<PlaceMagicVfx>,
@@ -155,9 +98,10 @@ pub fn place_magic_effects(
                         }
                         // Otherwise, effects gradually get increased appear timers depending on
                         // how far back they are in their queue.
-                        EffectSequence::Sequential { duration } => {
-                            Timer::from_seconds(i as f32 * duration + event.appear, TimerMode::Once)
-                        }
+                        EffectSequence::Sequential { duration } => Timer::from_seconds(
+                            i as f32 * duration + event.appear,
+                            TimerMode::Once,
+                        ),
                     },
                     decay: Timer::from_seconds(event.decay, TimerMode::Once),
                 },
@@ -165,7 +109,9 @@ pub fn place_magic_effects(
         }
     }
 }
+```
 
+```rust
 pub fn decay_magic_effects(
     mut commands: Commands,
     mut magic_vfx: Query<(Entity, &mut Visibility, &mut MagicVfx, &mut Sprite)>,
@@ -191,3 +137,87 @@ pub fn decay_magic_effects(
         }
     }
 }
+```
+
+```rust
+/// Target the caster's tile.
+fn axiom_form_ego(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>, // NEW!
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    // Get the currently executed spell.
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    // Get the caster's position.
+    let caster_position = *position.get(synapse_data.caster).unwrap();
+
+    // NEW!
+    // Place the visual effect.
+    magic_vfx.send(PlaceMagicVfx {
+        targets: vec![caster_position],
+        sequence: EffectSequence::Sequential { duration: 0.04 },
+        effect: EffectType::RedBlast,
+        decay: 0.5,
+        appear: 0.,
+    });
+    // End NEW.
+
+    // Add that caster's position to the targets.
+    synapse_data.targets.push(caster_position);
+}
+```
+
+```rust
+/// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
+/// including the first solid tile encountered, which stops the beam.
+fn axiom_form_momentum_beam(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>, // NEW!
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+    position_and_momentum: Query<(&Position, &OrdDir)>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let (caster_position, caster_momentum) =
+        position_and_momentum.get(synapse_data.caster).unwrap();
+    // Start the beam where the caster is standing.
+    // The beam travels in the direction of the caster's last move.
+    let (off_x, off_y) = caster_momentum.as_offset();
+    let mut output = linear_beam(*caster_position, 10, off_x, off_y, &map);
+
+    // NEW!
+    // Add some visual beam effects.
+    magic_vfx.send(PlaceMagicVfx {
+        targets: output.clone(),
+        sequence: EffectSequence::Sequential { duration: 0.04 },
+        effect: match caster_momentum {
+            OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
+            OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
+        },
+        decay: 0.5,
+        appear: 0.,
+    });
+    // End NEW.
+    
+    // Add these tiles to `targets`.
+    synapse_data.targets.append(&mut output);
+}
+```
+
+```rust
+/// Newly spawned creatures earn their place in the HashMap.
+fn register_creatures(
+    mut map: ResMut<Map>,
+    // Any entity that has a Position that just got added to it -
+    // currently only possible as a result of having just been spawned in.
+
+    // CHANGED - Added Without<MagicVfx>
+    displaced_creatures: Query<(&Position, Entity), (Added<Position>, Without<MagicVfx>)>,
+) {
+    for (position, entity) in displaced_creatures.iter() {
+        // Insert the new creature in the Map. Position implements Copy,
+        // so it can be dereferenced (*), but `.clone()` would have been
+        // fine too.
+        map.creatures.insert(*position, entity);
+    }
+}
+```
