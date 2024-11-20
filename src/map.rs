@@ -15,7 +15,6 @@ impl Plugin for MapPlugin {
         });
         app.add_systems(Startup, spawn_player);
         app.add_systems(Startup, spawn_cage);
-        app.add_systems(Update, register_creatures);
     }
 }
 
@@ -99,7 +98,7 @@ impl Map {
 }
 
 /// Newly spawned creatures earn their place in the HashMap.
-fn register_creatures(
+pub fn register_creatures(
     mut map: ResMut<Map>,
     // Any entity that has a Position that just got added to it -
     // currently only possible as a result of having just been spawned in.

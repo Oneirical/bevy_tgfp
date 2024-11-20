@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{Hunt, Player},
+    graphics::SlideAnimation,
     map::{Map, Position},
     OrdDir,
 };
@@ -12,8 +13,6 @@ impl Plugin for EventPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<PlayerStep>();
         app.add_event::<TeleportEntity>();
-        app.add_systems(Update, player_step);
-        app.add_systems(Update, teleport_entity);
     }
 }
 
@@ -22,7 +21,7 @@ pub struct PlayerStep {
     pub direction: OrdDir,
 }
 
-fn player_step(
+pub fn player_step(
     mut events: EventReader<PlayerStep>,
     mut teleporter: EventWriter<TeleportEntity>,
     mut player: Query<(Entity, &Position, &mut OrdDir), With<Player>>,
@@ -70,10 +69,11 @@ impl TeleportEntity {
     }
 }
 
-fn teleport_entity(
+pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
     mut creature: Query<&mut Position>,
     mut map: ResMut<Map>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
         let mut creature_position = creature
@@ -86,6 +86,8 @@ fn teleport_entity(
             map.move_creature(*creature_position, event.destination);
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
+            // Also, animate this creature, making its teleport action visible on the screen.
+            commands.entity(event.entity).insert(SlideAnimation);
         } else {
             // Nothing here just yet, but this is where collisions between creatures
             // will be handled.

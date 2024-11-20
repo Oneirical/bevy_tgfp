@@ -16,8 +16,6 @@ impl Plugin for SpellPlugin {
         app.add_event::<CastSpell>();
         app.init_resource::<SpellStack>();
         app.init_resource::<AxiomLibrary>();
-        app.add_systems(Update, cast_new_spell);
-        app.add_systems(Update, process_axiom);
     }
 }
 

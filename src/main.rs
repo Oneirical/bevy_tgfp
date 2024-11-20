@@ -3,25 +3,37 @@ mod events;
 mod graphics;
 mod input;
 mod map;
+mod sets;
 mod spells;
 
-use bevy::prelude::*;
+use bevy::{
+    ecs::schedule::{LogLevel, ScheduleBuildSettings},
+    prelude::*,
+};
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use input::InputPlugin;
 use map::MapPlugin;
+use sets::SetsPlugin;
 use spells::SpellPlugin;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins((
+            SetsPlugin,
             SpellPlugin,
             EventPlugin,
             GraphicsPlugin,
             MapPlugin,
             InputPlugin,
         ))
+        .edit_schedule(Update, |schedule| {
+            schedule.set_build_settings(ScheduleBuildSettings {
+                ambiguity_detection: LogLevel::Warn,
+                ..default()
+            });
+        })
         .run();
 }
 

@@ -10,9 +10,6 @@ impl Plugin for GraphicsPlugin {
         app.add_event::<PlaceMagicVfx>();
         app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
-        app.add_systems(Update, adjust_transforms);
-        app.add_systems(Update, place_magic_effects);
-        app.add_systems(Update, decay_magic_effects);
     }
 }
 
@@ -41,16 +38,47 @@ fn setup_camera(mut commands: Commands) {
     });
 }
 
+#[derive(Component)]
+pub struct SlideAnimation;
+
 /// Each frame, adjust every entity's display location to match
 /// their position on the grid, and make the camera follow the player.
-fn adjust_transforms(
-    mut creatures: Query<(&Position, &mut Transform, Has<Player>)>,
+pub fn adjust_transforms(
+    mut creatures: Query<(
+        Entity,
+        &Position,
+        &mut Transform,
+        Has<SlideAnimation>,
+        Has<Player>,
+    )>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
+    time: Res<Time>,
+    mut commands: Commands,
 ) {
-    for (pos, mut trans, is_player) in creatures.iter_mut() {
-        // Multiplied by the graphical size of a tile, which is 64x64.
-        trans.translation.x = pos.x as f32 * 64.;
-        trans.translation.y = pos.y as f32 * 64.;
+    for (entity, pos, mut trans, is_animated, is_player) in creatures.iter_mut() {
+        // If this creature is affected by an animation...
+        if is_animated {
+            // The sprite approaches its destination.
+            let current_translation = trans.translation;
+            let target_translation = Vec3::new(pos.x as f32 * 64., pos.y as f32 * 64., 0.);
+            // The creature is more than 0.5 pixels away from its destination - smooth animation.
+            if ((target_translation.x - current_translation.x).abs()
+                + (target_translation.y - current_translation.y).abs())
+                > 0.5
+            {
+                trans.translation = trans
+                    .translation
+                    .lerp(target_translation, 10. * time.delta_seconds());
+            // Otherwise, the animation is over - clip the creature onto the grid.
+            } else {
+                commands.entity(entity).remove::<SlideAnimation>();
+            }
+        } else {
+            // For creatures with no animation.
+            // Multiplied by the graphical size of a tile, which is 64x64.
+            trans.translation.x = pos.x as f32 * 64.;
+            trans.translation.y = pos.y as f32 * 64.;
+        }
         if is_player {
             // The camera follows the player.
             let mut camera_trans = camera.get_single_mut().unwrap();
@@ -173,7 +201,7 @@ pub fn decay_magic_effects(
 ) {
     for (vfx_entity, mut vfx_vis, mut vfx_timers, mut vfx_sprite) in magic_vfx.iter_mut() {
         // Effects that have completed their appear timer and are now visible, decay.
-        if matches!(*vfx_vis, Visibility::Visible) {
+        if matches!(*vfx_vis, Visibility::Inherited) {
             vfx_timers.decay.tick(time.delta());
             // Their alpha (transparency) slowly loses opacity as they decay.
             vfx_sprite
@@ -186,8 +214,20 @@ pub fn decay_magic_effects(
         } else {
             vfx_timers.appear.tick(time.delta());
             if vfx_timers.appear.finished() {
-                *vfx_vis = Visibility::Visible;
+                *vfx_vis = Visibility::Inherited;
             }
         }
     }
+}
+
+pub fn all_animations_finished(
+    magic_vfx: Query<&Visibility, With<MagicVfx>>,
+    slide_animation: Query<&SlideAnimation>,
+) -> bool {
+    for vfx in magic_vfx.iter() {
+        if vfx == Visibility::Hidden {
+            return false;
+        }
+    }
+    slide_animation.iter().len() == 0
 }
