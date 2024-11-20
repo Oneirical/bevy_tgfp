@@ -7,16 +7,8 @@ use crate::{
     OrdDir,
 };
 
-pub struct InputPlugin;
-
-impl Plugin for InputPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_input);
-    }
-}
-
 /// Each frame, if a button is pressed, move the player 1 tile.
-fn keyboard_input(
+pub fn keyboard_input(
     player: Query<Entity, With<Player>>,
     mut spell: EventWriter<CastSpell>,
     mut events: EventWriter<PlayerStep>,

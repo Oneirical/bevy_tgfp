@@ -5,6 +5,7 @@ use crate::{
     graphics::{
         adjust_transforms, all_animations_finished, decay_magic_effects, place_magic_effects,
     },
+    input::keyboard_input,
     map::register_creatures,
     spells::{cast_new_spell, process_axiom},
 };
@@ -15,7 +16,8 @@ impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            ((player_step, cast_new_spell, process_axiom).chain()).in_set(ActionPhase),
+            ((keyboard_input, player_step, cast_new_spell, process_axiom).chain())
+                .in_set(ActionPhase),
         );
         app.add_systems(
             Update,
@@ -23,7 +25,7 @@ impl Plugin for SetsPlugin {
         );
         app.add_systems(
             Update,
-            ((adjust_transforms, place_magic_effects, decay_magic_effects).chain())
+            ((place_magic_effects, adjust_transforms, decay_magic_effects).chain())
                 .in_set(AnimationPhase),
         );
         app.configure_sets(

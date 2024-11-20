@@ -12,7 +12,6 @@ use bevy::{
 };
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
-use input::InputPlugin;
 use map::MapPlugin;
 use sets::SetsPlugin;
 use spells::SpellPlugin;
@@ -26,7 +25,6 @@ fn main() {
             EventPlugin,
             GraphicsPlugin,
             MapPlugin,
-            InputPlugin,
         ))
         .edit_schedule(Update, |schedule| {
             schedule.set_build_settings(ScheduleBuildSettings {

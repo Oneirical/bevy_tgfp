@@ -1,4 +1,16 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 5. Laser Sumo Rave"
+date = 2024-11-19
+authors = ["Julien Robert"]
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
 
+Magic is nothing without the *sparkles*! The *artifice*! We need laser beams and confetti.
+
+# Visual Effects
+
+Let us start with the preliminary `Bundle`, `Event` and other supporting structs and enums. Whenever this event will be triggered, effects of a certain colour and sprite will be placed on all selected tiles, and will gradually decay with time.
 
 ```rust
 // graphics.rs
@@ -34,7 +46,7 @@ pub enum EffectSequence {
     /// All effects appear at the same time.
     Simultaneous,
     /// Effects appear one at a time, in a queue.
-    /// `duration` is how long it takes to unroll the entire queue.
+    /// `duration` is how long it takes to move from one effect to the next.
     Sequential { duration: f32 },
 }
 
@@ -66,6 +78,9 @@ pub fn get_effect_sprite(effect: &EffectType) -> usize {
     }
 }
 ```
+
+There are only two systems to make, now - one to place the effects, and one to ensure they decay appropriately.
+Each effect initially has its `Visibility` set to `Hidden` - if the effect is the tip of a laser beam, we want it to be displayed *after* the start of the laser beam, as to create a "trailing" effect.
 
 ```rust
 // graphics.rs
@@ -111,6 +126,8 @@ pub fn place_magic_effects(
 }
 ```
 
+Then, effects appear one by one (if sequential) or all at once (if simultaneous), and decay into 100% transparency after a delay preset by their `decay` timers.
+
 ```rust
 // graphics.rs
 pub fn decay_magic_effects(
@@ -139,6 +156,8 @@ pub fn decay_magic_effects(
     }
 }
 ```
+
+All we need now is to properly place these effects as a result of casting spells.
 
 ```rust
 // spells.rs
@@ -206,6 +225,8 @@ fn axiom_form_momentum_beam(
 }
 ```
 
+If you `cargo run` now, you'll run into an amusing bug - the laser beams create walls. This is because `register_creatures` cannot make the difference between a creature and a magic effect - they both have the `Position` component! Let us filter them out.
+
 ```rust
 // map.rs
 /// Newly spawned creatures earn their place in the HashMap.
@@ -226,7 +247,16 @@ fn register_creatures(
 }
 ```
 
-###
+All done! `cargo run`, and enjoy the fireworks.
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/5-laser-sumo-rave/beams.gif", alt="The player lasering the wall, and cyan blue beam effects leaving a trail as they do so.",
+         position="center", style="border-radius: 8px;") }}
+
+# Motion Animations
+
+All fun and good, but the instant-teleports don't fit in with all this aesthetic superiority we have just implemented. Let us fix that.
+
+Whenever a creature teleports, it will instead interpolate its `Transform` `translation` from its origin to its destination. To do so, we'll need to rewrite `adjust_transforms`.
 
 ```rust
 // graphics.rs
@@ -284,6 +314,8 @@ pub fn adjust_transforms(
 }
 ```
 
+Great, now, any creature with the new `SlideAnimatioǹ` component will gracefully make its way to its destination. Let us add that component each time a creature teleports.
+
 ```rust
 // events.rs
 fn teleport_entity(
@@ -311,7 +343,8 @@ fn teleport_entity(
 
 `cargo run`, and your two caged creatures *may* have developed a little bit of sliding grace, as shown below.
 
-// TODO GIF
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/5-laser-sumo-rave/slide.gif", alt="The player lasering the wall, and the wall sliding smoothly instead of sharply teleporting.",
+         position="center", style="border-radius: 8px;") }}
 
 Wait... why "may"? Indeed, should you restart the game multiple times, you might notice that it *sometimes* works, and *sometimes* doesn't.
 
@@ -319,9 +352,9 @@ Oh heavens, the worse type of bug - the non-deterministic error! How will we eve
 
 No. We simply have not **scheduled our systems**.
 
-###
+# System Scheduling
 
-Marking systems as `Update` only means they trigger every tick. In which *order* they trigger, however, that's fully up to chance!
+Marking systems as `Update` only means they trigger every tick. In which *order* they trigger, however, that's fully up to chance! This causes a dizzying amount of non-deterministic bugs.
 
 To prevent this, we must tell Bevy in which order all our events and animations are handled. As a starting point, let us diagnose just how bad it has gotten.
 
@@ -377,7 +410,8 @@ impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            ((player_step, cast_new_spell, process_axiom).chain()).in_set(ActionPhase),
+            ((keyboard_input, player_step, cast_new_spell, process_axiom).chain())
+                .in_set(ActionPhase),
         );
         app.add_systems(
             Update,
@@ -385,7 +419,7 @@ impl Plugin for SetsPlugin {
         );
         app.add_systems(
             Update,
-            ((adjust_transforms, place_magic_effects, decay_magic_effects).chain())
+            ((place_magic_effects, adjust_transforms, decay_magic_effects).chain())
                 .in_set(AnimationPhase),
         );
         app.configure_sets(
@@ -408,6 +442,13 @@ struct ResolutionPhase;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 struct AnimationPhase;
 ```
+
+`chaiǹ` effectively means the systems run one after the other. First, I place everything related to making choices and casting spells into `ActionPhase`, then everything related to gameplay actions in `ResolutionPhase`, and finally put all the visuals and animations in `AnimationPhase`. The ordering was not chosen at random:
+
+- `decay_magic_effects` goes after `adjust_transforms̀`, so the magical effects can snap to their tile position before starting to decay.
+- `register_creatures` goes before `teleport_entity`, so that moving into the tile of a newly-summoned creature won't succeed due to the creature not having been registered into the `Map` yet.
+
+Add this new `Plugin` to ̀`main.rs`.
 
 ```rust
 // main.rs
@@ -479,11 +520,48 @@ impl Plugin for SpellPlugin {
 ```
 
 ```rust
+// input.rs
+// REMOVE all of the following.
+pub struct InputPlugin;
+
+impl Plugin for InputPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, keyboard_input);
+    }
+}
+```
+
+```rust
+// main.rs
+use events::EventPlugin;
+use graphics::GraphicsPlugin;
+// REMOVED InputPlugin.
+use map::MapPlugin;
+use sets::SetsPlugin;
+use spells::SpellPlugin;
+
+fn main() {
+    App::new()
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins((
+            SetsPlugin,
+            SpellPlugin,
+            EventPlugin,
+            GraphicsPlugin,
+            MapPlugin,
+            // REMOVED InputPlugin.
+        ))
+```
+
+You may have noticed the sneaky run condition `all_animations_finished`, which ensures the player is locked down, their eyes wide open, watching your pretty animations unfold instead of impatiently mashing the keyboard to play out their next turn.
+
+```rust
 // graphics.rs
 pub fn all_animations_finished(
     magic_vfx: Query<&Visibility, With<MagicVfx>>,
     slide_animation: Query<&SlideAnimation>,
 ) -> bool {
+    // Don't wait for all VFX to decay completely, just all of them appearing is enough.
     for vfx in magic_vfx.iter() {
         if vfx == Visibility::Hidden {
             return false;
@@ -492,3 +570,10 @@ pub fn all_animations_finished(
     slide_animation.iter().len() == 0
 }
 ```
+
+I will admit, this is a little annoying when trying to just move around. There will be a way to skip these animations later.
+
+With all that done, `cargo run`! Note that this time around, the beam hits the wall, and *then* the wall is knocked back, all thanks to our system ordering.
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/5-laser-sumo-rave/ordering.gif", alt="The player lasering the wall, and the wall only being knocked back after it has been hit by the beam.",
+         position="center", style="border-radius: 8px;") }}

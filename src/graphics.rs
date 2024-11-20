@@ -121,7 +121,7 @@ pub enum EffectSequence {
     /// All effects appear at the same time.
     Simultaneous,
     /// Effects appear one at a time, in a queue.
-    /// `duration` is how long it takes to unroll the entire queue.
+    /// `duration` is how long it takes to move from one effect to the next.
     Sequential { duration: f32 },
 }
 
@@ -224,6 +224,7 @@ pub fn all_animations_finished(
     magic_vfx: Query<&Visibility, With<MagicVfx>>,
     slide_animation: Query<&SlideAnimation>,
 ) -> bool {
+    // Don't wait for all VFX to decay completely, just all of them appearing is enough.
     for vfx in magic_vfx.iter() {
         if vfx == Visibility::Hidden {
             return false;
