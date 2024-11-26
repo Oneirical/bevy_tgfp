@@ -141,7 +141,7 @@ fn spawn_cage(
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
     let cage = "#########\
-                #H......#\
+                #HHHHHHH#\
                 #.......#\
                 #.......#\
                 #.......#\
