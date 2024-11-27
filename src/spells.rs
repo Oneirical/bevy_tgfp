@@ -39,6 +39,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_momentum_beam),
         );
         axioms.library.insert(
+            discriminant(&Axiom::Touch),
+            world.register_system(axiom_form_touch),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Dash { max_distance: 1 }),
             world.register_system(axiom_function_dash),
         );
@@ -50,7 +54,7 @@ impl FromWorld for AxiomLibrary {
 /// The current spells being executed.
 pub struct SpellStack {
     /// The stack of spells, last in, first out.
-    spells: Vec<SynapseData>,
+    pub spells: Vec<SynapseData>,
     /// A system used to clean up the last spells after each Axiom is processed.
     cleanup_id: SystemId,
 }
@@ -88,6 +92,8 @@ pub enum Axiom {
     /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
+    /// Target the tile adjacent to the caster, towards the caster's last move.
+    Touch,
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
@@ -95,13 +101,13 @@ pub enum Axiom {
 }
 
 /// The tracker of everything which determines how a certain spell will act.
-struct SynapseData {
+pub struct SynapseData {
     /// Where a spell will act.
     targets: Vec<Position>,
     /// How a spell will act.
-    axioms: Vec<Axiom>,
+    pub axioms: Vec<Axiom>,
     /// The nth axiom currently being executed.
-    step: usize,
+    pub step: usize,
     /// Who cast the spell.
     caster: Entity,
 }
@@ -260,6 +266,27 @@ fn axiom_form_momentum_beam(
     synapse_data.targets.append(&mut output);
 }
 
+/// Target the tile adjacent to the caster, towards the caster's last move.
+fn axiom_form_touch(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    position_and_momentum: Query<(&Position, &OrdDir)>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let (caster_position, caster_momentum) =
+        position_and_momentum.get(synapse_data.caster).unwrap();
+    let (off_x, off_y) = caster_momentum.as_offset();
+    let touch = Position::new(caster_position.x + off_x, caster_position.y + off_y);
+    synapse_data.targets.push(touch);
+    magic_vfx.send(PlaceMagicVfx {
+        targets: vec![touch],
+        sequence: EffectSequence::Sequential { duration: 0.04 },
+        effect: EffectType::RedBlast,
+        decay: 0.5,
+        appear: 0.,
+    });
+}
+
 fn linear_beam(
     mut start: Position,
     max_distance: usize,
@@ -292,4 +319,8 @@ fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
     if synapse_data.axioms.get(synapse_data.step).is_some() {
         spell_stack.spells.push(synapse_data);
     }
+}
+
+pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
+    spell_stack.spells.is_empty()
 }

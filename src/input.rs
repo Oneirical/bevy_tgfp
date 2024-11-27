@@ -4,7 +4,7 @@ use crate::{
     creature::Player,
     events::PlayerStep,
     graphics::{MagicVfx, SlideAnimation},
-    spells::{Axiom, CastSpell, Spell},
+    spells::{Axiom, CastSpell, Spell, SpellStack},
     OrdDir,
 };
 
@@ -41,7 +41,6 @@ pub fn accelerate_animations(
         for mut visibility in magic_vfx.iter_mut() {
             *visibility = Visibility::Inherited;
         }
-        dbg!("hai");
         commands.run_system(keyboard_repeat.id);
     }
 }

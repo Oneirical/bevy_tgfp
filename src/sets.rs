@@ -7,7 +7,7 @@ use crate::{
     },
     input::{accelerate_animations, keyboard_input, KeyboardInputId},
     map::register_creatures,
-    spells::{cast_new_spell, process_axiom},
+    spells::{cast_new_spell, process_axiom, spell_stack_is_empty},
 };
 
 pub struct SetsPlugin;
@@ -17,8 +17,14 @@ impl Plugin for SetsPlugin {
         app.init_resource::<KeyboardInputId>();
         app.add_systems(
             Update,
-            ((keyboard_input, player_step, cast_new_spell, process_axiom).chain())
-                .in_set(ActionPhase),
+            ((
+                keyboard_input.run_if(spell_stack_is_empty),
+                player_step,
+                cast_new_spell,
+                process_axiom,
+            )
+                .chain())
+            .in_set(ActionPhase),
         );
         app.add_systems(
             Update,
@@ -27,7 +33,9 @@ impl Plugin for SetsPlugin {
         app.add_systems(
             Update,
             ((
-                accelerate_animations.run_if(not(all_animations_finished)),
+                accelerate_animations
+                    .run_if(not(all_animations_finished))
+                    .run_if(spell_stack_is_empty),
                 place_magic_effects,
                 adjust_transforms,
                 decay_magic_effects,
