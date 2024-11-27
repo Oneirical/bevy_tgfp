@@ -21,6 +21,8 @@ impl FromWorld for KeyboardInputId {
     }
 }
 
+/// If any key is pressed during animations, skip the rest of the animations
+/// and execute that action.
 pub fn accelerate_animations(
     mut commands: Commands,
     input: Res<ButtonInput<KeyCode>>,
@@ -36,9 +38,11 @@ pub fn accelerate_animations(
         KeyCode::KeyD,
     ]) {
         for entity in slide_skippers.iter() {
+            // All sliding creatures snap to their destination.
             commands.entity(entity).remove::<SlideAnimation>();
         }
         for mut visibility in magic_vfx.iter_mut() {
+            // All visual magic effects become visible.
             *visibility = Visibility::Inherited;
         }
         commands.run_system(keyboard_repeat.id);
