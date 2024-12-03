@@ -13,7 +13,7 @@ pub struct SpellPlugin;
 
 impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<CastSpell>();
+        app.init_resource::<Events<CastSpell>>();
         app.init_resource::<SpellStack>();
         app.init_resource::<AxiomLibrary>();
     }
@@ -254,7 +254,7 @@ fn axiom_form_momentum_beam(
     // Add some visual beam effects.
     magic_vfx.send(PlaceMagicVfx {
         targets: output.clone(),
-        sequence: EffectSequence::Sequential { duration: 0.04 },
+        sequence: EffectSequence::Simultaneous,
         effect: match caster_momentum {
             OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
             OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,

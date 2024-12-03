@@ -2,7 +2,7 @@ use bevy::{ecs::system::SystemId, prelude::*};
 
 use crate::{
     creature::Player,
-    events::PlayerStep,
+    events::CreatureStep,
     graphics::{MagicVfx, SlideAnimation},
     spells::{Axiom, CastSpell, Spell, SpellStack},
     OrdDir,
@@ -53,7 +53,7 @@ pub fn accelerate_animations(
 pub fn keyboard_input(
     player: Query<Entity, With<Player>>,
     mut spell: EventWriter<CastSpell>,
-    mut events: EventWriter<PlayerStep>,
+    mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
 ) {
     if input.just_pressed(KeyCode::Space) {
@@ -65,23 +65,27 @@ pub fn keyboard_input(
         });
     }
     if input.just_pressed(KeyCode::KeyW) {
-        events.send(PlayerStep {
+        events.send(CreatureStep {
             direction: OrdDir::Up,
+            entity: player.get_single().unwrap(),
         });
     }
     if input.just_pressed(KeyCode::KeyD) {
-        events.send(PlayerStep {
+        events.send(CreatureStep {
             direction: OrdDir::Right,
+            entity: player.get_single().unwrap(),
         });
     }
     if input.just_pressed(KeyCode::KeyA) {
-        events.send(PlayerStep {
+        events.send(CreatureStep {
             direction: OrdDir::Left,
+            entity: player.get_single().unwrap(),
         });
     }
     if input.just_pressed(KeyCode::KeyS) {
-        events.send(PlayerStep {
+        events.send(CreatureStep {
             direction: OrdDir::Down,
+            entity: player.get_single().unwrap(),
         });
     }
 }

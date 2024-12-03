@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    events::{player_step, teleport_entity},
+    events::{creature_step, end_turn, summon_creature, teleport_entity},
     graphics::{
         adjust_transforms, all_animations_finished, decay_magic_effects, place_magic_effects,
     },
@@ -19,7 +19,7 @@ impl Plugin for SetsPlugin {
             Update,
             ((
                 keyboard_input.run_if(spell_stack_is_empty),
-                player_step,
+                creature_step,
                 cast_new_spell,
                 process_axiom,
             )
@@ -28,7 +28,14 @@ impl Plugin for SetsPlugin {
         );
         app.add_systems(
             Update,
-            ((register_creatures, teleport_entity).chain()).in_set(ResolutionPhase),
+            ((
+                summon_creature,
+                register_creatures,
+                teleport_entity,
+                end_turn,
+            )
+                .chain())
+            .in_set(ResolutionPhase),
         );
         app.add_systems(
             Update,

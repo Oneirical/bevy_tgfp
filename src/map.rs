@@ -1,7 +1,8 @@
 use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
-    creature::{Creature, Hunt, Player},
+    creature::{Creature, Hunt, Player, Species},
+    events::SummonCreature,
     graphics::{MagicVfx, SpriteSheetAtlas},
     OrdDir,
 };
@@ -13,7 +14,6 @@ impl Plugin for MapPlugin {
         app.insert_resource(Map {
             creatures: HashMap::new(),
         });
-        app.add_systems(Startup, spawn_player);
         app.add_systems(Startup, spawn_cage);
     }
 }
@@ -64,26 +64,32 @@ impl Map {
     }
 
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
-    pub fn best_manhattan_move(&self, start: Position, end: Position) -> Option<Position> {
+    pub fn best_manhattan_move(&self, start: Position, end: Position) -> Option<OrdDir> {
         let mut options = [
-            Position::new(start.x, start.y + 1),
-            Position::new(start.x, start.y - 1),
-            Position::new(start.x + 1, start.y),
-            Position::new(start.x - 1, start.y),
+            (OrdDir::Up, Position::new(start.x, start.y + 1)),
+            (OrdDir::Down, Position::new(start.x, start.y - 1)),
+            (OrdDir::Right, Position::new(start.x + 1, start.y)),
+            (OrdDir::Left, Position::new(start.x - 1, start.y)),
         ];
 
         // Sort all candidate tiles by their distance to the `end` destination.
-        options.sort_by(|&a, &b| manhattan_distance(a, end).cmp(&manhattan_distance(b, end)));
+        options.sort_by(|&a, &b| manhattan_distance(a.1, end).cmp(&manhattan_distance(b.1, end)));
 
-        options
+        let final_choice = options
             .iter()
             // Only keep either the destination or unblocked tiles.
-            .filter(|&p| *p == end || self.is_passable(p.x, p.y))
+            .filter(|&p| p.1 == end || self.is_passable(p.1.x, p.1.y))
             // Remove the borrow.
             .copied()
             // Get the tile that manages to close the most distance to the destination.
             // If it exists, that is. Otherwise, this is just a None.
-            .next()
+            .next();
+
+        if let Some(final_direction) = final_choice {
+            Some(final_direction.0)
+        } else {
+            None
+        }
     }
 
     /// Move a pre-existing entity around the Map.
@@ -112,65 +118,24 @@ pub fn register_creatures(
     }
 }
 
-fn spawn_player(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    atlas_layout: Res<SpriteSheetAtlas>,
-) {
-    commands.spawn((
-        Creature {
-            position: Position { x: 4, y: 4 },
-            sprite: Sprite {
-                image: asset_server.load("spritesheet.png"),
-                custom_size: Some(Vec2::new(64., 64.)),
-                texture_atlas: Some(TextureAtlas {
-                    layout: atlas_layout.handle.clone(),
-                    index: 0,
-                }),
-                ..default()
-            },
-            momentum: OrdDir::Up,
-        },
-        Player,
-    ));
-}
-
-fn spawn_cage(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    atlas_layout: Res<SpriteSheetAtlas>,
-) {
+fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let cage = "#########\
                 #HHHHHHH#\
                 #.......#\
                 #.......#\
                 #.......#\
                 #.......#\
-                #.......#\
+                #...@...#\
                 #.......#\
                 #########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
-        let index = match tile_char {
-            '#' => 3,
-            'H' => 4,
+        let species = match tile_char {
+            '#' => Species::Wall,
+            'H' => Species::Hunter,
+            '@' => Species::Player,
             _ => continue,
         };
-        let mut creature = commands.spawn(Creature {
-            position,
-            sprite: Sprite {
-                image: asset_server.load("spritesheet.png"),
-                custom_size: Some(Vec2::new(64., 64.)),
-                texture_atlas: Some(TextureAtlas {
-                    layout: atlas_layout.handle.clone(),
-                    index,
-                }),
-                ..default()
-            },
-            momentum: OrdDir::Up,
-        });
-        if tile_char == 'H' {
-            creature.insert(Hunt);
-        }
+        summon.send(SummonCreature { species, position });
     }
 }

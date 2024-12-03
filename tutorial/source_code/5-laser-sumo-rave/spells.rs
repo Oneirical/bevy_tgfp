@@ -320,7 +320,3 @@ fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
         spell_stack.spells.push(synapse_data);
     }
 }
-
-pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
-    spell_stack.spells.is_empty()
-}
