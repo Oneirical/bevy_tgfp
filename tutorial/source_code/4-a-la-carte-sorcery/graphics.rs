@@ -7,7 +7,6 @@ pub struct GraphicsPlugin;
 impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteSheetAtlas>();
-        app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
         app.add_systems(Update, adjust_transforms);
     }
@@ -32,10 +31,11 @@ impl FromWorld for SpriteSheetAtlas {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle {
-        transform: Transform::from_xyz(0., 0., 0.),
-        ..default()
-    });
+    commands.spawn((
+        Camera2d::default(),
+        Transform::from_xyz(0., 0., 0.),
+        Msaa::Off,
+    ));
 }
 
 /// Each frame, adjust every entity's display location to match

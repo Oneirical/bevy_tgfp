@@ -9,17 +9,15 @@ fn main() {
         .run();
 }
 
+/// Common components relating to spawning a new Creature.
 #[derive(Bundle)]
 struct Creature {
-    sprite: SpriteBundle,
-    atlas: TextureAtlas,
+    sprite: Sprite,
 }
 
+/// The camera, allowing Entities to be seen through the App window.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle {
-        transform: Transform::from_xyz(0., 0., 0.),
-        ..default()
-    });
+    commands.spawn((Camera2d::default(), Transform::from_xyz(0., 0., 0.)));
 }
 
 fn spawn_player(
@@ -28,14 +26,16 @@ fn spawn_player(
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
     commands.spawn(Creature {
-        sprite: SpriteBundle {
-            texture: asset_server.load("spritesheet.png"),
-            transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+        sprite: Sprite {
+            image: asset_server.load("spritesheet.png"),
+            // Custom size, for 64x64 pixel tiles.
+            custom_size: Some(Vec2::new(64., 64.)),
+            // Our atlas.
+            texture_atlas: Some(TextureAtlas {
+                layout: atlas_layout.handle.clone(),
+                index: 0,
+            }),
             ..default()
-        },
-        atlas: TextureAtlas {
-            layout: atlas_layout.handle.clone(),
-            index: 0,
         },
     });
 }

@@ -327,8 +327,7 @@ It will also need to be a crucial part of each `Creature`.
 pub struct Creature {
     pub position: Position,
     pub momentum: OrdDir, // NEW!
-    pub sprite: SpriteBundle,
-    pub atlas: TextureAtlas,
+    pub sprite: Sprite,
 }
 ```
 
@@ -342,9 +341,7 @@ fn spawn_player(
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
             // SNIP
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index: 0,
+                ..default()
             },
             momentum: OrdDir::Up, // NEW!
         },
@@ -360,9 +357,7 @@ fn spawn_cage(
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
             // SNIP
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index,
+                ..default()
             },
             momentum: OrdDir::Up, // NEW!
         });

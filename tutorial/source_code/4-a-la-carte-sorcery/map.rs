@@ -121,14 +121,14 @@ fn spawn_player(
     commands.spawn((
         Creature {
             position: Position { x: 4, y: 4 },
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: 0,
+                }),
                 ..default()
-            },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index: 0,
             },
             momentum: OrdDir::Up,
         },
@@ -159,14 +159,14 @@ fn spawn_cage(
         };
         let mut creature = commands.spawn(Creature {
             position,
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index,
+                }),
                 ..default()
-            },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index,
             },
             momentum: OrdDir::Up,
         });

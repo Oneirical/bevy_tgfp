@@ -19,8 +19,8 @@ pub struct MagicEffect {
     /// The tile position of this visual effect.
     pub position: Position,
     /// The sprite representing this visual effect.
-    pub sprite: SpriteBundle,
-    pub atlas: TextureAtlas,
+    pub sprite: Sprite,
+    pub visibility: Visibility,
     /// The timers tracking when the effect appears, and how
     /// long it takes to decay.
     pub vfx: MagicVfx,
@@ -95,16 +95,16 @@ pub fn place_magic_effects(
             // Place effects on all positions from the event.
             commands.spawn(MagicEffect {
                 position: *target,
-                sprite: SpriteBundle {
-                    texture: asset_server.load("spritesheet.png"),
-                    transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
-                    visibility: Visibility::Hidden,
+                sprite: Sprite {
+                    image: asset_server.load("spritesheet.png"),
+                    custom_size: Some(Vec2::new(64., 64.)),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: get_effect_sprite(&event.effect),
+                    }),
                     ..default()
                 },
-                atlas: TextureAtlas {
-                    layout: atlas_layout.handle.clone(),
-                    index: get_effect_sprite(&event.effect),
-                },
+                visibility: Visibility::Hidden,
                 vfx: MagicVfx {
                     appear: match event.sequence {
                         // If simultaneous, everything appears at the same time.
@@ -291,7 +291,7 @@ pub fn adjust_transforms(
             {
                 trans.translation = trans
                     .translation
-                    .lerp(target_translation, 10. * time.delta_seconds());
+                    .lerp(target_translation, 10. * time.delta_secs());
             // Otherwise, the animation is over - clip the creature onto the grid.
             } else {
                 commands.entity(entity).remove::<SlideAnimation>();
@@ -475,7 +475,6 @@ impl Plugin for GraphicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SpriteSheetAtlas>();
         app.add_event::<PlaceMagicVfx>();
-        app.insert_resource(Msaa::Off);
         app.add_systems(Startup, setup_camera);
         // REMOVED Update systems.
     }

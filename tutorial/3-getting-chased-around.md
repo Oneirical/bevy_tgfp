@@ -54,10 +54,10 @@ impl FromWorld for SpriteSheetAtlas {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle {
-        transform: Transform::from_xyz(0., 0., 0.),
-        ..default()
-    });
+    commands.spawn((
+        Camera2d::default(),
+        Transform::from_xyz(0., 0., 0.),
+    ));
 }
 
 /// Each frame, adjust every entity's display location to match
@@ -153,13 +153,12 @@ This can happen when working with a 2D spritesheet in Bevy. To fix it, disable M
 
 ```rust
 // graphics.rs
-impl Plugin for GraphicsPlugin {
-    fn build(&self, app: &mut App) {
-        app.init_resource::<SpriteSheetAtlas>();
-        app.insert_resource(Msaa::Off); // NEW!
-        app.add_systems(Startup, setup_camera);
-        app.add_systems(Update, adjust_transforms);
-    }
+fn setup_camera(mut commands: Commands) {
+    commands.spawn((
+        Camera2d::default(),
+        Transform::from_xyz(0., 0., 0.),
+        Msaa::Off, // NEW!
+    ));
 }
 ```
 
@@ -519,14 +518,14 @@ pub struct Hunt;
 // map.rs, spawn_cage
 let mut creature = commands.spawn(Creature { // CHANGED - note the variable assignment
     position,
-    sprite: SpriteBundle {
-        texture: asset_server.load("spritesheet.png"),
-        transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+    sprite: Sprite {
+        image: asset_server.load("spritesheet.png"),
+        custom_size: Some(Vec2::new(64., 64.)),
+        texture_atlas: Some(TextureAtlas {
+            layout: atlas_layout.handle.clone(),
+            index,
+        }),
         ..default()
-    },
-    atlas: TextureAtlas {
-        layout: atlas_layout.handle.clone(),
-        index,
     },
 });
 if tile_char == 'H' {

@@ -6,8 +6,7 @@ use crate::{map::Position, OrdDir};
 pub struct Creature {
     pub position: Position,
     pub momentum: OrdDir,
-    pub sprite: SpriteBundle,
-    pub atlas: TextureAtlas,
+    pub sprite: Sprite,
 }
 
 /// Marker for the player

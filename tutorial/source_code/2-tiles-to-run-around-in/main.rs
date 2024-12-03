@@ -43,8 +43,7 @@ impl Position {
 #[derive(Bundle)]
 struct Creature {
     position: Position,
-    sprite: SpriteBundle,
-    atlas: TextureAtlas,
+    sprite: Sprite,
 }
 
 fn setup_camera(mut commands: Commands) {
@@ -62,14 +61,14 @@ fn spawn_player(
     commands.spawn((
         Creature {
             position: Position { x: 4, y: 4 },
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: 0,
+                }),
                 ..default()
-            },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index: 0,
             },
         },
         Player,
@@ -117,14 +116,14 @@ fn spawn_cage(
         };
         commands.spawn(Creature {
             position,
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index,
+                }),
                 ..default()
-            },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index,
             },
         });
     }

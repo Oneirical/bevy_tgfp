@@ -39,8 +39,7 @@ Not only do `Creature`s have a visual apperance, they also have a place where th
 #[derive(Bundle)]
 pub struct Creature {
     pub position: Position, // NEW!
-    pub sprite: SpriteBundle,
-    pub atlas: TextureAtlas,
+    pub sprite: Sprite,
 }
 
 // SNIP
@@ -51,17 +50,18 @@ fn spawn_player(
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
     commands.spawn(Creature {
+        Creature {
             position: Position { x: 4, y: 4 }, // NEW!
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: 0,
+                }),
                 ..default()
             },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index: 0,
-            },
-        }
+        },
     );
 }
 ```
@@ -93,14 +93,14 @@ fn spawn_cage(
         };
         commands.spawn(Creature {
             position,
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index,
+                }),
                 ..default()
-            },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index,
             },
         });
     }
@@ -153,14 +153,14 @@ fn spawn_player(
     commands.spawn(( // CHANGED - Note the added parentheses.
         Creature {
             position: Position { x: 4, y: 4 },
-            sprite: SpriteBundle {
-                texture: asset_server.load("spritesheet.png"),
-                transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: 0,
+                }),
                 ..default()
-            },
-            atlas: TextureAtlas {
-                layout: atlas_layout.handle.clone(),
-                index: 0,
             },
         },
         Player, // NEW!

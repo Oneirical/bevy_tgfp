@@ -79,11 +79,9 @@ In fact, our game will likely be populated by a lot of these Creatures. Let us d
 /// Common components relating to spawning a new Creature.
 #[derive(Bundle)]
 struct Creature {
-    sprite: SpriteBundle,
+    sprite: Sprite,
 }
 ```
-
-A ̀`Bundle` is a "starter pack" to define which Components a certain Entity has.
 
 Right now, a Creature doesn't have much more beyond a `sprite`, which is its graphical representation on screen.
 
@@ -99,11 +97,9 @@ fn spawn_player(
 ) {
     // The spawn command summons a new Entity with the components specified within.
     commands.spawn(Creature {
-        sprite: SpriteBundle {
+        sprite: Sprite {
             // What does the player look like?
-            texture: asset_server.load("otter.png"),
-            // Where is the player located?
-            transform: Transform::from_xyz(0., 0., 0.),
+            image: asset_server.load("otter.png"),
             // Everything else should be default (for example, the player should be Visible)
             ..default()
         },
@@ -154,10 +150,10 @@ In Bevy, spawning entities left and right isn't very interesting if we are incap
 ```rust
 /// The camera, allowing Entities to be seen through the App window.
 fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2dBundle {
-            transform: Transform::from_xyz(0., 0., 0.),
-            ..default()
-    });
+    commands.spawn((
+        Camera2d::default(),
+        Transform::from_xyz(0., 0., 0.),
+    ));
 }
 ```
 
@@ -238,15 +234,7 @@ fn main() {
 }
 ```
 
-Now that we have our Atlas, we need to extend Creature. Not only do they have a sprite (the spritesheet), they also have a select crop of that spritesheet (the Atlas) to represent them:
-
-```rust
-#[derive(Bundle)]
-struct Creature {
-    sprite: SpriteBundle,
-    atlas: TextureAtlas, // NEW!
-}
-```
+Now that we have our Atlas, we need to add it to new Creatures. Not only do they have a sprite (the spritesheet), they also have a select crop of that spritesheet (the Atlas) to represent them:
 
 ```rust
 fn spawn_player(
@@ -254,25 +242,24 @@ fn spawn_player(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>, // NEW!
 ) {
-    commands.spawn(Creature {
-        sprite: SpriteBundle {
-            // CHANGED to spritesheet.png.
-            texture: asset_server.load("spritesheet.png"),
-            // CHANGED to "from_scale" to make the
-            // player character 64x64 for good visibility.
-            transform: Transform::from_scale(Vec3::new(4., 4., 0.)),
-            ..default()
+    commands.spawn(
+        Creature {
+            sprite: Sprite {
+                // CHANGED to spritesheet.png.
+                image: asset_server.load("spritesheet.png"),
+                // NEW! 
+                // Custom size, for 64x64 pixel tiles.
+                custom_size: Some(Vec2::new(64., 64.)),
+                // Our atlas.
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: 0,
+                }),
+                // End NEW.
+                ..default()
+            },
         },
-        // NEW!
-        atlas: TextureAtlas {
-            // The atlas is copied for usage by this Entity.
-            layout: atlas_layout.handle.clone(),
-            // We assign to it the first sprite - writing "2" would pick the third sprite,
-            // and so on.
-            index: 0,
-        },
-        // End NEW.
-    });
+    );
 }
 ```
 
