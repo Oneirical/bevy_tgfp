@@ -29,6 +29,7 @@ pub struct TurnCount {
 pub struct SummonCreature {
     pub position: Position,
     pub species: Species,
+    pub summon_tile: Position,
 }
 
 /// Place a new Creature on the map of Species and at Position.
@@ -44,20 +45,28 @@ pub fn summon_creature(
         if !map.is_passable(event.position.x, event.position.y) {
             continue;
         }
-        let mut new_creature = commands.spawn(Creature {
-            position: event.position,
-            species: event.species,
-            sprite: Sprite {
-                image: asset_server.load("spritesheet.png"),
-                custom_size: Some(Vec2::new(64., 64.)),
-                texture_atlas: Some(TextureAtlas {
-                    layout: atlas_layout.handle.clone(),
-                    index: get_species_sprite(&event.species),
-                }),
-                ..default()
+        let mut new_creature = commands.spawn((
+            Creature {
+                position: event.position,
+                species: event.species,
+                sprite: Sprite {
+                    image: asset_server.load("spritesheet.png"),
+                    custom_size: Some(Vec2::new(64., 64.)),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: get_species_sprite(&event.species),
+                    }),
+                    ..default()
+                },
+                momentum: OrdDir::Up,
             },
-            momentum: OrdDir::Up,
-        });
+            Transform::from_xyz(
+                event.summon_tile.x as f32 * 64.,
+                event.summon_tile.y as f32 * 64.,
+                0.,
+            ),
+        ));
+        new_creature.insert(SlideAnimation);
         // Add any species-specific components.
         match &event.species {
             Species::Player => {
@@ -160,7 +169,7 @@ pub fn end_turn(
         let player_pos = player.get_single().unwrap();
         for (hunter_entity, hunter_pos, hunter_species) in hunters.iter() {
             // Occasionally cast a spell.
-            if turn_count.turns % 1 == 0 {
+            if turn_count.turns % 5 == 0 {
                 match hunter_species {
                     Species::Hunter => {
                         spell.send(CastSpell {

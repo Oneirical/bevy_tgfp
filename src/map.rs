@@ -115,8 +115,8 @@ pub fn register_creatures(
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let cage = "#########\
-                #HHHHHHH#\
                 #.......#\
+                #S......#\
                 #.......#\
                 #.......#\
                 #.......#\
@@ -132,6 +132,10 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             '@' => Species::Player,
             _ => continue,
         };
-        summon.send(SummonCreature { species, position });
+        summon.send(SummonCreature {
+            species,
+            position,
+            summon_tile: Position::new(0, 0),
+        });
     }
 }

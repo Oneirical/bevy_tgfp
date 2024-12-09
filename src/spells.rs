@@ -338,13 +338,16 @@ fn axiom_form_halo(
 fn axiom_function_summon_creature(
     mut summon: EventWriter<SummonCreature>,
     spell_stack: Res<SpellStack>,
+    position: Query<&Position>,
 ) {
     let synapse_data = spell_stack.spells.last().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
     if let Axiom::SummonCreature { species } = synapse_data.axioms[synapse_data.step] {
         for position in &synapse_data.targets {
             summon.send(SummonCreature {
                 species,
                 position: *position,
+                summon_tile: *caster_position,
             });
         }
     } else {
