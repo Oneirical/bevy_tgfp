@@ -2,10 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     events::{creature_step, end_turn, summon_creature, teleport_entity},
-    graphics::{
-        adjust_transforms, all_animations_finished, decay_magic_effects, place_magic_effects,
-    },
-    input::{accelerate_animations, keyboard_input, KeyboardInputId},
+    graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
+    input::keyboard_input,
     map::register_creatures,
     spells::{cast_new_spell, process_axiom, spell_stack_is_empty},
 };
@@ -14,7 +12,6 @@ pub struct SetsPlugin;
 
 impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<KeyboardInputId>();
         app.add_systems(
             Update,
             ((
@@ -39,24 +36,12 @@ impl Plugin for SetsPlugin {
         );
         app.add_systems(
             Update,
-            ((
-                accelerate_animations
-                    .run_if(not(all_animations_finished))
-                    .run_if(spell_stack_is_empty),
-                place_magic_effects,
-                adjust_transforms,
-                decay_magic_effects,
-            )
-                .chain())
-            .in_set(AnimationPhase),
+            ((place_magic_effects, adjust_transforms, decay_magic_effects).chain())
+                .in_set(AnimationPhase),
         );
         app.configure_sets(
             Update,
             (ActionPhase, AnimationPhase, ResolutionPhase).chain(),
-        );
-        app.configure_sets(
-            Update,
-            (ActionPhase, ResolutionPhase).run_if(all_animations_finished),
         );
     }
 }

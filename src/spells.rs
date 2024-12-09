@@ -254,7 +254,7 @@ fn axiom_form_momentum_beam(
     // Add some visual beam effects.
     magic_vfx.send(PlaceMagicVfx {
         targets: output.clone(),
-        sequence: EffectSequence::Simultaneous,
+        sequence: EffectSequence::Sequential { duration: 0.04 },
         effect: match caster_momentum {
             OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
             OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,

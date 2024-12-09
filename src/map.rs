@@ -1,11 +1,6 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::{
-    creature::{Creature, Hunt, Player, Species},
-    events::SummonCreature,
-    graphics::{MagicVfx, SpriteSheetAtlas},
-    OrdDir,
-};
+use crate::{creature::Species, events::SummonCreature, graphics::MagicVfx, OrdDir};
 
 pub struct MapPlugin;
 

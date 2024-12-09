@@ -160,7 +160,7 @@ pub fn end_turn(
         let player_pos = player.get_single().unwrap();
         for (hunter_entity, hunter_pos) in hunters.iter() {
             // Occasionally cast a spell.
-            if turn_count.turns % 1 == 0 {
+            if turn_count.turns % 5 == 0 {
                 spell.send(CastSpell {
                     caster: hunter_entity,
                     spell: Spell {

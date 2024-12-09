@@ -14,7 +14,6 @@ impl Plugin for GraphicsPlugin {
 
 #[derive(Resource)]
 pub struct SpriteSheetAtlas {
-    // Note the pub!
     pub handle: Handle<TextureAtlasLayout>,
 }
 
@@ -218,17 +217,4 @@ pub fn decay_magic_effects(
             }
         }
     }
-}
-
-pub fn all_animations_finished(
-    magic_vfx: Query<&Visibility, With<MagicVfx>>,
-    slide_animation: Query<&SlideAnimation>,
-) -> bool {
-    // Don't wait for all VFX to decay completely, just all of them appearing is enough.
-    for vfx in magic_vfx.iter() {
-        if vfx == Visibility::Hidden {
-            return false;
-        }
-    }
-    slide_animation.iter().len() == 0
 }
