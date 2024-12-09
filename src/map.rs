@@ -128,6 +128,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
         let species = match tile_char {
             '#' => Species::Wall,
             'H' => Species::Hunter,
+            'S' => Species::Spawner,
             '@' => Species::Player,
             _ => continue,
         };

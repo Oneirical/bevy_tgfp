@@ -5,16 +5,15 @@ use crate::{
     graphics::{
         adjust_transforms, all_animations_finished, decay_magic_effects, place_magic_effects,
     },
-    input::{accelerate_animations, keyboard_input, KeyboardInputId},
+    input::keyboard_input,
     map::register_creatures,
-    spells::{cast_new_spell, process_axiom, spell_stack_is_empty},
+    spells::{cast_new_spell, process_axiom},
 };
 
 pub struct SetsPlugin;
 
 impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<KeyboardInputId>();
         app.add_systems(
             Update,
             ((keyboard_input, player_step, cast_new_spell, process_axiom).chain())
@@ -32,10 +31,6 @@ impl Plugin for SetsPlugin {
         app.configure_sets(
             Update,
             (ActionPhase, AnimationPhase, ResolutionPhase).chain(),
-        );
-        app.configure_sets(
-            Update,
-            (ActionPhase, ResolutionPhase).run_if(all_animations_finished),
         );
     }
 }

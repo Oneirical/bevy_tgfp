@@ -63,7 +63,7 @@ pub fn summon_creature(
             Species::Player => {
                 new_creature.insert(Player);
             }
-            Species::Hunter => {
+            Species::Hunter | Species::Spawner => {
                 new_creature.insert(Hunt);
             }
             _ => (),
@@ -152,21 +152,39 @@ pub fn end_turn(
     mut spell: EventWriter<CastSpell>,
     mut turn_count: ResMut<TurnCount>,
     player: Query<&Position, With<Player>>,
-    hunters: Query<(Entity, &Position), (With<Hunt>, Without<Player>)>,
+    hunters: Query<(Entity, &Position, &Species), (With<Hunt>, Without<Player>)>,
     map: Res<Map>,
 ) {
     for _event in events.read() {
         turn_count.turns += 1;
         let player_pos = player.get_single().unwrap();
-        for (hunter_entity, hunter_pos) in hunters.iter() {
+        for (hunter_entity, hunter_pos, hunter_species) in hunters.iter() {
             // Occasionally cast a spell.
-            if turn_count.turns % 5 == 0 {
-                spell.send(CastSpell {
-                    caster: hunter_entity,
-                    spell: Spell {
-                        axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
-                    },
-                });
+            if turn_count.turns % 1 == 0 {
+                match hunter_species {
+                    Species::Hunter => {
+                        spell.send(CastSpell {
+                            caster: hunter_entity,
+                            spell: Spell {
+                                axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
+                            },
+                        });
+                    }
+                    Species::Spawner => {
+                        spell.send(CastSpell {
+                            caster: hunter_entity,
+                            spell: Spell {
+                                axioms: vec![
+                                    Axiom::Halo { radius: 3 },
+                                    Axiom::SummonCreature {
+                                        species: Species::Hunter,
+                                    },
+                                ],
+                            },
+                        });
+                    }
+                    _ => (),
+                }
             }
             // Try to find a tile that gets the hunter closer to the player.
             else if let Some(move_direction) = map.best_manhattan_move(*hunter_pos, *player_pos) {

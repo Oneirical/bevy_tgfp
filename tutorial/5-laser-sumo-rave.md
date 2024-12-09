@@ -431,7 +431,12 @@ impl Plugin for SetsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            ((keyboard_input, player_step, cast_new_spell, process_axiom).chain())
+            ((
+                keyboard_input.run_if(spell_stack_is_empty),
+                creature_step,
+                cast_new_spell,
+                process_axiom,
+            )
                 .in_set(ActionPhase),
         );
         app.add_systems(
@@ -447,10 +452,6 @@ impl Plugin for SetsPlugin {
             Update,
             (ActionPhase, AnimationPhase, ResolutionPhase).chain(),
         );
-        app.configure_sets(
-            Update,
-            (ActionPhase, ResolutionPhase).run_if(all_animations_finished),
-        );
     }
 }
 
@@ -464,10 +465,18 @@ struct ResolutionPhase;
 struct AnimationPhase;
 ```
 
+```rust
+// spells.rs
+pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
+    spell_stack.spells.is_empty()
+}
+```
+
 `chain` effectively means the systems run one after the other. First, I place everything related to making choices and casting spells into `ActionPhase`, then everything related to gameplay actions in `ResolutionPhase`, and finally put all the visuals and animations in `AnimationPhase`. The ordering was not chosen at random:
 
 - `decay_magic_effects` goes after `adjust_transforms`, so the magical effects can snap to their tile position before starting to decay.
 - `register_creatures` goes before `teleport_entity`, so that moving into the tile of a newly-summoned creature won't succeed due to the creature not having been registered into the `Map` yet.
+- `keyboard_input` is disallowed until all spells have finished executing, so the player cannot twitch-reflex their way out of an incoming beam.
 
 Add this new `Plugin` to `main.rs`.
 
@@ -572,26 +581,6 @@ fn main() {
             // REMOVED InputPlugin.
         ))
 ```
-
-You may have noticed the sneaky run condition `all_animations_finished`, which ensures the player is locked down, their eyes wide open, watching your pretty animations unfold instead of impatiently mashing the keyboard to play out their next turn.
-
-```rust
-// graphics.rs
-pub fn all_animations_finished(
-    magic_vfx: Query<&Visibility, With<MagicVfx>>,
-    slide_animation: Query<&SlideAnimation>,
-) -> bool {
-    // Don't wait for all VFX to decay completely, just all of them appearing is enough.
-    for vfx in magic_vfx.iter() {
-        if vfx == Visibility::Hidden {
-            return false;
-        }
-    }
-    slide_animation.iter().len() == 0
-}
-```
-
-I will admit, this is a little annoying when trying to just move around. There will be a way to skip these animations in the next chapter.
 
 With all that done, `cargo run`! Note that this time around, the beam hits the wall, and *then* the wall is knocked back, all thanks to our system ordering.
 

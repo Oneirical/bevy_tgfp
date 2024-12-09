@@ -3,7 +3,8 @@ use std::mem::{discriminant, Discriminant};
 use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
 
 use crate::{
-    events::TeleportEntity,
+    creature::Species,
+    events::{SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
@@ -39,12 +40,22 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_momentum_beam),
         );
         axioms.library.insert(
+            discriminant(&Axiom::Halo { radius: 1 }),
+            world.register_system(axiom_form_halo),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Touch),
             world.register_system(axiom_form_touch),
         );
         axioms.library.insert(
             discriminant(&Axiom::Dash { max_distance: 1 }),
             world.register_system(axiom_function_dash),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::SummonCreature {
+                species: Species::Player,
+            }),
+            world.register_system(axiom_function_summon_creature),
         );
         axioms
     }
@@ -94,10 +105,14 @@ pub enum Axiom {
     MomentumBeam,
     /// Target the tile adjacent to the caster, towards the caster's last move.
     Touch,
+    /// Target a ring of `radius` around the caster.
+    Halo { radius: i32 },
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
     Dash { max_distance: i32 },
+    /// The targeted passable tiles summon a new instance of species.
+    SummonCreature { species: Species },
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -287,6 +302,56 @@ fn axiom_form_touch(
     });
 }
 
+/// Target a ring of `radius` around the caster.
+fn axiom_form_halo(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    if let Axiom::Halo { radius } = synapse_data.axioms[synapse_data.step] {
+        let mut circle = circle_around(caster_position, radius);
+        // Sort by clockwise rotation.
+        circle.sort_by(|a, b| {
+            let angle_a = angle_from_center(caster_position, a);
+            let angle_b = angle_from_center(caster_position, b);
+            angle_a.partial_cmp(&angle_b).unwrap()
+        });
+        // Add some visual halo effects.
+        magic_vfx.send(PlaceMagicVfx {
+            targets: circle.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::GreenBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+        // animation_delay.delay += 0.1;
+        // Add these tiles to `targets`.
+        synapse_data.targets.append(&mut circle);
+    } else {
+        panic!()
+    }
+}
+
+/// The targeted passable tiles summon a new instance of species.
+fn axiom_function_summon_creature(
+    mut summon: EventWriter<SummonCreature>,
+    spell_stack: Res<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    if let Axiom::SummonCreature { species } = synapse_data.axioms[synapse_data.step] {
+        for position in &synapse_data.targets {
+            summon.send(SummonCreature {
+                species,
+                position: *position,
+            });
+        }
+    } else {
+        panic!()
+    }
+}
+
 fn linear_beam(
     mut start: Position,
     max_distance: usize,
@@ -308,6 +373,37 @@ fn linear_beam(
         }
     }
     output
+}
+
+/// Generate the points across the outline of a circle.
+fn circle_around(center: &Position, radius: i32) -> Vec<Position> {
+    let mut circle = Vec::new();
+    for r in 0..=(radius as f32 * (0.5f32).sqrt()).floor() as i32 {
+        let d = (((radius * radius - r * r) as f32).sqrt()).floor() as i32;
+        let adds = [
+            Position::new(center.x - d, center.y + r),
+            Position::new(center.x + d, center.y + r),
+            Position::new(center.x - d, center.y - r),
+            Position::new(center.x + d, center.y - r),
+            Position::new(center.x + r, center.y - d),
+            Position::new(center.x + r, center.y + d),
+            Position::new(center.x - r, center.y - d),
+            Position::new(center.x - r, center.y + d),
+        ];
+        for new_add in adds {
+            if !circle.contains(&new_add) {
+                circle.push(new_add);
+            }
+        }
+    }
+    circle
+}
+
+/// Find the angle of a point on a circle relative to its center.
+fn angle_from_center(center: &Position, point: &Position) -> f64 {
+    let delta_x = point.x - center.x;
+    let delta_y = point.y - center.y;
+    (delta_y as f64).atan2(delta_x as f64)
 }
 
 fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {

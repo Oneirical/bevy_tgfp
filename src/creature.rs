@@ -22,6 +22,7 @@ pub enum Species {
     Player,
     Wall,
     Hunter,
+    Spawner,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -30,5 +31,6 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Player => 0,
         Species::Wall => 3,
         Species::Hunter => 4,
+        Species::Spawner => 5,
     }
 }
