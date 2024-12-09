@@ -225,7 +225,7 @@ fn axiom_form_momentum_beam(
 }
 ```
 
-If you `cargo run` now, you'll run into an amusing bug - the laser beams create walls. This is because `register_creatures` cannot make the difference between a creature and a magic effect - they both have the `Position` component! Let us filter them out.
+If you `cargo run` now, you'll run into an amusing bug - the laser beams create invisible walls. This is because `register_creatures` cannot make the difference between a creature and a magic effect - they both have the `Position` component! It thinks lasers are creatures, and adds them to the `Map`. Let us filter them out.
 
 ```rust
 // map.rs
@@ -245,6 +245,25 @@ fn register_creatures(
         map.creatures.insert(*position, entity);
     }
 }
+```
+
+Don't forget to register.
+
+```rust
+// graphics.rs
+impl Plugin for GraphicsPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SpriteSheetAtlas>();
+        app.add_systems(Startup, setup_camera);
+        app.add_systems(Update, adjust_transforms);
+        // NEW!
+        app.add_systems(Update, place_magic_effects);
+        app.add_systems(Update, decay_magic_effects);
+        app.add_event::<PlaceMagicVfx>();
+        // End NEW.
+    }
+}
+
 ```
 
 All done! `cargo run`, and enjoy the fireworks.
@@ -314,7 +333,9 @@ pub fn adjust_transforms(
 }
 ```
 
-Great, now, any creature with the new `SlideAnimatioǹ` component will gracefully make its way to its destination. Let us add that component each time a creature teleports.
+Creatures have their `translation` interpolate (`lerp`) towards their target translation, until the animation completes and the component responsible for orchestrating this (`SlideAnimation`) is removed.
+
+Great, now, any creature with the new `SlideAnimation` component will gracefully make its way to its destination. Let us add that component each time a creature teleports.
 
 ```rust
 // events.rs
@@ -443,12 +464,12 @@ struct ResolutionPhase;
 struct AnimationPhase;
 ```
 
-`chaiǹ` effectively means the systems run one after the other. First, I place everything related to making choices and casting spells into `ActionPhase`, then everything related to gameplay actions in `ResolutionPhase`, and finally put all the visuals and animations in `AnimationPhase`. The ordering was not chosen at random:
+`chain` effectively means the systems run one after the other. First, I place everything related to making choices and casting spells into `ActionPhase`, then everything related to gameplay actions in `ResolutionPhase`, and finally put all the visuals and animations in `AnimationPhase`. The ordering was not chosen at random:
 
-- `decay_magic_effects` goes after `adjust_transforms̀`, so the magical effects can snap to their tile position before starting to decay.
+- `decay_magic_effects` goes after `adjust_transforms`, so the magical effects can snap to their tile position before starting to decay.
 - `register_creatures` goes before `teleport_entity`, so that moving into the tile of a newly-summoned creature won't succeed due to the creature not having been registered into the `Map` yet.
 
-Add this new `Plugin` to ̀`main.rs`.
+Add this new `Plugin` to `main.rs`.
 
 ```rust
 // main.rs
@@ -570,7 +591,7 @@ pub fn all_animations_finished(
 }
 ```
 
-I will admit, this is a little annoying when trying to just move around. There will be a way to skip these animations later.
+I will admit, this is a little annoying when trying to just move around. There will be a way to skip these animations in the next chapter.
 
 With all that done, `cargo run`! Note that this time around, the beam hits the wall, and *then* the wall is knocked back, all thanks to our system ordering.
 
