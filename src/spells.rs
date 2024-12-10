@@ -346,6 +346,7 @@ fn axiom_function_summon_creature(
             summon.send(SummonCreature {
                 species,
                 position: *position,
+                momentum: OrdDir::Down,
                 summon_tile: *caster_position,
             });
         }

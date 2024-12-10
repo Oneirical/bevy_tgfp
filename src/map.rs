@@ -80,11 +80,8 @@ impl Map {
             // If it exists, that is. Otherwise, this is just a None.
             .next();
 
-        if let Some(final_direction) = final_choice {
-            Some(final_direction.0)
-        } else {
-            None
-        }
+        // Return Some if the direction exists, None otherwise
+        final_choice.map(|final_direction| final_direction.0)
     }
 
     /// Move a pre-existing entity around the Map.
@@ -114,15 +111,15 @@ pub fn register_creatures(
 }
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
-    let cage = "#########\
-                #HHHHHHH#\
-                #HHHHHHH#\
-                #HHHHHHH#\
-                ###HHHHH#\
-                #@#HHHHH#\
-                ###HHHHH#\
-                #HHHHHHH#\
-                #########";
+    let cage = "####V####\
+                #.......#\
+                #.......#\
+                #.......#\
+                <.......>\
+                #@#.....#\
+                ###.....#\
+                #.......#\
+                ####^####";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
         let species = match tile_char {
@@ -130,11 +127,19 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             'H' => Species::Hunter,
             'S' => Species::Spawner,
             '@' => Species::Player,
+            '^' | '>' | '<' | 'V' => Species::Airlock,
             _ => continue,
+        };
+        let momentum = match tile_char {
+            '^' => OrdDir::Up,
+            '>' => OrdDir::Right,
+            '<' => OrdDir::Left,
+            'V' | _ => OrdDir::Down,
         };
         summon.send(SummonCreature {
             species,
             position,
+            momentum,
             summon_tile: Position::new(0, 0),
         });
     }

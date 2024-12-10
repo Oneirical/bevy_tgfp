@@ -2,7 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     events::{
-        creature_step, end_turn, harm_creature, remove_creature, summon_creature, teleport_entity,
+        creature_step, end_turn, harm_creature, open_door, remove_creature, summon_creature,
+        teleport_entity,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -32,6 +33,7 @@ impl Plugin for SetsPlugin {
                 register_creatures,
                 teleport_entity,
                 harm_creature,
+                open_door,
                 remove_creature,
                 end_turn,
             )

@@ -1,8 +1,13 @@
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
 
 use crate::{
     creature::{get_species_sprite, Creature, Health, HealthIndicator, Hunt, Player, Species},
-    graphics::{EffectSequence, EffectType, PlaceMagicVfx, SlideAnimation, SpriteSheetAtlas},
+    graphics::{
+        get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
+        SlideAnimation, SpriteSheetAtlas,
+    },
     map::{Map, Position},
     spells::{Axiom, CastSpell, Spell, SpellStack},
     OrdDir,
@@ -16,6 +21,7 @@ impl Plugin for EventPlugin {
         app.add_event::<EndTurn>();
         app.add_event::<TeleportEntity>();
         app.add_event::<HarmCreature>();
+        app.add_event::<OpenDoor>();
         app.add_event::<RemoveCreature>();
         app.init_resource::<Events<CreatureStep>>();
         app.insert_resource(TurnCount { turns: 0 });
@@ -31,6 +37,7 @@ pub struct TurnCount {
 pub struct SummonCreature {
     pub position: Position,
     pub species: Species,
+    pub momentum: OrdDir,
     pub summon_tile: Position,
 }
 
@@ -60,24 +67,34 @@ pub fn summon_creature(
                     }),
                     ..default()
                 },
-                momentum: OrdDir::Up,
+                momentum: event.momentum,
                 health: {
                     let max_hp = match &event.species {
                         Species::Player => 6,
                         Species::Wall => 10,
                         Species::Hunter => 5,
                         Species::Spawner => 3,
+                        Species::Airlock => 10,
                     };
                     // Start at full health.
                     let hp = max_hp;
                     Health { max_hp, hp }
                 },
             },
-            Transform::from_xyz(
-                event.summon_tile.x as f32 * 64.,
-                event.summon_tile.y as f32 * 64.,
-                0.,
-            ),
+            Transform {
+                translation: Vec3 {
+                    x: event.summon_tile.x as f32 * 64.,
+                    y: event.summon_tile.y as f32 * 64.,
+                    z: 0.,
+                },
+                rotation: Quat::from_rotation_z(match event.momentum {
+                    OrdDir::Down => 0.,
+                    OrdDir::Right => PI / 2.,
+                    OrdDir::Up => PI,
+                    OrdDir::Left => 3. * PI / 2.,
+                }),
+                scale: Vec3::new(1., 1., 1.),
+            },
             SlideAnimation,
         ));
         // Add any species-specific components.
@@ -164,6 +181,8 @@ pub fn teleport_entity(
     mut commands: Commands,
 
     mut harm: EventWriter<HarmCreature>,
+    mut open: EventWriter<OpenDoor>,
+    species: Query<&Species>,
 ) {
     for event in events.read() {
         let mut creature_position = creature
@@ -180,13 +199,23 @@ pub fn teleport_entity(
             commands.entity(event.entity).insert(SlideAnimation);
         } else {
             // A creature collides with another entity.
-            harm.send(HarmCreature {
-                entity: *map
-                    .get_entity_at(event.destination.x, event.destination.y)
-                    .unwrap(),
-                culprit: event.entity,
-                damage: 1,
-            });
+            let collided_with = map
+                .get_entity_at(event.destination.x, event.destination.y)
+                .unwrap();
+            match species.get(*collided_with).unwrap() {
+                Species::Airlock => {
+                    open.send(OpenDoor {
+                        entity: *collided_with,
+                    });
+                }
+                _ => {
+                    harm.send(HarmCreature {
+                        entity: *collided_with,
+                        culprit: event.entity,
+                        damage: 1,
+                    });
+                }
+            }
             continue;
         }
     }
@@ -235,6 +264,68 @@ pub fn harm_creature(
             remove.send(RemoveCreature {
                 entity: event.entity,
             });
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct OpenDoor {
+    entity: Entity,
+}
+
+pub fn open_door(
+    mut events: EventReader<OpenDoor>,
+    mut commands: Commands,
+    // mut remove: EventWriter<RemoveCreature>,
+    mut door: Query<(&mut Visibility, &Position, &OrdDir)>,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    mut map: ResMut<Map>,
+) {
+    for event in events.read() {
+        let (mut visibility, position, orientation) = door.get_mut(event.entity).unwrap();
+        map.creatures.remove(position);
+        *visibility = Visibility::Hidden;
+        let (offset_1, offset_2) = match orientation {
+            OrdDir::Up | OrdDir::Down => (OrdDir::Left.as_offset(), OrdDir::Right.as_offset()),
+            OrdDir::Right | OrdDir::Left => (OrdDir::Down.as_offset(), OrdDir::Up.as_offset()),
+        };
+        for offset in [offset_1, offset_2] {
+            commands.spawn((
+                MagicEffect {
+                    position: Position::new(position.x + offset.0, position.y + offset.1),
+                    sprite: Sprite {
+                        image: asset_server.load("spritesheet.png"),
+                        custom_size: Some(Vec2::new(64., 64.)),
+                        texture_atlas: Some(TextureAtlas {
+                            layout: atlas_layout.handle.clone(),
+                            index: get_effect_sprite(&EffectType::Airlock),
+                        }),
+                        ..default()
+                    },
+                    visibility: Visibility::Inherited,
+                    vfx: MagicVfx {
+                        appear: Timer::from_seconds(0., TimerMode::Once),
+                        decay: Timer::from_seconds(3., TimerMode::Once),
+                    },
+                },
+                SlideAnimation,
+                Transform {
+                    translation: Vec3 {
+                        x: position.x as f32 * 64.,
+                        y: position.y as f32 * 64.,
+                        // It needs to hide under actual tiles, such as walls.
+                        z: -1.,
+                    },
+                    rotation: Quat::from_rotation_z(match orientation {
+                        OrdDir::Down => 0.,
+                        OrdDir::Right => PI / 2.,
+                        OrdDir::Up => PI,
+                        OrdDir::Left => 3. * PI / 2.,
+                    }),
+                    scale: Vec3::new(1., 1., 1.),
+                },
+            ));
         }
     }
 }

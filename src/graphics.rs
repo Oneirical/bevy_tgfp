@@ -30,11 +30,7 @@ impl FromWorld for SpriteSheetAtlas {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn((
-        Camera2d::default(),
-        Transform::from_xyz(0., 0., 0.),
-        Msaa::Off,
-    ));
+    commands.spawn((Camera2d, Transform::from_xyz(0., 0., 0.), Msaa::Off));
 }
 
 #[derive(Component)]
@@ -131,14 +127,15 @@ pub enum EffectType {
     RedBlast,
     GreenBlast,
     XCross,
+    Airlock,
 }
 
 #[derive(Component)]
 pub struct MagicVfx {
     /// How long this effect takes to decay.
-    appear: Timer,
+    pub appear: Timer,
     /// How long this effect takes to appear.
-    decay: Timer,
+    pub decay: Timer,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the effect type.
@@ -149,6 +146,7 @@ pub fn get_effect_sprite(effect: &EffectType) -> usize {
         EffectType::RedBlast => 14,
         EffectType::GreenBlast => 13,
         EffectType::XCross => 1,
+        EffectType::Airlock => 17,
     }
 }
 
