@@ -70,9 +70,9 @@ pub fn summon_creature(
                 momentum: event.momentum,
                 health: {
                     let max_hp = match &event.species {
-                        Species::Player => 6,
+                        Species::Player => 12,
                         Species::Wall => 10,
-                        Species::Hunter => 5,
+                        Species::Hunter => 2,
                         Species::Spawner => 3,
                         Species::Airlock => 10,
                     };
@@ -203,6 +203,7 @@ pub fn teleport_entity(
                 .get_entity_at(event.destination.x, event.destination.y)
                 .unwrap();
             match species.get(*collided_with).unwrap() {
+                Species::Wall => (),
                 Species::Airlock => {
                     open.send(OpenDoor {
                         entity: *collided_with,

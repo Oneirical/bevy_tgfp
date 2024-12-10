@@ -111,17 +111,28 @@ pub fn register_creatures(
 }
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
-    let cage = "####V####\
-                #.......#\
-                #.......#\
-                #.......#\
-                <.......>\
-                #@#.....#\
-                ###.....#\
-                #.......#\
-                ####^####";
+    let cage = "\
+##################\
+#H.H..H.##...HH..#\
+#.#####.##..###..#\
+#...#...##.......#\
+#..H#...><.#####.#\
+#...#...##...H...#\
+#.#####.##..###..#\
+#..H...H##.......#\
+####^########^####\
+####V########V####\
+#.......##H......#\
+#.#####.##.......#\
+#.#H....##..#.#..#\
+#.#.##..><...@...#\
+#.#H....##..#.#..#\
+#.#####.##.......#\
+#.......##......H#\
+##################\
+    ";
     for (idx, tile_char) in cage.char_indices() {
-        let position = Position::new(idx as i32 % 9, idx as i32 / 9);
+        let position = Position::new(idx as i32 % 18, idx as i32 / 18);
         let species = match tile_char {
             '#' => Species::Wall,
             'H' => Species::Hunter,
