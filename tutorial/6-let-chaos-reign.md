@@ -1,3 +1,11 @@
++++
+title = "Bevy Traditional Roguelike Quick-Start - 6. Let Chaos Reign"
+date = 2024-12-10
+authors = ["Julien Robert"]
+[taxonomies]
+tags = ["rust", "bevy", "tutorial"]
++++
+
 # The Summoning Circle
 
 The more prolific programmers among readers may have been frothing at the mouth for quite some time now. Why? Well, `spawn_cage` and `spawn_player` have been sitting there since chapter 2, violating the "Don't Repeat Yourself" principle. Let us cure them of their wrath.
@@ -147,7 +155,7 @@ We'll fix this by bumping this line into the event loop itself, preventing it fr
 
 ```rust
 // events.rs
-fn player_step(
+pub fn player_step(
     mut events: EventReader<PlayerStep>,
     mut teleporter: EventWriter<TeleportEntity>,
     mut player: Query<(Entity, &Position, &mut OrdDir), With<Player>>,
@@ -370,7 +378,7 @@ impl Plugin for EventPlugin {
 }
 ```
 
-If you `cargo run` again, everything will work as planned. You'll notice a slight difference in the way turns are displayed on the screen - hunters visibly move after the player instead of undertaking a simultaneous movement.
+If you `cargo run` again, everything will work as planned.
 
 # Lasers For Everyone
 
@@ -455,3 +463,395 @@ impl Plugin for SpellPlugin {
 ```
 
 If you `cargo run` now, the Hunter will occasionally shoot lasers at you and the surrounding walls!
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/6-let-chaos-reign/laser.gif", alt="The Hunter, now with a knockback laser of its own which shoots at walls, then the player.",
+         position="center", style="border-radius: 8px;") }}
+
+# Magical Barricades
+
+To conclude this chapter, we'll tie in `SummonCreature` with spells that call upon this event on demand!
+
+Before anything else, we'll need to know *who* is summoning *what*, which can be solved by adding a pretty animation for which we already have all necessary components.
+
+```rust
+// events.rs
+
+#[derive(Event)]
+pub struct SummonCreature {
+    pub position: Position,
+    pub species: Species,
+    pub summon_tile: Position, // NEW!
+}
+```
+
+When a creature is summoned, they will now visibly move from their summoner to their assigned tile, giving a feel like they are being "thrown out" by the caster. We'll just need to add `Transform` and `SlideAnimation`:
+
+```rust
+// events.rs
+pub fn summon_creature(/* SNIP */) {
+    // SNIP
+    let mut new_creature = commands.spawn(( // CHANGED - added "("
+        Creature {
+            position: event.position,
+            species: event.species,
+            sprite: Sprite {
+                image: asset_server.load("spritesheet.png"),
+                custom_size: Some(Vec2::new(64., 64.)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: get_species_sprite(&event.species),
+                }),
+                ..default()
+            },
+            momentum: OrdDir::Up,
+        },
+        // NEW!
+        Transform::from_xyz(
+            event.summon_tile.x as f32 * 64.,
+            event.summon_tile.y as f32 * 64.,
+            0.,
+        ),
+        SlideAnimation,
+        // End NEW.
+    )); // CHANGED - added ")"
+
+```
+
+This is a great example of Bevy's signature ECS modularity - once the building blocks of your game are well established, tacking on a few labels is all you need to radically change the behaviour of some Entities. Creatures will start with their sprite visually placed by `Transform`, moving towards their real tile position with `SlideAnimation`.
+
+Fix the fields in `summon_cage`.
+
+```rust
+// map.rs
+fn summon_cage(/* SNIP */) {
+    // SNIP
+    summon.send(SummonCreature {
+        species,
+        position,
+        summon_tile: Position::new(4, 4), // NEW!
+    });
+```
+
+We may now add the spell itself.
+
+```rust
+// spells.rs
+#[derive(Debug, Clone)]
+/// There are Form axioms, which target certain tiles, and Function axioms, which execute an effect
+/// onto those tiles.
+pub enum Axiom {
+
+    // SNIP
+
+    // FUNCTIONS
+    /// The targeted creatures dash in the direction of the caster's last move.
+    Dash { max_distance: i32 },
+
+    // NEW!
+    /// The targeted passable tiles summon a new instance of species.
+    SummonCreature { species: Species },
+    // End NEW.
+}
+
+```
+
+```rust
+// spells.rs
+impl FromWorld for AxiomLibrary {
+    fn from_world(world: &mut World) -> Self {
+        let mut axioms = AxiomLibrary {
+            library: HashMap::new(),
+        };
+        // SNIP
+        // NEW!
+        axioms.library.insert(
+            discriminant(&Axiom::SummonCreature {
+                species: Species::Player,
+            }),
+            world.register_system(axiom_function_summon_creature),
+        );
+        // End NEW.
+        axioms
+    }
+}
+```
+
+```rust
+// spells.rs
+/// The targeted passable tiles summon a new instance of species.
+fn axiom_function_summon_creature(
+    mut summon: EventWriter<SummonCreature>,
+    spell_stack: Res<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    if let Axiom::SummonCreature { species } = synapse_data.axioms[synapse_data.step] {
+        for position in &synapse_data.targets {
+            summon.send(SummonCreature {
+                species,
+                position: *position,
+                summon_tile: *caster_position,
+            });
+        }
+    } else {
+        panic!()
+    }
+}
+```
+
+If you now modify the Hunter's spellcasting like so:
+
+```rust
+// events.rs
+pub fn end_turn(/* SNIP */) {
+
+    // SNIP
+
+    spell.send(CastSpell {
+        caster: hunter_entity,
+        spell: Spell {
+            axioms: vec![
+            // CHANGED
+                Axiom::MomentumBeam,
+                Axiom::SummonCreature {
+                    species: Species::Wall,
+                },
+            // End CHANGED.
+            ],
+        },
+    });
+```
+
+You'll find (after `cargo run`) a green friend who seems a little too enthusiastic about modern architecture.
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/6-let-chaos-reign/archi.gif", alt="The Hunter, using its laser to fill the cage with additional walls",
+         position="center", style="border-radius: 8px;") }}
+
+To up the stakes, we'll now add a new Form `Axiom` and a new `Species` who will use it.
+
+```rust
+// spells.rs
+pub enum Axiom {
+    // FORMS
+    
+    // SNIP
+
+    // NEW!
+    /// Target a ring of `radius` around the caster.
+    Halo { radius: i32 },
+    // End NEW.
+```
+
+```rust
+// spells.rs
+impl FromWorld for AxiomLibrary {
+    fn from_world(world: &mut World) -> Self {
+        let mut axioms = AxiomLibrary {
+            library: HashMap::new(),
+        };
+        // SNIP
+        // NEW!
+        axioms.library.insert(
+            discriminant(&Axiom::Halo { radius: 1 }),
+            world.register_system(axiom_form_halo),
+        );
+        // End NEW.
+```
+
+```rust
+// spells.rs
+/// Target a ring of `radius` around the caster.
+fn axiom_form_halo(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    if let Axiom::Halo { radius } = synapse_data.axioms[synapse_data.step] {
+        let mut circle = circle_around(caster_position, radius);
+        // Sort by clockwise rotation.
+        circle.sort_by(|a, b| {
+            let angle_a = angle_from_center(caster_position, a);
+            let angle_b = angle_from_center(caster_position, b);
+            angle_a.partial_cmp(&angle_b).unwrap()
+        });
+        // Add some visual halo effects.
+        magic_vfx.send(PlaceMagicVfx {
+            targets: circle.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::GreenBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+        // Add these tiles to `targets`.
+        synapse_data.targets.append(&mut circle);
+    } else {
+        panic!()
+    }
+}
+
+/// Generate the points across the outline of a circle.
+fn circle_around(center: &Position, radius: i32) -> Vec<Position> {
+    let mut circle = Vec::new();
+    for r in 0..=(radius as f32 * (0.5f32).sqrt()).floor() as i32 {
+        let d = (((radius * radius - r * r) as f32).sqrt()).floor() as i32;
+        let adds = [
+            Position::new(center.x - d, center.y + r),
+            Position::new(center.x + d, center.y + r),
+            Position::new(center.x - d, center.y - r),
+            Position::new(center.x + d, center.y - r),
+            Position::new(center.x + r, center.y - d),
+            Position::new(center.x + r, center.y + d),
+            Position::new(center.x - r, center.y - d),
+            Position::new(center.x - r, center.y + d),
+        ];
+        for new_add in adds {
+            if !circle.contains(&new_add) {
+                circle.push(new_add);
+            }
+        }
+    }
+    circle
+}
+
+/// Find the angle of a point on a circle relative to its center.
+fn angle_from_center(center: &Position, point: &Position) -> f64 {
+    let delta_x = point.x - center.x;
+    let delta_y = point.y - center.y;
+    (delta_y as f64).atan2(delta_x as f64)
+}
+```
+
+Create a circle, then rotate around it in a clockwise maneer so the animation looks pretty. If you are curious about my circle-making function, I highly recommend [Red Blob Game's entry on the topic](https://www.redblobgames.com/grids/circle-drawing/).
+
+Now, for the new species:
+
+```rust
+// creature.rs
+#[derive(Debug, Component, Clone, Copy)]
+pub enum Species {
+    Player,
+    Wall,
+    Hunter,
+    Spawner, // NEW!
+}
+
+/// Get the appropriate texture from the spritesheet depending on the species type.
+pub fn get_species_sprite(species: &Species) -> usize {
+    match species {
+        Species::Player => 0,
+        Species::Wall => 3,
+        Species::Hunter => 4,
+        Species::Spawner => 5, // NEW!
+    }
+}
+```
+
+```rust
+// events.rs
+/// Place a new Creature on the map of Species and at Position.
+pub fn summon_creature(/* SNIP */) {
+
+        // SNIP
+
+        // Add any species-specific components.
+        match &event.species {
+            Species::Player => {
+                new_creature.insert(Player);
+            }
+            Species::Hunter | Species::Spawner => { // CHANGED: Added Spawner.
+                new_creature.insert(Hunt);
+            }
+            _ => (),
+        }
+```
+
+And for its spellcasting:
+
+```rust
+// events.rs
+pub fn end_turn(
+    // SNIP
+    hunters: Query<(Entity, &Position, &Species), (With<Hunt>, Without<Player>)>, // CHANGED: Added Species.
+    map: Res<Map>,
+) {
+    for _event in events.read() {
+        turn_count.turns += 1;
+        let player_pos = player.get_single().unwrap();
+        for (hunter_entity, hunter_pos, hunter_species) in hunters.iter() { // CHANGED: Added hunter_species.
+            // Occasionally cast a spell.
+            if turn_count.turns % 5 == 0 {
+                // NEW!
+                match hunter_species {
+                    Species::Hunter => {
+                        spell.send(CastSpell {
+                            caster: hunter_entity,
+                            spell: Spell {
+                                axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
+                            },
+                        });
+                    }
+                    Species::Spawner => {
+                        spell.send(CastSpell {
+                            caster: hunter_entity,
+                            spell: Spell {
+                                axioms: vec![
+                                    Axiom::Halo { radius: 3 },
+                                    Axiom::SummonCreature {
+                                        species: Species::Hunter,
+                                    },
+                                ],
+                            },
+                        });
+                    }
+                    _ => (),
+                }
+                // End NEW.
+            }
+            // Try to find a tile that gets the hunter closer to the player.
+            else if let Some(move_direction) = map.best_manhattan_move(*hunter_pos, *player_pos) {
+                // If it is found, cause a CreatureStep event.
+
+                step.send(CreatureStep {
+                    direction: move_direction,
+                    entity: hunter_entity,
+                });
+            }
+        }
+    }
+}
+```
+
+That's right - halo summoning of Hunters every 5 turns, who all have knockback beams. Whatever it is you are imagining right now, it is nowhere as glorious as the pandemonium about to be unleashed.
+
+```rust
+// map.rs
+fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
+    // CHANGED
+    let cage = ".........\
+                .........\
+                ....S....\
+                .........\
+                .........\
+                .........\
+                ....@....\
+                .........\
+                .........";
+    // End CHANGED.
+    for (idx, tile_char) in cage.char_indices() {
+        let position = Position::new(idx as i32 % 9, idx as i32 / 9);
+        let species = match tile_char {
+            '#' => Species::Wall,
+            'H' => Species::Hunter,
+            'S' => Species::Spawner, // NEW!
+            '@' => Species::Player,
+            _ => continue,
+        };
+```
+
+`cargo run`, and LET CHAOS REIGN.
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/6-let-chaos-reign/chaos.gif", alt="The Spawner creating an armada of Hunters, which then proceed to laser everything and cause chaotic knockback fun!",
+         position="center", style="border-radius: 8px;") }}

@@ -39,13 +39,6 @@ The nature of ECS has been covered earlier in the Quick Start guide. Here is a m
 * **Components** - The costumes and characters worn by the actors.
 * **Systems** - The script of the play.
 
-# Table of Contents
-
- 1. [The App](#setting-the-stage---the-app)
- 2. [The Player](#the-first-denizen---the-player)
- 3. [The Camera](#bird's-eye-view---the-camera)
- 4. [The Spritesheet](#bundling-them-up---the-spritesheet)
-
 # Setting the Stage - The App
 
 Writing `cargo new bevy-quick-start` creates a Rust version of the evergreen *Hello World* program. It feels quite distant from anything resembling a game you can play in a contained window, except perhaps a prehistoric text adventure. Let's fix that by replacing the code in `fn main`:
@@ -202,7 +195,7 @@ impl FromWorld for SpriteSheetAtlas {
         // The spritesheet is composed of 16x16 squares.
         // There are 8 sprite columns, spread across 1 row.
         // There is no padding between the cells (None) and no offset (None)
-        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 8, 1, None, None);
+        let layout = TextureAtlasLayout::from_grid(UVec2::splat(16), 160, 2, None, None);
         // Grab the active atlases stored by Bevy.
         let mut texture_atlases = world
             .get_resource_mut::<Assets<TextureAtlasLayout>>()
@@ -217,7 +210,7 @@ impl FromWorld for SpriteSheetAtlas {
 
 Any Resource which implements `FromWorld` will, upon running `init_resource`, run the code contained in the `impl` block to create a new instance of it.
 
-The `TextureAtlasLayout` specifies the crop layout. Each sprite is 16x16 (`UVec2::splat(16)` is a shortform of `UVec2::new(16, 16)`), there are 8 sprite columns and 1 row, and there is no padding nor offset (None, None).
+The `TextureAtlasLayout` specifies the crop layout. Each sprite is 16x16 (`UVec2::splat(16)` is a shortform of `UVec2::new(16, 16)`), there are 160 sprite columns and 2 rows, and there is no padding nor offset (None, None).
 
 This is stored into Bevy's atlases list, and is saved into the `Resource` for future usage.
 
