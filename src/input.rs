@@ -18,7 +18,15 @@ pub fn keyboard_input(
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::Dash { max_distance: 5 },
+                    Axiom::Halo { radius: 3 },
+                    Axiom::Ego,
+                    Axiom::Dash { max_distance: 3 },
+                    Axiom::Halo { radius: 3 },
+                    Axiom::Dash { max_distance: 3 },
+                ],
             },
         });
     }

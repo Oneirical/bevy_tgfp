@@ -8,6 +8,14 @@ pub struct Creature {
     pub momentum: OrdDir,
     pub sprite: Sprite,
     pub species: Species,
+    pub health: Health,
+}
+
+#[derive(Bundle)]
+pub struct HealthIndicator {
+    pub sprite: Sprite,
+    pub visibility: Visibility,
+    pub transform: Transform,
 }
 
 /// Marker for the player
@@ -16,6 +24,12 @@ pub struct Player;
 
 #[derive(Component)]
 pub struct Hunt;
+
+#[derive(Component)]
+pub struct Health {
+    pub hp: usize,
+    pub max_hp: usize,
+}
 
 #[derive(Debug, Component, Clone, Copy)]
 pub enum Species {

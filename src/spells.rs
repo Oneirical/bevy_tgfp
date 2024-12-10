@@ -124,7 +124,7 @@ pub struct SynapseData {
     /// The nth axiom currently being executed.
     pub step: usize,
     /// Who cast the spell.
-    caster: Entity,
+    pub caster: Entity,
 }
 
 impl SynapseData {

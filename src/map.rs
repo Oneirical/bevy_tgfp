@@ -115,13 +115,13 @@ pub fn register_creatures(
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let cage = "#########\
-                #.......#\
-                #H......#\
-                #.......#\
-                #.......#\
-                #.......#\
-                #...@...#\
-                #.......#\
+                #HHHHHHH#\
+                #HHHHHHH#\
+                #HHHHHHH#\
+                ###HHHHH#\
+                #@#HHHHH#\
+                ###HHHHH#\
+                #HHHHHHH#\
                 #########";
     for (idx, tile_char) in cage.char_indices() {
         let position = Position::new(idx as i32 % 9, idx as i32 / 9);
