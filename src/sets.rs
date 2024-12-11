@@ -2,8 +2,8 @@ use bevy::prelude::*;
 
 use crate::{
     events::{
-        creature_step, end_turn, harm_creature, open_door, remove_creature, summon_creature,
-        teleport_entity,
+        alter_momentum, creature_collision, creature_step, end_turn, harm_creature, open_door,
+        remove_creature, summon_creature, teleport_entity,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -32,10 +32,12 @@ impl Plugin for SetsPlugin {
                 summon_creature,
                 register_creatures,
                 teleport_entity,
+                creature_collision,
+                alter_momentum,
                 harm_creature,
                 open_door,
                 remove_creature,
-                end_turn,
+                end_turn.run_if(spell_stack_is_empty),
             )
                 .chain())
             .in_set(ResolutionPhase),

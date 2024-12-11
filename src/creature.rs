@@ -26,6 +26,15 @@ pub struct Player;
 pub struct Hunt;
 
 #[derive(Component)]
+pub struct Door;
+
+#[derive(Component)]
+pub struct Spellproof;
+
+#[derive(Component)]
+pub struct Attackproof;
+
+#[derive(Component)]
 pub struct Health {
     pub hp: usize,
     pub max_hp: usize,

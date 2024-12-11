@@ -3,7 +3,7 @@ use std::mem::{discriminant, Discriminant};
 use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
 
 use crate::{
-    creature::Species,
+    creature::{Species, Spellproof},
     events::{SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
@@ -213,12 +213,17 @@ fn axiom_function_dash(
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
     momentum: Query<&OrdDir>,
+    is_spellproof: Query<Has<Spellproof>>,
 ) {
     let synapse_data = spell_stack.spells.last().unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
     if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
         // For each (Entity, Position) on a targeted tile with a creature on it...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
+            // Spellproof entities cannot be affected.
+            if is_spellproof.get(dasher).unwrap() {
+                continue;
+            }
             // The dashing creature starts where it currently is standing.
             let mut final_dash_destination = dasher_pos;
             // It will travel in the direction of the caster's last move.
@@ -227,7 +232,7 @@ fn axiom_function_dash(
             let mut distance_travelled = 0;
             while distance_travelled < max_distance {
                 distance_travelled += 1;
-                // Stop dashing if a solid Creature is hit and the dasher is not intangible.
+                // Stop dashing if a solid Creature is hit (not implemented: "and the dasher is not intangible").
                 if !map.is_passable(
                     final_dash_destination.x + off_x,
                     final_dash_destination.y + off_y,

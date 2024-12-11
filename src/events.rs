@@ -3,7 +3,10 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 
 use crate::{
-    creature::{get_species_sprite, Creature, Health, HealthIndicator, Hunt, Player, Species},
+    creature::{
+        get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Player,
+        Species, Spellproof,
+    },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
@@ -18,19 +21,32 @@ pub struct EventPlugin;
 impl Plugin for EventPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SummonCreature>();
-        app.add_event::<EndTurn>();
+        app.init_resource::<Events<EndTurn>>();
         app.add_event::<TeleportEntity>();
+        app.add_event::<CreatureCollision>();
+        app.add_event::<AlterMomentum>();
         app.add_event::<HarmCreature>();
         app.add_event::<OpenDoor>();
         app.add_event::<RemoveCreature>();
         app.init_resource::<Events<CreatureStep>>();
-        app.insert_resource(TurnCount { turns: 0 });
+        app.insert_resource(TurnManager {
+            turn_count: 0,
+            action_this_turn: PlayerAction::Invalid,
+        });
     }
 }
 
 #[derive(Resource)]
-pub struct TurnCount {
-    turns: usize,
+pub struct TurnManager {
+    pub turn_count: usize,
+    /// Whether the player took a step, cast a spell, or did something useless (like step into a wall) this turn.
+    pub action_this_turn: PlayerAction,
+}
+
+pub enum PlayerAction {
+    Step,
+    Spell,
+    Invalid,
 }
 
 #[derive(Event)]
@@ -70,7 +86,7 @@ pub fn summon_creature(
                 momentum: event.momentum,
                 health: {
                     let max_hp = match &event.species {
-                        Species::Player => 12,
+                        Species::Player => 7,
                         Species::Wall => 10,
                         Species::Hunter => 2,
                         Species::Spawner => 3,
@@ -98,9 +114,16 @@ pub fn summon_creature(
             SlideAnimation,
         ));
         // Add any species-specific components.
+        // TODO: Offshore this to a function when transformation axioms get added to avoid repetition?
         match &event.species {
             Species::Player => {
                 new_creature.insert(Player);
+            }
+            Species::Wall => {
+                new_creature.insert((Attackproof, Spellproof));
+            }
+            Species::Airlock => {
+                new_creature.insert((Attackproof, Spellproof, Door));
             }
             Species::Hunter | Species::Spawner => {
                 new_creature.insert(Hunt);
@@ -138,12 +161,11 @@ pub struct CreatureStep {
 pub fn creature_step(
     mut events: EventReader<CreatureStep>,
     mut teleporter: EventWriter<TeleportEntity>,
-    mut turn_end: EventWriter<EndTurn>,
-    mut creature: Query<(&Position, Has<Player>, &mut OrdDir)>,
+    mut momentum: EventWriter<AlterMomentum>,
+    mut creature: Query<&Position>,
 ) {
     for event in events.read() {
-        let (creature_pos, is_player, mut creature_momentum) =
-            creature.get_mut(event.entity).unwrap();
+        let creature_pos = creature.get_mut(event.entity).unwrap();
         let (off_x, off_y) = event.direction.as_offset();
         teleporter.send(TeleportEntity::new(
             event.entity,
@@ -151,11 +173,10 @@ pub fn creature_step(
             creature_pos.y + off_y,
         ));
         // Update the direction towards which this creature is facing.
-        *creature_momentum = event.direction;
-        // If this creature was the player, this will end the turn.
-        if is_player {
-            turn_end.send(EndTurn);
-        }
+        momentum.send(AlterMomentum {
+            entity: event.entity,
+            direction: event.direction,
+        });
     }
 }
 
@@ -179,10 +200,7 @@ pub fn teleport_entity(
     mut creature: Query<&mut Position>,
     mut map: ResMut<Map>,
     mut commands: Commands,
-
-    mut harm: EventWriter<HarmCreature>,
-    mut open: EventWriter<OpenDoor>,
-    species: Query<&Species>,
+    mut collision: EventWriter<CreatureCollision>,
 ) {
     for event in events.read() {
         let mut creature_position = creature
@@ -202,22 +220,75 @@ pub fn teleport_entity(
             let collided_with = map
                 .get_entity_at(event.destination.x, event.destination.y)
                 .unwrap();
-            match species.get(*collided_with).unwrap() {
-                Species::Wall => (),
-                Species::Airlock => {
-                    open.send(OpenDoor {
-                        entity: *collided_with,
-                    });
-                }
-                _ => {
-                    harm.send(HarmCreature {
-                        entity: *collided_with,
-                        culprit: event.entity,
-                        damage: 1,
-                    });
-                }
-            }
+            collision.send(CreatureCollision {
+                culprit: event.entity,
+                collided_with: *collided_with,
+            });
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct CreatureCollision {
+    culprit: Entity,
+    collided_with: Entity,
+}
+
+pub fn creature_collision(
+    mut events: EventReader<CreatureCollision>,
+    mut harm: EventWriter<HarmCreature>,
+    mut open: EventWriter<OpenDoor>,
+    flags: Query<(Has<Door>, Has<Attackproof>)>,
+    mut turn_manager: ResMut<TurnManager>,
+) {
+    for event in events.read() {
+        if event.culprit == event.collided_with {
+            // No colliding with yourself.
             continue;
+        }
+        let (is_door, cannot_be_attacked) = flags.get(event.collided_with).unwrap();
+        if is_door {
+            // Open doors.
+            open.send(OpenDoor {
+                entity: event.collided_with,
+            });
+        } else if !cannot_be_attacked {
+            // Melee attack.
+            harm.send(HarmCreature {
+                entity: event.collided_with,
+                culprit: event.culprit,
+                damage: 1,
+            });
+        } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) {
+            // The player spent their turn walking into a wall, disallow the turn from ending.
+            turn_manager.action_this_turn = PlayerAction::Invalid;
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct AlterMomentum {
+    pub entity: Entity,
+    pub direction: OrdDir,
+}
+
+pub fn alter_momentum(
+    mut events: EventReader<AlterMomentum>,
+    mut creature: Query<(&mut OrdDir, &mut Transform)>,
+    turn_manager: Res<TurnManager>,
+) {
+    for event in events.read() {
+        if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+            return;
+        }
+        let (mut creature_momentum, mut creature_transform) =
+            creature.get_mut(event.entity).unwrap();
+        *creature_momentum = event.direction;
+        match event.direction {
+            OrdDir::Down => creature_transform.rotation = Quat::from_rotation_z(0.),
+            OrdDir::Right => creature_transform.rotation = Quat::from_rotation_z(PI / 2.),
+            OrdDir::Up => creature_transform.rotation = Quat::from_rotation_z(PI),
+            OrdDir::Left => creature_transform.rotation = Quat::from_rotation_z(3. * PI / 2.),
         }
     }
 }
@@ -370,17 +441,21 @@ pub fn end_turn(
     mut events: EventReader<EndTurn>,
     mut step: EventWriter<CreatureStep>,
     mut spell: EventWriter<CastSpell>,
-    mut turn_count: ResMut<TurnCount>,
+    mut turn_manager: ResMut<TurnManager>,
     player: Query<&Position, With<Player>>,
     hunters: Query<(Entity, &Position, &Species), (With<Hunt>, Without<Player>)>,
     map: Res<Map>,
 ) {
     for _event in events.read() {
-        turn_count.turns += 1;
+        // The player shouldn't be allowed to "wait" turns by stepping into walls.
+        if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+            return;
+        }
+        turn_manager.turn_count += 1;
         let player_pos = player.get_single().unwrap();
         for (hunter_entity, hunter_pos, hunter_species) in hunters.iter() {
             // Occasionally cast a spell.
-            if turn_count.turns % 5 == 0 {
+            if turn_manager.turn_count % 5 == 0 {
                 match hunter_species {
                     Species::Hunter => {
                         spell.send(CastSpell {
