@@ -240,6 +240,8 @@ pub fn creature_collision(
     mut open: EventWriter<OpenDoor>,
     flags: Query<(Has<Door>, Has<Attackproof>)>,
     mut turn_manager: ResMut<TurnManager>,
+    mut creature: Query<(&OrdDir, &mut Transform)>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
@@ -259,6 +261,14 @@ pub fn creature_collision(
                 culprit: event.culprit,
                 damage: 1,
             });
+            // Melee attack animation.
+            let (attacker_orientation, mut attacker_transform) =
+                creature.get_mut(event.culprit).unwrap();
+            attacker_transform.translation.x +=
+                attacker_orientation.as_offset().0 as f32 * 64. / 4.;
+            attacker_transform.translation.y +=
+                attacker_orientation.as_offset().1 as f32 * 64. / 4.;
+            commands.entity(event.culprit).insert(SlideAnimation);
         } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) {
             // The player spent their turn walking into a wall, disallow the turn from ending.
             turn_manager.action_this_turn = PlayerAction::Invalid;
@@ -274,14 +284,16 @@ pub struct AlterMomentum {
 
 pub fn alter_momentum(
     mut events: EventReader<AlterMomentum>,
-    mut creature: Query<(&mut OrdDir, &mut Transform)>,
+    mut creature: Query<(&mut OrdDir, &mut Transform, &Children)>,
+    mut hp_bar: Query<&mut Transform, Without<OrdDir>>,
     turn_manager: Res<TurnManager>,
 ) {
     for event in events.read() {
+        // Don't allow changing your momentum by stepping into walls.
         if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
             return;
         }
-        let (mut creature_momentum, mut creature_transform) =
+        let (mut creature_momentum, mut creature_transform, children) =
             creature.get_mut(event.entity).unwrap();
         *creature_momentum = event.direction;
         match event.direction {
@@ -289,6 +301,16 @@ pub fn alter_momentum(
             OrdDir::Right => creature_transform.rotation = Quat::from_rotation_z(PI / 2.),
             OrdDir::Up => creature_transform.rotation = Quat::from_rotation_z(PI),
             OrdDir::Left => creature_transform.rotation = Quat::from_rotation_z(3. * PI / 2.),
+        }
+        // Keep the HP bar on the bottom.
+        for child in children.iter() {
+            let mut hp_transform = hp_bar.get_mut(*child).unwrap();
+            match event.direction {
+                OrdDir::Down => hp_transform.rotation = Quat::from_rotation_z(0.),
+                OrdDir::Right => hp_transform.rotation = Quat::from_rotation_z(3. * PI / 2.),
+                OrdDir::Up => hp_transform.rotation = Quat::from_rotation_z(PI),
+                OrdDir::Left => hp_transform.rotation = Quat::from_rotation_z(PI / 2.),
+            }
         }
     }
 }
