@@ -79,8 +79,9 @@ Volume (impact) Pianissimo, Piano, Forte, Fortissimo
 
 # Tutorial
 - Mention the Color imprements Copy oddity from bevy discord.
-- Mention the exclusive system and associated weird bevy errors.
+- Mention the exclusive system (&mut World) and associated weird bevy errors.
 - A Gimp tutorial for the spritesheet, inspired by the broughlike one.
+- Is the ̀`Map` too weird? Maybe it should just fetch the entity with the correct Position?
 
 # Random writing
 
@@ -90,3 +91,5 @@ Tempo: Piano (xx)
 
 *A dark blue tulip inside a simple clay pot. Its petals twist and turn like muscle, performing a pitiful caricature of nearby creatures' motions. One tempted to laugh at this display should take note of its roots, which pierce reality to draw nourishment from other dimensions.* 
 
+"It's accurate when you realize all language is a way to dumb down concepts in such a way that any mind could understand it"
+> link this with Harmony

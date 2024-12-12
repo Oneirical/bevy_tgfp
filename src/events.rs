@@ -439,6 +439,7 @@ pub fn remove_creature(
 ) {
     for event in events.read() {
         let (position, is_player) = creature.get(event.entity).unwrap();
+        // Visually flash an X where the creature was removed.
         magic_vfx.send(PlaceMagicVfx {
             targets: vec![*position],
             sequence: EffectSequence::Simultaneous,
@@ -446,9 +447,14 @@ pub fn remove_creature(
             decay: 0.5,
             appear: 0.,
         });
+        // For now, avoid removing the player - the game panics without a player.
         if !is_player {
+            // Remove the creature from Map
             map.creatures.remove(position);
+            // Remove the creature AND its children (health bar)
             commands.entity(event.entity).despawn_recursive();
+            // Remove all spells cast by this creature
+            // (this entity doesn't exist anymore, casting its spells would crash the game)
             spell_stack
                 .spells
                 .retain(|spell| spell.caster != event.entity);

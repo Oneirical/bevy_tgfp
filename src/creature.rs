@@ -11,6 +11,7 @@ pub struct Creature {
     pub health: Health,
 }
 
+// The graphical representation of Health: a health bar.
 #[derive(Bundle)]
 pub struct HealthIndicator {
     pub sprite: Sprite,
