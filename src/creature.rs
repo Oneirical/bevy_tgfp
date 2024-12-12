@@ -36,6 +36,9 @@ pub struct Spellproof;
 pub struct Attackproof;
 
 #[derive(Component)]
+pub struct Intangible;
+
+#[derive(Component)]
 pub struct Health {
     pub hp: usize,
     pub max_hp: usize,

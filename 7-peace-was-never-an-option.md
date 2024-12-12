@@ -318,4 +318,52 @@ pub fn teleport_entity(
 
 A new, unimplemented event... yes, because not all collisions will necessarily be harmful. Some could be interacting with a mechanism, talking to an NPC, or opening a door. The later of which will be shown later in this chapter!
 
+```rust
+#[derive(Event)]
+pub struct CreatureCollision {
+    culprit: Entity,
+    collided_with: Entity,
+}
 
+pub fn creature_collision(
+    mut events: EventReader<CreatureCollision>,
+    mut harm: EventWriter<HarmCreature>,
+    mut open: EventWriter<OpenDoor>,
+    flags: Query<(Has<Door>, Has<Attackproof>)>,
+    mut turn_manager: ResMut<TurnManager>,
+    mut creature: Query<(&OrdDir, &mut Transform)>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        if event.culprit == event.collided_with {
+            // No colliding with yourself.
+            continue;
+        }
+        let (is_door, cannot_be_attacked) = flags.get(event.collided_with).unwrap();
+        if is_door {
+            // Open doors.
+            open.send(OpenDoor {
+                entity: event.collided_with,
+            });
+        } else if !cannot_be_attacked {
+            // Melee attack.
+            harm.send(HarmCreature {
+                entity: event.collided_with,
+                culprit: event.culprit,
+                damage: 1,
+            });
+            // Melee attack animation.
+            let (attacker_orientation, mut attacker_transform) =
+                creature.get_mut(event.culprit).unwrap();
+            attacker_transform.translation.x +=
+                attacker_orientation.as_offset().0 as f32 * 64. / 4.;
+            attacker_transform.translation.y +=
+                attacker_orientation.as_offset().1 as f32 * 64. / 4.;
+            commands.entity(event.culprit).insert(SlideAnimation);
+        } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) {
+            // The player spent their turn walking into a wall, disallow the turn from ending.
+            turn_manager.action_this_turn = PlayerAction::Invalid;
+        }
+    }
+}
+```

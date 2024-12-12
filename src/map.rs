@@ -1,6 +1,10 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::{creature::Species, events::SummonCreature, graphics::MagicVfx, OrdDir};
+use crate::{
+    creature::{Intangible, Species},
+    events::SummonCreature,
+    OrdDir,
+};
 
 pub struct MapPlugin;
 
@@ -100,13 +104,30 @@ pub fn register_creatures(
     mut map: ResMut<Map>,
     // Any entity that has a Position that just got added to it -
     // currently only possible as a result of having just been spawned in.
-    displaced_creatures: Query<(&Position, Entity), (Added<Position>, Without<MagicVfx>)>,
+    displaced_creatures: Query<(&Position, Entity), (Added<Position>, With<Species>)>,
+    intangible_creatures: Query<&Position, (Added<Intangible>, With<Species>)>,
+    tangible_creatures: Query<&Position, With<Species>>,
+    mut tangible_entities: RemovedComponents<Intangible>,
 ) {
     for (position, entity) in displaced_creatures.iter() {
         // Insert the new creature in the Map. Position implements Copy,
         // so it can be dereferenced (*), but `.clone()` would have been
         // fine too.
         map.creatures.insert(*position, entity);
+    }
+
+    // Newly intangible creatures are removed from the map.
+    for intangible_position in intangible_creatures.iter() {
+        map.creatures.remove(intangible_position);
+    }
+
+    // A creature recovering its tangibility is added to the map.
+    for entity in tangible_entities.read() {
+        let tangible_position = tangible_creatures.get(entity).unwrap();
+        if map.creatures.get(tangible_position).is_some() {
+            panic!("A creature recovered its tangibility while on top of another creature!");
+        }
+        map.creatures.insert(*tangible_position, entity);
     }
 }
 

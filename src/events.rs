@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{
-        get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Player,
-        Species, Spellproof,
+        get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Intangible,
+        Player, Species, Spellproof,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -117,7 +117,7 @@ pub fn summon_creature(
         // TODO: Offshore this to a function when transformation axioms get added to avoid repetition?
         match &event.species {
             Species::Player => {
-                new_creature.insert(Player);
+                new_creature.insert((Player, Intangible));
             }
             Species::Wall => {
                 new_creature.insert((Attackproof, Spellproof));
@@ -197,20 +197,22 @@ impl TeleportEntity {
 
 pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut creature: Query<&mut Position>,
+    mut creature: Query<(&mut Position, Has<Intangible>)>,
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
 ) {
     for event in events.read() {
-        let mut creature_position = creature
+        let (mut creature_position, is_intangible) = creature
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
         // If motion is possible...
-        if map.is_passable(event.destination.x, event.destination.y) {
-            // ...update the Map to reflect this...
-            map.move_creature(*creature_position, event.destination);
+        if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
+            if !is_intangible {
+                // ...update the Map to reflect this...
+                map.move_creature(*creature_position, event.destination);
+            }
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
             // Also, animate this creature, making its teleport action visible on the screen.
@@ -370,15 +372,13 @@ pub struct OpenDoor {
 pub fn open_door(
     mut events: EventReader<OpenDoor>,
     mut commands: Commands,
-    // mut remove: EventWriter<RemoveCreature>,
     mut door: Query<(&mut Visibility, &Position, &OrdDir)>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
-    mut map: ResMut<Map>,
 ) {
     for event in events.read() {
         let (mut visibility, position, orientation) = door.get_mut(event.entity).unwrap();
-        map.creatures.remove(position);
+        commands.entity(event.entity).insert(Intangible);
         *visibility = Visibility::Hidden;
         let (offset_1, offset_2) = match orientation {
             OrdDir::Up | OrdDir::Down => (OrdDir::Left.as_offset(), OrdDir::Right.as_offset()),
