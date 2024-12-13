@@ -238,7 +238,7 @@ pub fn harm_creature(
 }
 ```
 
-`saturating_sub` prevents integer overflow by stopping subtraction at 0. The healthbar is hidden when it is full, and then gradually deteriorates by shifting its sprite into increasingly dire variations as the HP percentage lowers.
+`saturating_sub` prevents integer overflow by stopping subtraction at 0. The healthbar is hidden when it is full, and then gradually deteriorates by shifting its sprite into increasingly dire variations as the HP percentage lowers. `Visibility::Inherited` means the health bar will also be hidden should the parent (the creature itself) be hidden.
 
 Note the yet unimplemented event at the end for creatures to remove from the game board - which we will attend to immediately.
 
@@ -316,7 +316,7 @@ pub fn teleport_entity(
     }
 ```
 
-A new, unimplemented event... yes, because not all collisions will necessarily be harmful. Some could be interacting with a mechanism, talking to an NPC, or opening a door. The later of which will be shown later in this chapter!
+A new, unimplemented event... yes, because not all collisions will necessarily be harmful. Some could be interacting with a mechanism, talking to an NPC, or... **opening a door**.
 
 ```rust
 #[derive(Event)]
@@ -328,7 +328,6 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<HarmCreature>,
-    mut open: EventWriter<OpenDoor>,
     flags: Query<(Has<Door>, Has<Attackproof>)>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&OrdDir, &mut Transform)>,
@@ -366,4 +365,51 @@ pub fn creature_collision(
         }
     }
 }
+```
+
+There are quite a few things of interest in this new system:
+
+- `Attackproof` is finally checked. This prevents the player from melee-attacking walls to break them, and escape the cage.
+- There is a melee attack animation. It shifts the attacking entity 1/4th of a tile closer to their attack direction, and the added `SlideAnimation` returns them to their original placement, making it look like a "jab" onto the attacked creature.
+- There is a yet unimplemented resource, `TurnManager`, which will be addressed next.
+- There is a yet unimplemented event, `OpenDoor`, which will be showcased later down the chapter.
+
+# Wallhack Anticheat
+
+Currently, it is possible to wait for enemies to get into melee range by scratching at the walls over and over again. Even though they are indestructible (because of `Attackproof`), this still skips turns even though nothing is actually happening!
+
+This is because `end_turn` triggers no matter what, even if the player performed an invalid action. This must be checked.
+
+```rust
+// events.rs
+#[derive(Resource)]
+pub struct TurnManager {
+    pub turn_count: usize,
+    // NEW!
+    /// Whether the player took a step, cast a spell, or did something useless (like step into a wall) this turn.
+    pub action_this_turn: PlayerAction,
+    // End NEW.
+}
+
+// NEW!
+pub enum PlayerAction {
+    Step,
+    Spell,
+    Invalid,
+}
+// End NEW.
+```
+
+```rust
+// events.rs
+pub fn end_turn(
+    // SNIP
+) {
+    for _event in events.read() {
+        // NEW!
+        // The player shouldn't be allowed to "wait" turns by stepping into walls.
+        if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+            return;
+        }
+        // End NEW.
 ```
