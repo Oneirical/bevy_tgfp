@@ -117,7 +117,7 @@ pub fn summon_creature(
         // TODO: Offshore this to a function when transformation axioms get added to avoid repetition?
         match &event.species {
             Species::Player => {
-                new_creature.insert((Player, Intangible));
+                new_creature.insert(Player);
             }
             Species::Wall => {
                 new_creature.insert((Attackproof, Spellproof));

@@ -12,7 +12,7 @@ use bevy::{
 };
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
-use map::MapPlugin;
+use map::{MapPlugin, Position};
 use sets::SetsPlugin;
 use spells::SpellPlugin;
 
@@ -52,5 +52,22 @@ impl OrdDir {
             OrdDir::Left => (-1, 0),
         };
         (x, y)
+    }
+
+    pub fn as_variant(dx: i32, dy: i32) -> Option<Self> {
+        match (dx, dy) {
+            (0, 1) => Some(OrdDir::Up),
+            (0, -1) => Some(OrdDir::Down),
+            (1, 0) => Some(OrdDir::Right),
+            (-1, 0) => Some(OrdDir::Left),
+            _ => None,
+        }
+    }
+
+    pub fn direction_towards_adjacent_tile(
+        source: Position,
+        destination: Position,
+    ) -> Option<Self> {
+        OrdDir::as_variant(destination.x - source.x, destination.y - source.y)
     }
 }

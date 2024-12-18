@@ -26,6 +26,10 @@ pub struct Player;
 #[derive(Component)]
 pub struct Hunt;
 
+// Performs random actions on its turn.
+#[derive(Component)]
+pub struct Random;
+
 #[derive(Component)]
 pub struct Door;
 
@@ -49,6 +53,10 @@ pub enum Species {
     Player,
     Wall,
     Hunter,
+    Apiarist,
+    Shrike,
+    Tinker,
+    Second,
     Spawner,
     Airlock,
 }
@@ -61,5 +69,9 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Hunter => 4,
         Species::Spawner => 5,
         Species::Airlock => 17,
+        Species::Shrike => 5,
+        Species::Apiarist => 6,
+        Species::Second => 7,
+        Species::Tinker => 8,
     }
 }

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::{
     creature::{
         get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Intangible,
-        Player, Species, Spellproof,
+        Player, Random, Species, Spellproof,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -91,6 +91,10 @@ pub fn summon_creature(
                         Species::Hunter => 2,
                         Species::Spawner => 3,
                         Species::Airlock => 10,
+                        Species::Apiarist => 3,
+                        Species::Shrike => 1,
+                        Species::Second => 1,
+                        Species::Tinker => 2,
                     };
                     // Start at full health.
                     let hp = max_hp;
@@ -117,7 +121,7 @@ pub fn summon_creature(
         // TODO: Offshore this to a function when transformation axioms get added to avoid repetition?
         match &event.species {
             Species::Player => {
-                new_creature.insert((Player, Intangible));
+                new_creature.insert(Player);
             }
             Species::Wall => {
                 new_creature.insert((Attackproof, Spellproof));
@@ -127,6 +131,9 @@ pub fn summon_creature(
             }
             Species::Hunter | Species::Spawner => {
                 new_creature.insert(Hunt);
+            }
+            Species::Tinker => {
+                new_creature.insert(Random);
             }
             _ => (),
         }
@@ -242,7 +249,7 @@ pub fn creature_collision(
     mut open: EventWriter<OpenDoor>,
     flags: Query<(Has<Door>, Has<Attackproof>)>,
     mut turn_manager: ResMut<TurnManager>,
-    mut creature: Query<(&OrdDir, &mut Transform)>,
+    mut creature: Query<(&OrdDir, &mut Transform, Has<Player>)>,
     mut commands: Commands,
 ) {
     for event in events.read() {
@@ -251,6 +258,8 @@ pub fn creature_collision(
             continue;
         }
         let (is_door, cannot_be_attacked) = flags.get(event.collided_with).unwrap();
+        let (attacker_orientation, mut attacker_transform, is_player) =
+            creature.get_mut(event.culprit).unwrap();
         if is_door {
             // Open doors.
             open.send(OpenDoor {
@@ -264,14 +273,12 @@ pub fn creature_collision(
                 damage: 1,
             });
             // Melee attack animation.
-            let (attacker_orientation, mut attacker_transform) =
-                creature.get_mut(event.culprit).unwrap();
             attacker_transform.translation.x +=
                 attacker_orientation.as_offset().0 as f32 * 64. / 4.;
             attacker_transform.translation.y +=
                 attacker_orientation.as_offset().1 as f32 * 64. / 4.;
             commands.entity(event.culprit).insert(SlideAnimation);
-        } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) {
+        } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) && is_player {
             // The player spent their turn walking into a wall, disallow the turn from ending.
             turn_manager.action_this_turn = PlayerAction::Invalid;
         }
@@ -482,7 +489,7 @@ pub fn end_turn(
     mut spell: EventWriter<CastSpell>,
     mut turn_manager: ResMut<TurnManager>,
     player: Query<&Position, With<Player>>,
-    hunters: Query<(Entity, &Position, &Species), (With<Hunt>, Without<Player>)>,
+    npcs: Query<(Entity, &Position, &Species, Has<Hunt>, Has<Random>), Without<Player>>,
     map: Res<Map>,
 ) {
     for _event in events.read() {
@@ -492,13 +499,13 @@ pub fn end_turn(
         }
         turn_manager.turn_count += 1;
         let player_pos = player.get_single().unwrap();
-        for (hunter_entity, hunter_pos, hunter_species) in hunters.iter() {
+        for (npc_entity, npc_pos, npc_species, is_hunter, is_random) in npcs.iter() {
             // Occasionally cast a spell.
             if turn_manager.turn_count % 5 == 0 {
-                match hunter_species {
+                match npc_species {
                     Species::Hunter => {
                         spell.send(CastSpell {
-                            caster: hunter_entity,
+                            caster: npc_entity,
                             spell: Spell {
                                 axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
                             },
@@ -506,7 +513,7 @@ pub fn end_turn(
                     }
                     Species::Spawner => {
                         spell.send(CastSpell {
-                            caster: hunter_entity,
+                            caster: npc_entity,
                             spell: Spell {
                                 axioms: vec![
                                     Axiom::Halo { radius: 3 },
@@ -519,15 +526,23 @@ pub fn end_turn(
                     }
                     _ => (),
                 }
-            }
-            // Try to find a tile that gets the hunter closer to the player.
-            else if let Some(move_direction) = map.best_manhattan_move(*hunter_pos, *player_pos) {
-                // If it is found, cause a CreatureStep event.
-
-                step.send(CreatureStep {
-                    direction: move_direction,
-                    entity: hunter_entity,
-                });
+            } else if is_random {
+                if let Some(move_direction) = map.random_adjacent_passable_direction(*npc_pos) {
+                    // If it is found, cause a CreatureStep event.
+                    step.send(CreatureStep {
+                        direction: move_direction,
+                        entity: npc_entity,
+                    });
+                }
+            } else if is_hunter {
+                // Try to find a tile that gets the hunter closer to the player.
+                if let Some(move_direction) = map.best_manhattan_move(*npc_pos, *player_pos) {
+                    // If it is found, cause a CreatureStep event.
+                    step.send(CreatureStep {
+                        direction: move_direction,
+                        entity: npc_entity,
+                    });
+                }
             }
         }
     }

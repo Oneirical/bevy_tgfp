@@ -1,4 +1,5 @@
 use bevy::{prelude::*, utils::HashMap};
+use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
     creature::{Intangible, Species},
@@ -62,30 +63,66 @@ impl Map {
         self.get_entity_at(x, y).is_none()
     }
 
+    /// Get all tile coordinates of adjacent tiles from a point.
+    pub fn get_adjacent_tiles(&self, centre: Position) -> Vec<Position> {
+        vec![
+            Position::new(centre.x, centre.y + 1),
+            Position::new(centre.x, centre.y - 1),
+            Position::new(centre.x + 1, centre.y),
+            Position::new(centre.x - 1, centre.y),
+        ]
+    }
+
+    /// Filter tiles from closest to further to another tile.
+    pub fn sort_by_manhattan(
+        &self,
+        mut tiles: Vec<Position>,
+        destination: Position,
+    ) -> Vec<Position> {
+        tiles.sort_by(|&a, &b| {
+            manhattan_distance(a, destination).cmp(&manhattan_distance(b, destination))
+        });
+        tiles
+    }
+
+    pub fn random_adjacent_passable_direction(&self, start: Position) -> Option<OrdDir> {
+        let adjacent = self.get_adjacent_tiles(start);
+        let mut rng = thread_rng();
+        let final_choice = adjacent
+            .iter()
+            // Only keep unblocked tiles.
+            .filter(|&p| self.is_passable(p.x, p.y))
+            // Remove the borrow.
+            // Get the tile that manages to close the most distance to the destination.
+            // If it exists, that is. Otherwise, this is just a None.
+            .choose(&mut rng);
+        if let Some(final_choice) = final_choice {
+            OrdDir::direction_towards_adjacent_tile(start, *final_choice)
+        } else {
+            None
+        }
+    }
+
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
     pub fn best_manhattan_move(&self, start: Position, end: Position) -> Option<OrdDir> {
-        let mut options = [
-            (OrdDir::Up, Position::new(start.x, start.y + 1)),
-            (OrdDir::Down, Position::new(start.x, start.y - 1)),
-            (OrdDir::Right, Position::new(start.x + 1, start.y)),
-            (OrdDir::Left, Position::new(start.x - 1, start.y)),
-        ];
+        let adjacent = self.get_adjacent_tiles(start);
+        let adjacent_sorted = self.sort_by_manhattan(adjacent, end);
 
-        // Sort all candidate tiles by their distance to the `end` destination.
-        options.sort_by(|&a, &b| manhattan_distance(a.1, end).cmp(&manhattan_distance(b.1, end)));
-
-        let final_choice = options
+        let final_choice = adjacent_sorted
             .iter()
             // Only keep either the destination or unblocked tiles.
-            .filter(|&p| p.1 == end || self.is_passable(p.1.x, p.1.y))
+            .filter(|&p| *p == end || self.is_passable(p.x, p.y))
             // Remove the borrow.
             .copied()
             // Get the tile that manages to close the most distance to the destination.
             // If it exists, that is. Otherwise, this is just a None.
             .next();
 
-        // Return Some if the direction exists, None otherwise
-        final_choice.map(|final_direction| final_direction.0)
+        if let Some(final_choice) = final_choice {
+            OrdDir::direction_towards_adjacent_tile(start, final_choice)
+        } else {
+            None
+        }
     }
 
     /// Move a pre-existing entity around the Map.
@@ -139,12 +176,12 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 #...#...##.......#\
 #..H#...><.#####.#\
 #...#...##...H...#\
-#.#####.##..###..#\
+#.#####.##.T###..#\
 #..H...H##.......#\
 ####^########^####\
 ####V########V####\
 #.......##H......#\
-#.#####.##.......#\
+#.#####.##.....T.#\
 #.#H....##..#.#..#\
 #.#.##..><...@...#\
 #.#H....##..#.#..#\
@@ -158,6 +195,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             '#' => Species::Wall,
             'H' => Species::Hunter,
             'S' => Species::Spawner,
+            'T' => Species::Tinker,
             '@' => Species::Player,
             '^' | '>' | '<' | 'V' => Species::Airlock,
             _ => continue,
