@@ -377,16 +377,23 @@ pub fn open_door(
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
     for event in events.read() {
+        // Gather component values of the door.
         let (mut visibility, position, orientation) = door.get_mut(event.entity).unwrap();
+        // The door becomes intangible, and can be walked through.
         commands.entity(event.entity).insert(Intangible);
+        // The door is no longer visible, as it is open.
         *visibility = Visibility::Hidden;
+        // Find the direction in which the door was facing to play its animation correctly.
         let (offset_1, offset_2) = match orientation {
             OrdDir::Up | OrdDir::Down => (OrdDir::Left.as_offset(), OrdDir::Right.as_offset()),
             OrdDir::Right | OrdDir::Left => (OrdDir::Down.as_offset(), OrdDir::Up.as_offset()),
         };
+        // Loop twice: for each pane of the door.
         for offset in [offset_1, offset_2] {
             commands.spawn((
+                // The sliding panes are represented as a MagicEffect with a very slow decay.
                 MagicEffect {
+                    // The panes slide into the adjacent walls to the door, hence the offset.
                     position: Position::new(position.x + offset.0, position.y + offset.1),
                     sprite: Sprite {
                         image: asset_server.load("spritesheet.png"),
@@ -400,17 +407,21 @@ pub fn open_door(
                     visibility: Visibility::Inherited,
                     vfx: MagicVfx {
                         appear: Timer::from_seconds(0., TimerMode::Once),
+                        // Very slow decay - the alpha shouldn't be reduced too much
+                        // while the panes are still visible.
                         decay: Timer::from_seconds(3., TimerMode::Once),
                     },
                 },
+                // Ensure the panes are sliding.
                 SlideAnimation,
                 Transform {
                     translation: Vec3 {
                         x: position.x as f32 * 64.,
                         y: position.y as f32 * 64.,
-                        // It needs to hide under actual tiles, such as walls.
+                        // The pane needs to hide under actual tiles, such as walls.
                         z: -1.,
                     },
+                    // Adjust the pane's rotation with its door.
                     rotation: Quat::from_rotation_z(match orientation {
                         OrdDir::Down => 0.,
                         OrdDir::Right => PI / 2.,
