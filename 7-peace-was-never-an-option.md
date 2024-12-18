@@ -33,6 +33,8 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 ##################\
     ";
 // End NEW.
+    for (idx, tile_char) in cage.char_indices() {
+        let position = Position::new(idx as i32 % 18, idx as i32 / 18); // CHANGED - 9 -> 18
 ```
 
 A little maze, full of dastardly foes. There is immediately a problem: spells allow both the player and the Hunters to deconstruct our beautiful architecture.
@@ -49,7 +51,9 @@ pub struct Attackproof;
 Note the physical/magical duality! Right now, only `Spellproof` will be implemented, but `Attackproof` will be next very soon in this chapter.
 
 ```rust
+// events.rs
 // Add any species-specific components.
+pub fn summon_creature(/* SNIP */) { // SNIP
 match &event.species {
     Species::Player => {
         new_creature.insert(Player);
@@ -88,11 +92,13 @@ fn axiom_function_dash(
 
 If you `cargo run` now, the cage will now be fully inescapable.
 
-// TODO gif
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/7-peace-was-never-an-option/inescapable.gif", alt="A 18x18 cage with diverse wall patterns, which cannot be altered in any way despite the numerous beams firing inside.",
+         position="center", style="border-radius: 8px;") }}
 
 And, in such a doomed prison, the only thing left to do is fight for entertainment.
 
 ```rust
+// creature.rs
 #[derive(Component)]
 pub struct Health {
     pub hp: usize,
@@ -129,7 +135,7 @@ pub fn summon_creature(
 let mut new_creature = commands.spawn((
 Creature {
     // SNIP
-    momentum: event.momentum,
+    momentum: OrdDir::Up,
     // NEW!
     health: {
         let max_hp = match &event.species {
@@ -137,7 +143,7 @@ Creature {
             Species::Wall => 10,
             Species::Hunter => 2,
             Species::Spawner => 3,
-            Species::Airlock => 10,
+            _ => 2,
         };
         // Start at full health.
         let hp = max_hp;
@@ -328,6 +334,7 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<HarmCreature>,
+    mut open: EventWriter<OpenDoor>,
     flags: Query<(Has<Door>, Has<Attackproof>)>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&OrdDir, &mut Transform)>,
@@ -380,11 +387,13 @@ Currently, it is possible to wait for enemies to get into melee range by scratch
 
 This is because `end_turn` triggers no matter what, even if the player performed an invalid action. This must be checked.
 
+`TurnCount` does a little more than just counting, now, so it has been renamed to `TurnManager`.
+
 ```rust
 // events.rs
 #[derive(Resource)]
-pub struct TurnManager {
-    pub turn_count: usize,
+pub struct TurnManager { // CHANGED - rename all instances of the TurnCount symbol to TurnManager.
+    pub turn_count: usize, // CHANGED to turn_count
     // NEW!
     /// Whether the player took a step, cast a spell, or did something useless (like step into a wall) this turn.
     pub action_this_turn: PlayerAction,
@@ -404,6 +413,7 @@ pub enum PlayerAction {
 // events.rs
 pub fn end_turn(
     // SNIP
+    mut turn_manager: ResMut<TurnManager>, // CHANGED - renamed to turn_manager
 ) {
     for _event in events.read() {
         // NEW!
@@ -412,6 +422,11 @@ pub fn end_turn(
             return;
         }
         // End NEW.
+        turn_manager.turn_count += 1; // CHANGED to turn_manager.turn_count
+        let player_pos = player.get_single().unwrap();
+        for (hunter_entity, hunter_pos, hunter_species) in hunters.iter() {
+            // Occasionally cast a spell.
+            if turn_manager.turn_count % 5 == 0 { // CHANGED to turn_manager.turn_count
 ```
 
 For this to do anything, we'll ensure each possible action is registered the moment the player presses a key:
@@ -628,6 +643,18 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 }
 ```
 
+```rust
+// events.rs
+
+pub fn summon_creature(/* SNIP */) {
+        // SNIP
+        // NEW!
+            Species::Airlock => {
+                new_creature.insert((Attackproof, Spellproof, Door));
+            }
+        // End NEW.
+```
+
 Airlocks face a direction, represented by a graphical arrow on their tile - this will allow us to know in which direction to slide their panes, so it looks like they are retreating inside the walls. To this end, we must add an additional field to `SummonCreature`.
 
 ```rust
@@ -682,7 +709,7 @@ pub fn summon_creature(
                 momentum: event.momentum, // CHANGED - no longer defaults to Down
                 health: // SNIP
             },
-            // NEW!
+            // CHANGED - defines fields instead of from_xyz
             Transform {
                 translation: Vec3 {
                     x: event.summon_tile.x as f32 * 64.,
@@ -700,9 +727,33 @@ pub fn summon_creature(
             // End NEW.
             SlideAnimation,
         ));
+    // SNIP
+    let hp_bar = commands
+        .spawn(HealthIndicator {
+            // SNIP
+            // CHANGED - defines fields instead of from_xyz
+            transform: Transform {
+                translation: Vec3 {
+                    x: event.summon_tile.x as f32 * 64.,
+                    y: event.summon_tile.y as f32 * 64.,
+                    z: 1.,
+                },
+                rotation: Quat::from_rotation_z(match event.momentum {
+                    OrdDir::Down => 0.,
+                    OrdDir::Right => 3. * PI / 2.,
+                    OrdDir::Up => PI,
+                    OrdDir::Left => PI / 2.,
+                }),
+                scale: Vec3::new(1., 1., 1.),
+            },
+            // End CHANGED
+        })
+        .id();
 ```
 
 Before proceeding, we'll register absolutely everything we've added before we forget!
+
+I also elected to add `.run_if(spell_stack_is_empty)` to `end_turn`. If a spell has a very large amount of `Axiom`s and takes a while to work its magic, this will prevent other creatures from taking their turns before it completes.
 
 ```rust
 // sets.rs
@@ -716,7 +767,7 @@ Before proceeding, we'll register absolutely everything we've added before we fo
                 alter_momentum, // NEW!
                 harm_creature, // NEW!
                 remove_creature, // NEW!
-                end_turn.run_if(spell_stack_is_empty),
+                end_turn.run_if(spell_stack_is_empty), // CHANGED - This will prevent problems
             )
                 .chain())
             .in_set(ResolutionPhase),
@@ -749,7 +800,10 @@ impl Plugin for EventPlugin {
 
 Try `cargo run`.
 
-You'll find everything in working order: the sprite rotations when walking around, the inescapable cage, and melee attacking the pesky denizens intruding on your personal space... but everyone is nicely isolated in their own cubicles, unable to transit between the four quadrants.
+You'll find everything in working order: the sprite rotations when walking around, the inescapable cage, and melee attacking the pesky denizens intruding on your personal space... but you'll have to bash your way through the doors to move from quadrant to quadrant!
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/7-peace-was-never-an-option/bash.gif", alt="The player melee attacks doors to force them open, and gets slapped from all sides by the various Hunters around.",
+         position="center", style="border-radius: 8px;") }}
 
 We'll fix that. When a door is opened, it will become `Intangible`, which means it will be removed from the `Map`. It will still exist, but will no longer be included in any collisions or spell targeting.
 
@@ -759,6 +813,10 @@ We'll fix that. When a door is opened, it will become `Intangible`, which means 
 #[derive(Component)]
 pub struct Intangible;
 ```
+
+To enforce this, we'll add a new `Added` filter to `register_creatures` to handle any newly `Intangible` creature by removing it from the `Map`.
+
+However, we'll also need to track creatures which are *no longer tangible*  for their re-insertion into the `Map`. This will be done with `RemovedComponents`, an unique parameter that is basically the opposite of `Added`.
 
 ```rust
 // map.rs
@@ -797,6 +855,11 @@ pub fn register_creatures(
     // End NEW.
 }
 ```
+
+Finally, the door-interacting system can be written:
+
+- It hides the door creature's sprite, and spawns two `MagicEffect`s on top with the exact same appearance as the door.
+- These two effects receive `SlideAnimation` and slide away in a direction dictated by the door's original orientation.
 
 ```rust
 // events.rs
@@ -867,3 +930,58 @@ pub fn open_door(
     }
 }
 ```
+
+```rust
+// graphics.rs
+
+
+#[derive(Clone, Copy)]
+pub enum EffectType {
+    HorizontalBeam,
+    VerticalBeam,
+    RedBlast,
+    GreenBlast,
+    XCross,
+    Airlock, // NEW!
+}
+
+// SNIP
+
+/// Get the appropriate texture from the spritesheet depending on the effect type.
+pub fn get_effect_sprite(effect: &EffectType) -> usize {
+    match effect {
+        EffectType::HorizontalBeam => 15,
+        EffectType::VerticalBeam => 16,
+        EffectType::RedBlast => 14,
+        EffectType::GreenBlast => 13,
+        EffectType::XCross => 1,
+        EffectType::Airlock => 17, // NEW!
+    }
+}
+```
+
+With a final registration, we'll be able to open the doors like proper, civilized members of the elite.
+
+```rust
+// sets.rs
+
+        app.add_systems(
+            Update,
+            ((
+                summon_creature,
+                register_creatures,
+                teleport_entity,
+                creature_collision,
+                alter_momentum,
+                harm_creature,
+                open_door, // NEW!
+                remove_creature,
+                end_turn.run_if(spell_stack_is_empty),
+            )
+                .chain())
+            .in_set(ResolutionPhase),
+        );
+```
+
+{{ image(src="https://raw.githubusercontent.com/Oneirical/oneirical.github.io/main/7-peace-was-never-an-option/door.gif", alt="This time, the doors slide cleanly when the player bumps into them, allowing transition between each quadrant of the 18x18 play area.",
+         position="center", style="border-radius: 8px;") }}
