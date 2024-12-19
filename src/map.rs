@@ -172,21 +172,21 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let cage = "\
 ##################\
 #H.H..H.##...HH..#\
-#.#####.##..###..#\
-#...#...##.......#\
-#..H#...><.#####.#\
-#...#...##...H...#\
-#.#####.##.T###..#\
+#.WWWWW.##..WWW..#\
+#...W...##.......#\
+#..HW...><.WWWWW.#\
+#...W...##...H...#\
+#.WWWWW.##.TWWW..#\
 #..H...H##.......#\
 ####^########^####\
 ####V########V####\
 #.......##H......#\
-#.#####.##.....T.#\
-#.#H....##..#.#..#\
-#.#.##..><...@...#\
-#.#H....##..#.#..#\
-#.#####.##.......#\
-#.......##......H#\
+#.WWWWW.##.....T.#\
+#.WH....##..W.W..#\
+#.W.WW..><...@...#\
+#.WH....##..W.W..#\
+#.WWWWW.##.......#\
+#......2##..2...H#\
 ##################\
     ";
     for (idx, tile_char) in cage.char_indices() {
@@ -197,6 +197,8 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             'S' => Species::Spawner,
             'T' => Species::Tinker,
             '@' => Species::Player,
+            'W' => Species::WeakWall,
+            '2' => Species::Second,
             '^' | '>' | '<' | 'V' => Species::Airlock,
             _ => continue,
         };

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::{
     creature::{
         get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Intangible,
-        Player, Random, Species, Spellproof,
+        Player, Random, Species, Spellproof, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -25,7 +25,7 @@ impl Plugin for EventPlugin {
         app.add_event::<TeleportEntity>();
         app.add_event::<CreatureCollision>();
         app.add_event::<AlterMomentum>();
-        app.add_event::<HarmCreature>();
+        app.add_event::<DamageOrHealCreature>();
         app.add_event::<OpenDoor>();
         app.add_event::<RemoveCreature>();
         app.init_resource::<Events<CreatureStep>>();
@@ -70,6 +70,23 @@ pub fn summon_creature(
         if !map.is_passable(event.position.x, event.position.y) {
             continue;
         }
+        let max_hp = match &event.species {
+            Species::Player => 7,
+            Species::Wall => 10,
+            Species::WeakWall => 10,
+            Species::Hunter => 2,
+            Species::Spawner => 3,
+            Species::Airlock => 10,
+            Species::Apiarist => 3,
+            Species::Shrike => 1,
+            Species::Second => 6,
+            Species::Tinker => 2,
+        };
+        // Start at full health, in most cases.
+        let hp = match &event.species {
+            Species::Second => 1,
+            _ => max_hp,
+        };
         let mut new_creature = commands.spawn((
             Creature {
                 position: event.position,
@@ -84,22 +101,7 @@ pub fn summon_creature(
                     ..default()
                 },
                 momentum: event.momentum,
-                health: {
-                    let max_hp = match &event.species {
-                        Species::Player => 7,
-                        Species::Wall => 10,
-                        Species::Hunter => 2,
-                        Species::Spawner => 3,
-                        Species::Airlock => 10,
-                        Species::Apiarist => 3,
-                        Species::Shrike => 1,
-                        Species::Second => 1,
-                        Species::Tinker => 2,
-                    };
-                    // Start at full health.
-                    let hp = max_hp;
-                    Health { max_hp, hp }
-                },
+                health: Health { max_hp, hp },
             },
             Transform {
                 translation: Vec3 {
@@ -124,12 +126,15 @@ pub fn summon_creature(
                 new_creature.insert(Player);
             }
             Species::Wall => {
-                new_creature.insert((Attackproof, Spellproof));
+                new_creature.insert((Attackproof, Spellproof, Wall));
+            }
+            Species::WeakWall => {
+                new_creature.insert((Attackproof, Wall));
             }
             Species::Airlock => {
                 new_creature.insert((Attackproof, Spellproof, Door));
             }
-            Species::Hunter | Species::Spawner => {
+            Species::Hunter | Species::Spawner | Species::Second => {
                 new_creature.insert(Hunt);
             }
             Species::Tinker => {
@@ -137,6 +142,9 @@ pub fn summon_creature(
             }
             _ => (),
         }
+
+        // Creatures which start out damaged show their HP bar in advance.
+        let (visibility, index) = hp_bar_visibility_and_index(hp, max_hp);
 
         // Free the borrow on Commands.
         let new_creature_entity = new_creature.id();
@@ -147,16 +155,46 @@ pub fn summon_creature(
                     custom_size: Some(Vec2::new(64., 64.)),
                     texture_atlas: Some(TextureAtlas {
                         layout: atlas_layout.handle.clone(),
-                        index: 178,
+                        index,
                     }),
                     ..default()
                 },
-                visibility: Visibility::Hidden,
+                visibility,
                 transform: Transform::from_xyz(0., 0., 1.),
             })
             .id();
         commands.entity(new_creature_entity).add_child(hp_bar);
     }
+}
+
+/// Determine whether to show or not, and at which sprite index, an HP bar.
+fn hp_bar_visibility_and_index(hp: usize, max_hp: usize) -> (Visibility, usize) {
+    (
+        {
+            if max_hp == hp {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            }
+        },
+        {
+            if max_hp == hp {
+                178
+            } else {
+                let hp_percent = hp as f32 / max_hp as f32;
+                match hp_percent {
+                    0.86..1.00 => 178,
+                    0.72..0.86 => 179,
+                    0.58..0.72 => 180,
+                    0.44..0.58 => 181,
+                    0.30..0.44 => 182,
+                    0.16..0.30 => 183,
+                    0.00..0.16 => 184,
+                    _ => panic!("{hp}/{max_hp} - That is not a possible HP %!"),
+                }
+            }
+        },
+    )
 }
 
 #[derive(Event)]
@@ -245,7 +283,7 @@ pub struct CreatureCollision {
 
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
-    mut harm: EventWriter<HarmCreature>,
+    mut harm: EventWriter<DamageOrHealCreature>,
     mut open: EventWriter<OpenDoor>,
     flags: Query<(Has<Door>, Has<Attackproof>)>,
     mut turn_manager: ResMut<TurnManager>,
@@ -267,10 +305,10 @@ pub fn creature_collision(
             });
         } else if !cannot_be_attacked {
             // Melee attack.
-            harm.send(HarmCreature {
+            harm.send(DamageOrHealCreature {
                 entity: event.collided_with,
                 culprit: event.culprit,
-                damage: 1,
+                hp_mod: -1,
             });
             // Melee attack animation.
             attacker_transform.translation.x +=
@@ -325,42 +363,32 @@ pub fn alter_momentum(
 }
 
 #[derive(Event)]
-pub struct HarmCreature {
-    entity: Entity,
-    culprit: Entity,
-    damage: usize,
+pub struct DamageOrHealCreature {
+    pub entity: Entity,
+    pub culprit: Entity,
+    pub hp_mod: isize,
 }
 
 pub fn harm_creature(
-    mut events: EventReader<HarmCreature>,
+    mut events: EventReader<DamageOrHealCreature>,
     mut remove: EventWriter<RemoveCreature>,
     mut creature: Query<(&mut Health, &Children)>,
     mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
 ) {
     for event in events.read() {
         let (mut health, children) = creature.get_mut(event.entity).unwrap();
-        // Deduct damage from hp.
-        health.hp = health.hp.saturating_sub(event.damage);
+        // Apply damage or healing.
+        match event.hp_mod.signum() {
+            -1 => health.hp = health.hp.saturating_sub((event.hp_mod * -1) as usize), // Damage
+            1 => health.hp = health.hp.saturating_add(event.hp_mod as usize),         // Healing
+            _ => (), // 0 values do nothing
+        }
         // Update the healthbar.
         for child in children.iter() {
             let (mut hp_vis, mut hp_bar) = hp_bar.get_mut(*child).unwrap();
             // Don't show the healthbar at full hp.
-            if health.max_hp == health.hp {
-                *hp_vis = Visibility::Hidden;
-            } else {
-                *hp_vis = Visibility::Inherited;
-                let hp_percent = health.hp as f32 / health.max_hp as f32;
-                hp_bar.texture_atlas.as_mut().unwrap().index = match hp_percent {
-                    0.86..1.00 => 178,
-                    0.72..0.86 => 179,
-                    0.58..0.72 => 180,
-                    0.44..0.58 => 181,
-                    0.30..0.44 => 182,
-                    0.16..0.30 => 183,
-                    0.00..0.16 => 184,
-                    _ => panic!("That is not a possible HP %!"),
-                }
-            }
+            (*hp_vis, hp_bar.texture_atlas.as_mut().unwrap().index) =
+                hp_bar_visibility_and_index(health.hp, health.max_hp);
         }
         // 0 hp creatures are removed.
         if health.hp == 0 {
@@ -444,7 +472,7 @@ pub fn open_door(
 
 #[derive(Event)]
 pub struct RemoveCreature {
-    entity: Entity,
+    pub entity: Entity,
 }
 
 pub fn remove_creature(
@@ -508,6 +536,14 @@ pub fn end_turn(
                             caster: npc_entity,
                             spell: Spell {
                                 axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
+                            },
+                        });
+                    }
+                    Species::Second => {
+                        spell.send(CastSpell {
+                            caster: npc_entity,
+                            spell: Spell {
+                                axioms: vec![Axiom::Plus, Axiom::DevourWall],
                             },
                         });
                     }

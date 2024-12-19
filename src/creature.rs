@@ -34,6 +34,9 @@ pub struct Random;
 pub struct Door;
 
 #[derive(Component)]
+pub struct Wall;
+
+#[derive(Component)]
 pub struct Spellproof;
 
 #[derive(Component)]
@@ -52,6 +55,7 @@ pub struct Health {
 pub enum Species {
     Player,
     Wall,
+    WeakWall,
     Hunter,
     Apiarist,
     Shrike,
@@ -66,6 +70,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
     match species {
         Species::Player => 0,
         Species::Wall => 3,
+        Species::WeakWall => 3,
         Species::Hunter => 4,
         Species::Spawner => 5,
         Species::Airlock => 17,

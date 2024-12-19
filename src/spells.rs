@@ -3,8 +3,8 @@ use std::mem::{discriminant, Discriminant};
 use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
 
 use crate::{
-    creature::{Species, Spellproof},
-    events::{SummonCreature, TeleportEntity},
+    creature::{Species, Spellproof, Wall},
+    events::{DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
@@ -40,6 +40,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_momentum_beam),
         );
         axioms.library.insert(
+            discriminant(&Axiom::Plus),
+            world.register_system(axiom_form_plus),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Halo { radius: 1 }),
             world.register_system(axiom_form_halo),
         );
@@ -56,6 +60,10 @@ impl FromWorld for AxiomLibrary {
                 species: Species::Player,
             }),
             world.register_system(axiom_function_summon_creature),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::DevourWall),
+            world.register_system(axiom_function_devour_wall),
         );
         axioms
     }
@@ -103,6 +111,8 @@ pub enum Axiom {
     /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
+    /// Target all orthogonally adjacent tiles to the caster.
+    Plus,
     /// Target the tile adjacent to the caster, towards the caster's last move.
     Touch,
     /// Target a ring of `radius` around the caster.
@@ -113,6 +123,9 @@ pub enum Axiom {
     Dash { max_distance: i32 },
     /// The targeted passable tiles summon a new instance of species.
     SummonCreature { species: Species },
+    /// Any targeted creature with the Wall component is removed.
+    /// Each removed wall heals the caster +1.
+    DevourWall,
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -147,6 +160,14 @@ impl SynapseData {
             }
         }
         targeted_pairs
+    }
+
+    /// Get the Entity of each creature standing on a tile inside `targets`.
+    fn get_all_targeted_entities(&self, map: &Map) -> Vec<Entity> {
+        self.get_all_targeted_entity_pos_pairs(map)
+            .into_iter()
+            .map(|(entity, _)| entity)
+            .collect()
     }
 }
 
@@ -205,6 +226,32 @@ fn axiom_form_ego(
     });
     // Add that caster's position to the targets.
     synapse_data.targets.push(caster_position);
+}
+
+/// Target all orthogonally adjacent tiles to the caster.
+fn axiom_form_plus(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
+    let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
+    let mut output = Vec::new();
+    for direction in adjacent {
+        let mut new_pos = caster_position;
+        let offset = direction.as_offset();
+        new_pos.shift(offset.0, offset.1);
+        output.push(new_pos);
+    }
+    magic_vfx.send(PlaceMagicVfx {
+        targets: output.clone(),
+        sequence: EffectSequence::Sequential { duration: 0.04 },
+        effect: EffectType::RedBlast,
+        decay: 0.5,
+        appear: 0.,
+    });
+    synapse_data.targets.append(&mut output);
 }
 
 /// The targeted creatures dash in the direction of the caster's last move.
@@ -358,6 +405,31 @@ fn axiom_function_summon_creature(
     } else {
         panic!()
     }
+}
+
+/// Any targeted creature with the Wall component is removed.
+/// Each removed wall heals the caster +1.
+fn axiom_function_devour_wall(
+    mut remove: EventWriter<RemoveCreature>,
+    mut heal: EventWriter<DamageOrHealCreature>,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    wall_check: Query<(Has<Wall>, Has<Spellproof>)>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let mut total_heal: isize = 0;
+    for entity in synapse_data.get_all_targeted_entities(&map) {
+        let (is_wall, is_spellproof) = wall_check.get(entity).unwrap();
+        if is_wall && !is_spellproof {
+            remove.send(RemoveCreature { entity });
+            total_heal = total_heal.saturating_add(1);
+        }
+    }
+    heal.send(DamageOrHealCreature {
+        entity: synapse_data.caster,
+        culprit: synapse_data.caster,
+        hp_mod: total_heal,
+    });
 }
 
 fn linear_beam(
