@@ -177,16 +177,16 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 #..HW...><.WWWWW.#\
 #...W...##...H...#\
 #.WWWWW.##.TWWW..#\
-#..H...H##.......#\
+#..H...H##......F#\
 ####^########^####\
 ####V########V####\
-#.......##H......#\
-#.WWWWW.##.....T.#\
+#.......##A......#\
+#.WWWWW.##.....F.#\
 #.WH....##..W.W..#\
 #.W.WW..><...@...#\
 #.WH....##..W.W..#\
 #.WWWWW.##.......#\
-#......2##..2...H#\
+#......2##..2...F#\
 ##################\
     ";
     for (idx, tile_char) in cage.char_indices() {
@@ -199,6 +199,8 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             '@' => Species::Player,
             'W' => Species::WeakWall,
             '2' => Species::Second,
+            'A' => Species::Apiarist,
+            'F' => Species::Shrike,
             '^' | '>' | '<' | 'V' => Species::Airlock,
             _ => continue,
         };

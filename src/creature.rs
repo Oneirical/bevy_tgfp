@@ -19,6 +19,12 @@ pub struct HealthIndicator {
     pub transform: Transform,
 }
 
+#[derive(Component)]
+pub enum Speed {
+    Slow { wait_turns: usize },
+    Fast { actions_per_turn: usize },
+}
+
 /// Marker for the player
 #[derive(Component)]
 pub struct Player;

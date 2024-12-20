@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::{
     creature::{
         get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Intangible,
-        Player, Random, Species, Spellproof, Wall,
+        Player, Random, Species, Speed, Spellproof, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -28,6 +28,7 @@ impl Plugin for EventPlugin {
         app.add_event::<DamageOrHealCreature>();
         app.add_event::<OpenDoor>();
         app.add_event::<RemoveCreature>();
+        app.add_event::<EchoSpeed>();
         app.init_resource::<Events<CreatureStep>>();
         app.insert_resource(TurnManager {
             turn_count: 0,
@@ -139,6 +140,17 @@ pub fn summon_creature(
             }
             Species::Tinker => {
                 new_creature.insert(Random);
+            }
+            Species::Apiarist => {
+                new_creature.insert((Speed::Slow { wait_turns: 1 }, Hunt));
+            }
+            Species::Shrike => {
+                new_creature.insert((
+                    Speed::Fast {
+                        actions_per_turn: 2,
+                    },
+                    Hunt,
+                ));
             }
             _ => (),
         }
@@ -509,25 +521,59 @@ pub fn remove_creature(
 }
 
 #[derive(Event)]
-pub struct EndTurn;
+pub struct EndTurn {
+    pub speed_level: usize,
+}
 
 pub fn end_turn(
     mut events: EventReader<EndTurn>,
     mut step: EventWriter<CreatureStep>,
     mut spell: EventWriter<CastSpell>,
+    mut echo: EventWriter<EchoSpeed>,
     mut turn_manager: ResMut<TurnManager>,
     player: Query<&Position, With<Player>>,
-    npcs: Query<(Entity, &Position, &Species, Has<Hunt>, Has<Random>), Without<Player>>,
+    npcs: Query<
+        (
+            Entity,
+            &Position,
+            &Species,
+            Option<&Speed>,
+            Has<Hunt>,
+            Has<Random>,
+        ),
+        Without<Player>,
+    >,
     map: Res<Map>,
 ) {
-    for _event in events.read() {
+    for event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
         if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
             return;
         }
         turn_manager.turn_count += 1;
         let player_pos = player.get_single().unwrap();
-        for (npc_entity, npc_pos, npc_species, is_hunter, is_random) in npcs.iter() {
+        for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {
+            if let Some(speed) = speed {
+                match speed {
+                    Speed::Slow { wait_turns } => {
+                        if turn_manager.turn_count % (wait_turns + 1) != 0 || event.speed_level > 1
+                        {
+                            continue;
+                        }
+                    }
+                    Speed::Fast { actions_per_turn } => {
+                        if event.speed_level > *actions_per_turn {
+                            continue;
+                        } else {
+                            echo.send(EchoSpeed {
+                                speed_level: event.speed_level + 1,
+                            });
+                        }
+                    }
+                }
+            } else if event.speed_level > 1 {
+                continue;
+            }
             // Occasionally cast a spell.
             if turn_manager.turn_count % 5 == 0 {
                 match npc_species {
@@ -581,5 +627,18 @@ pub fn end_turn(
                 }
             }
         }
+    }
+}
+
+#[derive(Event)]
+pub struct EchoSpeed {
+    pub speed_level: usize,
+}
+
+pub fn echo_speed(mut events: EventReader<EchoSpeed>, mut end_turn: EventWriter<EndTurn>) {
+    for event in events.read() {
+        end_turn.send(EndTurn {
+            speed_level: event.speed_level,
+        });
     }
 }
