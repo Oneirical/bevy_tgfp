@@ -82,6 +82,7 @@ pub fn summon_creature(
             Species::Shrike => 1,
             Species::Second => 6,
             Species::Tinker => 2,
+            Species::Architect => 3,
         };
         // Start at full health, in most cases.
         let hp = match &event.species {
@@ -575,13 +576,21 @@ pub fn end_turn(
                 continue;
             }
             // Occasionally cast a spell.
-            if turn_manager.turn_count % 5 == 0 {
+            if turn_manager.turn_count % 10 == 0 {
                 match npc_species {
                     Species::Hunter => {
                         spell.send(CastSpell {
                             caster: npc_entity,
                             spell: Spell {
                                 axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
+                            },
+                        });
+                    }
+                    Species::Architect => {
+                        spell.send(CastSpell {
+                            caster: npc_entity,
+                            spell: Spell {
+                                axioms: vec![Axiom::Player, Axiom::ArchitectCage],
                             },
                         });
                     }

@@ -3,7 +3,7 @@ use std::mem::{discriminant, Discriminant};
 use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
 
 use crate::{
-    creature::{Species, Spellproof, Wall},
+    creature::{Player, Species, Spellproof, Wall},
     events::{DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
@@ -36,6 +36,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_ego),
         );
         axioms.library.insert(
+            discriminant(&Axiom::Player),
+            world.register_system(axiom_form_player),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::MomentumBeam),
             world.register_system(axiom_form_momentum_beam),
         );
@@ -64,6 +68,10 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::DevourWall),
             world.register_system(axiom_function_devour_wall),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::ArchitectCage),
+            world.register_system(axiom_function_architect_cage),
         );
         axioms
     }
@@ -108,6 +116,8 @@ pub enum Axiom {
     // FORMS
     /// Target the caster's tile.
     Ego,
+    /// Target the player's tile.
+    Player,
     /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
@@ -116,16 +126,23 @@ pub enum Axiom {
     /// Target the tile adjacent to the caster, towards the caster's last move.
     Touch,
     /// Target a ring of `radius` around the caster.
-    Halo { radius: i32 },
+    Halo {
+        radius: i32,
+    },
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
-    Dash { max_distance: i32 },
+    Dash {
+        max_distance: i32,
+    },
     /// The targeted passable tiles summon a new instance of species.
-    SummonCreature { species: Species },
+    SummonCreature {
+        species: Species,
+    },
     /// Any targeted creature with the Wall component is removed.
     /// Each removed wall heals the caster +1.
     DevourWall,
+    ArchitectCage,
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -226,6 +243,28 @@ fn axiom_form_ego(
     });
     // Add that caster's position to the targets.
     synapse_data.targets.push(caster_position);
+}
+
+/// Target the player's tile.
+fn axiom_form_player(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position, With<Player>>,
+) {
+    // Get the currently executed spell.
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    // Get the caster's position.
+    let player_position = *position.get_single().unwrap();
+    // Place the visual effect.
+    magic_vfx.send(PlaceMagicVfx {
+        targets: vec![player_position],
+        sequence: EffectSequence::Sequential { duration: 0.04 },
+        effect: EffectType::RedBlast,
+        decay: 0.5,
+        appear: 0.,
+    });
+    // Add that caster's position to the targets.
+    synapse_data.targets.push(player_position);
 }
 
 /// Target all orthogonally adjacent tiles to the caster.
@@ -432,6 +471,95 @@ fn axiom_function_devour_wall(
     });
 }
 
+fn axiom_function_architect_cage(
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    wall_check: Query<Has<Wall>>,
+    mut summon: EventWriter<SummonCreature>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    // Get the caster's position.
+    if let Some(cage_tile) = synapse_data.targets.last() {
+        let mut possible_centers = Vec::new();
+        for cage_offset_x in -3..3 {
+            for cage_offset_y in -3..3 {
+                possible_centers.push(Position::new(
+                    cage_tile.x + cage_offset_x,
+                    cage_tile.y + cage_offset_y,
+                ));
+            }
+        }
+        // TODO shuffle possible centers
+        let mut chosen_center = None;
+        let mut creatures_in_cage = Vec::new();
+        for possible_center in possible_centers {
+            let mut good_candidate = true;
+            for cage_offset_x in -3..3 {
+                for cage_offset_y in -3..3 {
+                    if let Some(found_obstruction) = map.get_entity_at(
+                        possible_center.x + cage_offset_x,
+                        possible_center.y + cage_offset_y,
+                    ) {
+                        if wall_check.get(*found_obstruction).unwrap() {
+                            good_candidate = false;
+                        } else {
+                            creatures_in_cage
+                                .push(Position::new(4 + cage_offset_x, 4 + cage_offset_y));
+                        }
+                    }
+                    if !good_candidate {
+                        break;
+                    }
+                }
+                if !good_candidate {
+                    creatures_in_cage.clear();
+                    break;
+                }
+            }
+            if good_candidate {
+                chosen_center = Some(possible_center);
+                break;
+            }
+        }
+        if let Some(chosen_center) = chosen_center {
+            let cage = generate_room(creatures_in_cage);
+            for (idx, tile_char) in cage.iter().enumerate() {
+                let position = Position::new(
+                    idx as i32 % 10 + chosen_center.x - 4,
+                    idx as i32 / 10 + chosen_center.y - 4,
+                );
+                let species = match tile_char {
+                    '#' => Species::Wall,
+                    'H' => Species::Hunter,
+                    'S' => Species::Spawner,
+                    'T' => Species::Tinker,
+                    '@' => Species::Player,
+                    'W' => Species::WeakWall,
+                    '2' => Species::Second,
+                    'A' => Species::Apiarist,
+                    'F' => Species::Shrike,
+                    '^' | '>' | '<' | 'V' => Species::Airlock,
+                    _ => continue,
+                };
+                let momentum = match tile_char {
+                    '^' => OrdDir::Up,
+                    '>' => OrdDir::Right,
+                    '<' => OrdDir::Left,
+                    'V' | _ => OrdDir::Down,
+                };
+                summon.send(SummonCreature {
+                    species,
+                    position,
+                    momentum,
+                    summon_tile: *caster_position,
+                });
+            }
+        }
+    }
+}
+
 fn linear_beam(
     mut start: Position,
     max_distance: usize,
@@ -499,4 +627,274 @@ fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
 
 pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
     spell_stack.spells.is_empty()
+}
+
+use rand::{seq::SliceRandom, Rng};
+
+const SIZE: usize = 9;
+
+fn generate_room(creatures_in_cage: Vec<Position>) -> Vec<char> {
+    let mut grid = vec![vec!['#'; SIZE]; SIZE];
+    let mut rng = rand::thread_rng();
+
+    // Set the X markers
+    grid[0][4] = '^';
+    grid[4][0] = '<';
+    grid[4][8] = '>';
+    grid[8][4] = 'V';
+
+    // Create a variable central area
+    create_variable_center(&mut grid, &mut rng);
+
+    // Connect X markers to the center
+    connect_to_center(&mut grid, 0, 4, 4, 4);
+    connect_to_center(&mut grid, 4, 0, 4, 4);
+    connect_to_center(&mut grid, 4, 8, 4, 4);
+    connect_to_center(&mut grid, 8, 4, 4, 4);
+    for creature_tile in creatures_in_cage {
+        connect_to_center(
+            &mut grid,
+            creature_tile.x.try_into().unwrap(),
+            creature_tile.y.try_into().unwrap(),
+            4,
+            4,
+        );
+    }
+
+    // Add random paths
+    for _ in 0..rng.gen_range(10..20) {
+        let x = rng.gen_range(1..8);
+        let y = rng.gen_range(1..8);
+        if grid[x][y] == '#' {
+            grid[x][y] = '.';
+            // Expand the path
+            for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx > 0 && nx < SIZE as i32 - 1 && ny > 0 && ny < SIZE as i32 - 1 {
+                    if rng.gen_bool(0.5) {
+                        grid[nx as usize][ny as usize] = '.';
+                    }
+                }
+            }
+        }
+    }
+
+    // Ensure all floor tiles are connected
+    ensure_connectivity(&mut grid);
+
+    // Replace inner walls with 'W'
+    replace_inner_walls(&mut grid);
+
+    // Place '@' and 'H' on random floor tiles
+    place_special_tiles(&mut grid, &mut rng);
+
+    grid.into_iter()
+        .flat_map(|row| row.into_iter().chain(std::iter::once('\n')))
+        .collect()
+}
+
+fn connect_to_center(
+    grid: &mut Vec<Vec<char>>,
+    start_x: usize,
+    start_y: usize,
+    end_x: usize,
+    end_y: usize,
+) {
+    let mut x = start_x;
+    let mut y = start_y;
+    while x != end_x || y != end_y {
+        grid[x][y] = '.';
+        if x < end_x {
+            x += 1;
+        } else if x > end_x {
+            x -= 1;
+        } else if y < end_y {
+            y += 1;
+        } else if y > end_y {
+            y -= 1;
+        }
+    }
+}
+
+fn ensure_connectivity(grid: &mut Vec<Vec<char>>) {
+    let mut visited = vec![vec![false; SIZE]; SIZE];
+    let mut stack = vec![];
+
+    // Find the first floor tile
+    'outer: for i in 0..SIZE {
+        for j in 0..SIZE {
+            if grid[i][j] == '.' {
+                stack.push((i, j));
+                visited[i][j] = true;
+                break 'outer;
+            }
+        }
+    }
+
+    // DFS to mark all connected tiles
+    while let Some((x, y)) = stack.pop() {
+        for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx >= 0 && nx < SIZE as i32 && ny >= 0 && ny < SIZE as i32 {
+                let nx = nx as usize;
+                let ny = ny as usize;
+                if (grid[nx][ny] == '.') && !visited[nx][ny] {
+                    visited[nx][ny] = true;
+                    stack.push((nx, ny));
+                }
+            }
+        }
+    }
+
+    // Connect any unvisited floor tiles
+    for i in 0..SIZE {
+        for j in 0..SIZE {
+            if (grid[i][j] == '.') && !visited[i][j] {
+                connect_to_nearest_visited(grid, &visited, i, j);
+            }
+        }
+    }
+}
+
+fn connect_to_nearest_visited(
+    grid: &mut Vec<Vec<char>>,
+    visited: &Vec<Vec<bool>>,
+    x: usize,
+    y: usize,
+) {
+    let mut queue = std::collections::VecDeque::new();
+    queue.push_back((x, y, Vec::<(usize, usize)>::new()));
+    let mut seen = vec![vec![false; SIZE]; SIZE];
+    seen[x][y] = true;
+
+    while let Some((cx, cy, path)) = queue.pop_front() {
+        if visited[cx][cy] {
+            for &(px, py) in &path {
+                grid[px][py] = '.';
+            }
+            return;
+        }
+
+        for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
+            let nx = cx as i32 + dx;
+            let ny = cy as i32 + dy;
+            if nx >= 0 && nx < SIZE as i32 && ny >= 0 && ny < SIZE as i32 {
+                let nx = nx as usize;
+                let ny = ny as usize;
+                if !seen[nx][ny] {
+                    seen[nx][ny] = true;
+                    let mut new_path = path.clone();
+                    new_path.push((nx, ny));
+                    queue.push_back((nx, ny, new_path));
+                }
+            }
+        }
+    }
+}
+
+fn create_variable_center(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng) {
+    // Start with a clear 5x5 center
+    for i in 3..6 {
+        for j in 3..6 {
+            grid[i][j] = '.';
+        }
+    }
+
+    // Randomly add some walls in the center
+    for _ in 0..rng.gen_range(1..5) {
+        let x = rng.gen_range(2..7);
+        let y = rng.gen_range(2..7);
+        grid[x][y] = '#';
+    }
+
+    // Ensure the center remains connected
+    let mut center_grid = grid[2..7]
+        .iter()
+        .map(|row| row[2..7].to_vec())
+        .collect::<Vec<_>>();
+    ensure_connectivity_subgrid(&mut center_grid);
+    for i in 0..5 {
+        for j in 0..5 {
+            grid[i + 2][j + 2] = center_grid[i][j];
+        }
+    }
+}
+
+fn ensure_connectivity_subgrid(grid: &mut Vec<Vec<char>>) {
+    let size = grid.len();
+    let mut visited = vec![vec![false; size]; size];
+    let mut stack = vec![];
+
+    // Find the first floor tile
+    'outer: for i in 0..size {
+        for j in 0..size {
+            if grid[i][j] == '.' {
+                stack.push((i, j));
+                visited[i][j] = true;
+                break 'outer;
+            }
+        }
+    }
+
+    // DFS to mark all connected tiles
+    while let Some((x, y)) = stack.pop() {
+        for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx >= 0 && nx < size as i32 && ny >= 0 && ny < size as i32 {
+                let nx = nx as usize;
+                let ny = ny as usize;
+                if grid[nx][ny] == '.' && !visited[nx][ny] {
+                    visited[nx][ny] = true;
+                    stack.push((nx, ny));
+                }
+            }
+        }
+    }
+
+    // Connect any unvisited floor tiles
+    for i in 0..size {
+        for j in 0..size {
+            if grid[i][j] == '.' && !visited[i][j] {
+                grid[i][j] = '#';
+            }
+        }
+    }
+}
+
+fn replace_inner_walls(grid: &mut Vec<Vec<char>>) {
+    for i in 1..SIZE - 1 {
+        for j in 1..SIZE - 1 {
+            if grid[i][j] == '#' {
+                grid[i][j] = 'W';
+            }
+        }
+    }
+}
+
+fn place_special_tiles(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng) {
+    let mut floor_tiles: Vec<(usize, usize)> = Vec::new();
+
+    grid[0][4] = 'V';
+    grid[4][0] = '<';
+    grid[4][8] = '>';
+    grid[8][4] = '^';
+
+    for i in 0..SIZE {
+        for j in 0..SIZE {
+            if grid[i][j] == '.' {
+                floor_tiles.push((i, j));
+            }
+        }
+    }
+
+    if floor_tiles.len() >= 2 {
+        floor_tiles.shuffle(rng);
+        // let (x, y) = floor_tiles[0];
+        // grid[x][y] = '@';
+        // let (x, y) = floor_tiles[1];
+        // grid[x][y] = 'H';
+    }
 }

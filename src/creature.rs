@@ -69,6 +69,7 @@ pub enum Species {
     Second,
     Spawner,
     Airlock,
+    Architect,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -84,5 +85,6 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Apiarist => 6,
         Species::Second => 7,
         Species::Tinker => 8,
+        Species::Architect => 24,
     }
 }
