@@ -73,6 +73,10 @@ impl FromWorld for AxiomLibrary {
             discriminant(&Axiom::ArchitectCage),
             world.register_system(axiom_function_architect_cage),
         );
+        axioms.library.insert(
+            discriminant(&Axiom::Abjuration),
+            world.register_system(axiom_function_abjuration),
+        );
         axioms
     }
 }
@@ -143,6 +147,8 @@ pub enum Axiom {
     /// Each removed wall heals the caster +1.
     DevourWall,
     ArchitectCage,
+    /// All creatures summoned by targeted creatures are removed.
+    Abjuration,
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -439,6 +445,7 @@ fn axiom_function_summon_creature(
                 position: *position,
                 momentum: OrdDir::Down,
                 summon_tile: *caster_position,
+                summoner: Some(synapse_data.caster),
             });
         }
     } else {
@@ -483,21 +490,22 @@ fn axiom_function_architect_cage(
     // Get the caster's position.
     if let Some(cage_tile) = synapse_data.targets.last() {
         let mut possible_centers = Vec::new();
-        for cage_offset_x in -3..3 {
-            for cage_offset_y in -3..3 {
+        for cage_offset_x in -3..=3 {
+            for cage_offset_y in -3..=3 {
                 possible_centers.push(Position::new(
                     cage_tile.x + cage_offset_x,
                     cage_tile.y + cage_offset_y,
                 ));
             }
         }
-        // TODO shuffle possible centers
+        let mut rng = rand::thread_rng();
+        possible_centers.shuffle(&mut rng);
         let mut chosen_center = None;
         let mut creatures_in_cage = Vec::new();
         for possible_center in possible_centers {
             let mut good_candidate = true;
-            for cage_offset_x in -3..3 {
-                for cage_offset_y in -3..3 {
+            for cage_offset_x in -3..=3 {
+                for cage_offset_y in -3..=3 {
                     if let Some(found_obstruction) = map.get_entity_at(
                         possible_center.x + cage_offset_x,
                         possible_center.y + cage_offset_y,
@@ -554,8 +562,29 @@ fn axiom_function_architect_cage(
                     position,
                     momentum,
                     summon_tile: *caster_position,
+                    summoner: Some(synapse_data.caster),
                 });
             }
+        }
+    }
+}
+
+/// All creatures summoned by targeted creatures are removed.
+fn axiom_function_abjuration(
+    mut remove: EventWriter<RemoveCreature>,
+    mut heal: EventWriter<DamageOrHealCreature>,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    wall_check: Query<(Has<Wall>, Has<Spellproof>)>,
+) {
+    // TODO
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let mut total_heal: isize = 0;
+    for entity in synapse_data.get_all_targeted_entities(&map) {
+        let (is_wall, is_spellproof) = wall_check.get(entity).unwrap();
+        if is_wall && !is_spellproof {
+            remove.send(RemoveCreature { entity });
+            total_heal = total_heal.saturating_add(1);
         }
     }
 }
@@ -894,7 +923,7 @@ fn place_special_tiles(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng) {
         floor_tiles.shuffle(rng);
         // let (x, y) = floor_tiles[0];
         // grid[x][y] = '@';
-        // let (x, y) = floor_tiles[1];
-        // grid[x][y] = 'H';
+        let (x, y) = floor_tiles[0];
+        grid[x][y] = 'H';
     }
 }

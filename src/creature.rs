@@ -37,6 +37,11 @@ pub struct Hunt;
 pub struct Random;
 
 #[derive(Component)]
+pub struct Summoned {
+    pub summoner: Entity,
+}
+
+#[derive(Component)]
 pub struct Door;
 
 #[derive(Component)]

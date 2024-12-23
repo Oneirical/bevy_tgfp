@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use crate::{
     creature::{
         get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Intangible,
-        Player, Random, Species, Speed, Spellproof, Wall,
+        Player, Random, Species, Speed, Spellproof, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -56,6 +56,7 @@ pub struct SummonCreature {
     pub species: Species,
     pub momentum: OrdDir,
     pub summon_tile: Position,
+    pub summoner: Option<Entity>,
 }
 
 /// Place a new Creature on the map of Species and at Position.
@@ -154,6 +155,10 @@ pub fn summon_creature(
                 ));
             }
             _ => (),
+        }
+
+        if let Some(summoner) = event.summoner {
+            new_creature.insert(Summoned { summoner });
         }
 
         // Creatures which start out damaged show their HP bar in advance.

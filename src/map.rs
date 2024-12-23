@@ -251,6 +251,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
             position,
             momentum,
             summon_tile: Position::new(0, 0),
+            summoner: None,
         });
     }
 }
