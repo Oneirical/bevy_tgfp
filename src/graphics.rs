@@ -63,7 +63,7 @@ pub fn adjust_transforms(
             {
                 trans.translation = trans
                     .translation
-                    .lerp(target_translation, 10. * time.delta_secs());
+                    .lerp(target_translation, 6. * time.delta_secs());
             // Otherwise, the animation is over - clip the creature onto the grid.
             } else {
                 commands.entity(entity).remove::<SlideAnimation>();

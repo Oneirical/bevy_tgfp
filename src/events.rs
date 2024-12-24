@@ -390,11 +390,13 @@ pub struct DamageOrHealCreature {
 pub fn harm_creature(
     mut events: EventReader<DamageOrHealCreature>,
     mut remove: EventWriter<RemoveCreature>,
-    mut creature: Query<(&mut Health, &Children)>,
+    mut spell: EventWriter<CastSpell>,
+    mut teleporter: EventWriter<TeleportEntity>,
+    mut creature: Query<(&mut Health, &Children, &Species)>,
     mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
 ) {
     for event in events.read() {
-        let (mut health, children) = creature.get_mut(event.entity).unwrap();
+        let (mut health, children, species) = creature.get_mut(event.entity).unwrap();
         // Apply damage or healing.
         match event.hp_mod.signum() {
             -1 => health.hp = health.hp.saturating_sub((event.hp_mod * -1) as usize), // Damage
@@ -412,6 +414,14 @@ pub fn harm_creature(
         if health.hp == 0 {
             remove.send(RemoveCreature {
                 entity: event.entity,
+            });
+        } else if matches!(species, Species::Architect) {
+            teleporter.send(TeleportEntity::new(event.culprit, 22, 1));
+            spell.send(CastSpell {
+                caster: event.entity,
+                spell: Spell {
+                    axioms: vec![Axiom::Ego, Axiom::Abjuration],
+                },
             });
         }
     }
@@ -522,6 +532,8 @@ pub fn remove_creature(
             spell_stack
                 .spells
                 .retain(|spell| spell.caster != event.entity);
+        } else {
+            panic!("You have been slain");
         }
     }
 }

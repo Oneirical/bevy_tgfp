@@ -3,7 +3,7 @@ use std::mem::{discriminant, Discriminant};
 use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
 
 use crate::{
-    creature::{Player, Species, Spellproof, Wall},
+    creature::{Player, Species, Spellproof, Summoned, Wall},
     events::{DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
@@ -572,19 +572,23 @@ fn axiom_function_architect_cage(
 /// All creatures summoned by targeted creatures are removed.
 fn axiom_function_abjuration(
     mut remove: EventWriter<RemoveCreature>,
-    mut heal: EventWriter<DamageOrHealCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    wall_check: Query<(Has<Wall>, Has<Spellproof>)>,
+    summons: Query<(Entity, &Summoned)>,
+    is_spellproof: Query<Has<Spellproof>>,
 ) {
-    // TODO
     let synapse_data = spell_stack.spells.last().unwrap();
-    let mut total_heal: isize = 0;
     for entity in synapse_data.get_all_targeted_entities(&map) {
-        let (is_wall, is_spellproof) = wall_check.get(entity).unwrap();
-        if is_wall && !is_spellproof {
-            remove.send(RemoveCreature { entity });
-            total_heal = total_heal.saturating_add(1);
+        // Spellproof entities cannot be affected.
+        if is_spellproof.get(entity).unwrap() {
+            continue;
+        }
+        for (summoned_entity, summon) in summons.iter() {
+            if summon.summoner == entity {
+                remove.send(RemoveCreature {
+                    entity: summoned_entity,
+                });
+            }
         }
     }
 }
@@ -825,14 +829,14 @@ fn connect_to_nearest_visited(
 
 fn create_variable_center(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng) {
     // Start with a clear 5x5 center
-    for i in 3..6 {
-        for j in 3..6 {
+    for i in 4..5 {
+        for j in 4..5 {
             grid[i][j] = '.';
         }
     }
 
     // Randomly add some walls in the center
-    for _ in 0..rng.gen_range(1..5) {
+    for _ in 0..rng.gen_range(1..9) {
         let x = rng.gen_range(2..7);
         let y = rng.gen_range(2..7);
         grid[x][y] = '#';
@@ -921,9 +925,9 @@ fn place_special_tiles(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng) {
 
     if floor_tiles.len() >= 2 {
         floor_tiles.shuffle(rng);
-        // let (x, y) = floor_tiles[0];
-        // grid[x][y] = '@';
         let (x, y) = floor_tiles[0];
-        grid[x][y] = 'H';
+        grid[x][y] = *['A', 'T', 'F', '2', 'H'].choose(rng).unwrap();
+        let (x, y) = floor_tiles[1];
+        grid[x][y] = *['A', 'T', 'F', '2', 'H'].choose(rng).unwrap();
     }
 }

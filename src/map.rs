@@ -131,11 +131,9 @@ impl Map {
     /// Move a pre-existing entity around the Map.
     pub fn move_creature(&mut self, old_pos: Position, new_pos: Position) {
         // As the entity already existed in the Map's records, remove it.
-        let entity = self.creatures.remove(&old_pos).expect(&format!(
-            "The map cannot move a nonexistent Entity from {:?} to {:?}.",
-            old_pos, new_pos
-        ));
-        self.creatures.insert(new_pos, entity);
+        if let Some(entity) = self.creatures.remove(&old_pos) {
+            self.creatures.insert(new_pos, entity);
+        }
     }
 }
 
@@ -163,11 +161,12 @@ pub fn register_creatures(
 
     // A creature recovering its tangibility is added to the map.
     for entity in tangible_entities.read() {
-        let tangible_position = tangible_creatures.get(entity).unwrap();
-        if map.creatures.get(tangible_position).is_some() {
-            panic!("A creature recovered its tangibility while on top of another creature!");
+        if let Ok(tangible_position) = tangible_creatures.get(entity) {
+            if map.creatures.get(tangible_position).is_some() {
+                panic!("A creature recovered its tangibility while on top of another creature!");
+            }
+            map.creatures.insert(*tangible_position, entity);
         }
-        map.creatures.insert(*tangible_position, entity);
     }
 }
 
@@ -175,7 +174,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let mut spawned_player = false;
     let cage = "
 ####.....###......#######......###.....####
-##########......###.....###......##########
+##########......###..@..###......##########
 .#...###......###.........###......###...#.
 .#...#......###.............###......#...#.
 .#...#....###.................###....#...#.
@@ -194,7 +193,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 #.........................................#
 #.........................................#
 #.........................................#
-#...........................@.............#
+#.........................................#
 #....................B....................#
 #.........................................#
 #.........................................#
