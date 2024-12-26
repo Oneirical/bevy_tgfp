@@ -73,12 +73,12 @@ pub fn summon_creature(
             continue;
         }
         let max_hp = match &event.species {
-            Species::Player => 7,
-            Species::Wall => 10,
-            Species::WeakWall => 10,
+            Species::Player => 6,
+            Species::Wall => 6,
+            Species::WeakWall => 6,
             Species::Hunter => 2,
             Species::Spawner => 3,
-            Species::Airlock => 10,
+            Species::Airlock => 6,
             Species::Apiarist => 3,
             Species::Shrike => 1,
             Species::Second => 6,
@@ -199,16 +199,13 @@ fn hp_bar_visibility_and_index(hp: usize, max_hp: usize) -> (Visibility, usize) 
             if max_hp == hp {
                 178
             } else {
-                let hp_percent = hp as f32 / max_hp as f32;
-                match hp_percent {
-                    0.86..1.00 => 178,
-                    0.72..0.86 => 179,
-                    0.58..0.72 => 180,
-                    0.44..0.58 => 181,
-                    0.30..0.44 => 182,
-                    0.16..0.30 => 183,
-                    0.00..0.16 => 184,
-                    _ => panic!("{hp}/{max_hp} - That is not a possible HP %!"),
+                match hp {
+                    5 => 178,
+                    4 => 179,
+                    3 => 180,
+                    2 => 181,
+                    1 => 182,
+                    _ => 183,
                 }
             }
         },
