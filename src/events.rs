@@ -261,6 +261,7 @@ pub fn teleport_entity(
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
+    is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
         let (mut creature_position, is_intangible) = creature
@@ -282,10 +283,18 @@ pub fn teleport_entity(
             let collided_with = map
                 .get_entity_at(event.destination.x, event.destination.y)
                 .unwrap();
-            collision.send(CreatureCollision {
-                culprit: event.entity,
-                collided_with: *collided_with,
-            });
+            let (culprit_is_player, collided_is_player) = (
+                is_player.get(event.entity).unwrap(),
+                is_player.get(*collided_with).unwrap(),
+            );
+            // Only collide if one of the two creature is the player.
+            // TODO: This will prevent allied creatures from attacking.
+            if culprit_is_player || collided_is_player {
+                collision.send(CreatureCollision {
+                    culprit: event.entity,
+                    collided_with: *collided_with,
+                });
+            }
         }
     }
 }
@@ -567,6 +576,7 @@ pub fn end_turn(
         }
         turn_manager.turn_count += 1;
         let player_pos = player.get_single().unwrap();
+        let mut send_echo = false;
         for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {
             if let Some(speed) = speed {
                 match speed {
@@ -580,9 +590,7 @@ pub fn end_turn(
                         if event.speed_level > *actions_per_turn {
                             continue;
                         } else {
-                            echo.send(EchoSpeed {
-                                speed_level: event.speed_level + 1,
-                            });
+                            send_echo = true;
                         }
                     }
                 }
@@ -590,7 +598,7 @@ pub fn end_turn(
                 continue;
             }
             // Occasionally cast a spell.
-            if turn_manager.turn_count % 10 == 0 {
+            if turn_manager.turn_count % 1000 == 0 {
                 match npc_species {
                     Species::Hunter => {
                         spell.send(CastSpell {
@@ -649,6 +657,11 @@ pub fn end_turn(
                     });
                 }
             }
+        }
+        if send_echo {
+            echo.send(EchoSpeed {
+                speed_level: event.speed_level + 1,
+            });
         }
     }
 }
