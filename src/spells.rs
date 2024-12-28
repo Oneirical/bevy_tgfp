@@ -1,13 +1,19 @@
-use std::mem::{discriminant, Discriminant};
+use std::{
+    cmp::Ordering,
+    mem::{discriminant, Discriminant},
+};
 
-use bevy::{ecs::system::SystemId, prelude::*, utils::HashMap};
-use rand::seq::SliceRandom;
+use bevy::{
+    ecs::system::SystemId,
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
 
 use crate::{
     creature::{Player, Species, Spellproof, Summoned, Wall},
     events::{DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity},
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
-    map::{generate_room, Map, Position},
+    map::{Map, Position},
     OrdDir,
 };
 
@@ -25,11 +31,13 @@ impl Plugin for SpellPlugin {
 /// All available Axioms and their corresponding systems.
 pub struct AxiomLibrary {
     pub library: HashMap<Discriminant<Axiom>, SystemId>,
+    pub teleport: SystemId<In<TeleportEntity>>,
 }
 
 impl FromWorld for AxiomLibrary {
     fn from_world(world: &mut World) -> Self {
         let mut axioms = AxiomLibrary {
+            teleport: world.register_system(teleport_transmission),
             library: HashMap::new(),
         };
         axioms.library.insert(
@@ -53,6 +61,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_halo),
         );
         axioms.library.insert(
+            discriminant(&Axiom::XBeam),
+            world.register_system(axiom_form_xbeam),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Touch),
             world.register_system(axiom_form_touch),
         );
@@ -71,12 +83,24 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_function_devour_wall),
         );
         axioms.library.insert(
-            discriminant(&Axiom::ArchitectCage),
-            world.register_system(axiom_function_architect_cage),
-        );
-        axioms.library.insert(
             discriminant(&Axiom::Abjuration),
             world.register_system(axiom_function_abjuration),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::HealOrHarm { amount: 1 }),
+            world.register_system(axiom_function_heal_or_harm),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::Trace),
+            world.register_system(axiom_mutator_trace),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::Spread),
+            world.register_system(axiom_mutator_spread),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::UntargetCaster),
+            world.register_system(axiom_mutator_untarget_caster),
         );
         axioms
     }
@@ -126,52 +150,61 @@ pub enum Axiom {
     /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     MomentumBeam,
+    /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
+    /// including the first solid tile encountered, which stops the beam.
+    XBeam,
     /// Target all orthogonally adjacent tiles to the caster.
     Plus,
     /// Target the tile adjacent to the caster, towards the caster's last move.
     Touch,
     /// Target a ring of `radius` around the caster.
-    Halo {
-        radius: i32,
-    },
+    Halo { radius: i32 },
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
-    Dash {
-        max_distance: i32,
-    },
+    Dash { max_distance: i32 },
     /// The targeted passable tiles summon a new instance of species.
-    SummonCreature {
-        species: Species,
-    },
+    SummonCreature { species: Species },
     /// Any targeted creature with the Wall component is removed.
     /// Each removed wall heals the caster +1.
     DevourWall,
-    ArchitectCage,
     /// All creatures summoned by targeted creatures are removed.
     Abjuration,
+    /// All targeted creatures heal or are harmed by this amount.
+    HealOrHarm { amount: isize },
+
+    // MUTATORS
+    /// Any Teleport event will target all tiles between its start and destination tiles.
+    Trace,
+    /// All targeted tiles expand to also target their orthogonally adjacent tiles.
+    Spread,
+    /// Remove the Caster's tile from targets.
+    UntargetCaster,
 }
 
 /// The tracker of everything which determines how a certain spell will act.
 pub struct SynapseData {
     /// Where a spell will act.
-    targets: Vec<Position>,
+    targets: HashSet<Position>,
     /// How a spell will act.
     pub axioms: Vec<Axiom>,
     /// The nth axiom currently being executed.
     pub step: usize,
     /// Who cast the spell.
     pub caster: Entity,
+    /// Flags that alter the behaviour of an active synapse.
+    synapse_flags: HashSet<SynapseFlag>,
 }
 
 impl SynapseData {
     /// Create a blank SynapseData.
     fn new(caster: Entity, axioms: Vec<Axiom>) -> Self {
         SynapseData {
-            targets: Vec::new(),
+            targets: HashSet::new(),
             axioms,
             step: 0,
             caster,
+            synapse_flags: HashSet::new(),
         }
     }
 
@@ -193,6 +226,18 @@ impl SynapseData {
             .map(|(entity, _)| entity)
             .collect()
     }
+}
+
+#[derive(Eq, Debug, PartialEq, Hash)]
+/// Flags that alter the behaviour of an active synapse.
+pub enum SynapseFlag {
+    /// Delete this synapse and abandon all future Axioms.
+    Terminate,
+    /// Do not advance the step counter. Only runs once, is deleted instead of incrementing
+    /// the step counter.
+    NoStep,
+    /// Any Teleport event will target all tiles between its start and destination tiles.
+    Trace,
 }
 
 pub fn cast_new_spell(
@@ -249,7 +294,7 @@ fn axiom_form_ego(
         appear: 0.,
     });
     // Add that caster's position to the targets.
-    synapse_data.targets.push(caster_position);
+    synapse_data.targets.insert(caster_position);
 }
 
 /// Target the player's tile.
@@ -271,7 +316,7 @@ fn axiom_form_player(
         appear: 0.,
     });
     // Add that caster's position to the targets.
-    synapse_data.targets.push(player_position);
+    synapse_data.targets.insert(player_position);
 }
 
 /// Target all orthogonally adjacent tiles to the caster.
@@ -297,12 +342,13 @@ fn axiom_form_plus(
         decay: 0.5,
         appear: 0.,
     });
-    synapse_data.targets.append(&mut output);
+    synapse_data.targets.extend(&output);
 }
 
 /// The targeted creatures dash in the direction of the caster's last move.
 fn axiom_function_dash(
-    mut teleport: EventWriter<TeleportEntity>,
+    library: Res<AxiomLibrary>,
+    mut commands: Commands,
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
     momentum: Query<&OrdDir>,
@@ -337,10 +383,13 @@ fn axiom_function_dash(
             }
 
             // Once finished, release the Teleport event.
-            teleport.send(TeleportEntity {
-                destination: final_dash_destination,
-                entity: dasher,
-            });
+            commands.run_system_with_input(
+                library.teleport,
+                TeleportEntity {
+                    destination: final_dash_destination,
+                    entity: dasher,
+                },
+            );
         }
     } else {
         // This should NEVER trigger. This system was chosen to run because the
@@ -363,7 +412,7 @@ fn axiom_form_momentum_beam(
     // Start the beam where the caster is standing.
     // The beam travels in the direction of the caster's last move.
     let (off_x, off_y) = caster_momentum.as_offset();
-    let mut output = linear_beam(*caster_position, 10, off_x, off_y, &map);
+    let output = linear_beam(*caster_position, 10, off_x, off_y, &map);
     // Add some visual beam effects.
     magic_vfx.send(PlaceMagicVfx {
         targets: output.clone(),
@@ -376,7 +425,35 @@ fn axiom_form_momentum_beam(
         appear: 0.,
     });
     // Add these tiles to `targets`.
-    synapse_data.targets.append(&mut output);
+    synapse_data.targets.extend(&output);
+}
+
+/// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
+/// including the first solid tile encountered, which stops the beam.
+fn axiom_form_xbeam(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
+    let diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)];
+    for (dx, dy) in diagonals {
+        // Start the beam where the caster is standing.
+        // The beam travels in the direction of each diagonal.
+        let output = linear_beam(caster_position, 10, dx, dy, &map);
+        // Add some visual beam effects.
+        magic_vfx.send(PlaceMagicVfx {
+            targets: output.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::RedBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+        // Add these tiles to `targets`.
+        synapse_data.targets.extend(&output);
+    }
 }
 
 /// Target the tile adjacent to the caster, towards the caster's last move.
@@ -390,7 +467,7 @@ fn axiom_form_touch(
         position_and_momentum.get(synapse_data.caster).unwrap();
     let (off_x, off_y) = caster_momentum.as_offset();
     let touch = Position::new(caster_position.x + off_x, caster_position.y + off_y);
-    synapse_data.targets.push(touch);
+    synapse_data.targets.insert(touch);
     magic_vfx.send(PlaceMagicVfx {
         targets: vec![touch],
         sequence: EffectSequence::Sequential { duration: 0.04 },
@@ -425,7 +502,7 @@ fn axiom_form_halo(
             appear: 0.,
         });
         // Add these tiles to `targets`.
-        synapse_data.targets.append(&mut circle);
+        synapse_data.targets.extend(&circle);
     } else {
         panic!()
     }
@@ -479,94 +556,27 @@ fn axiom_function_devour_wall(
     });
 }
 
-fn axiom_function_architect_cage(
+/// All targeted creatures heal or are harmed by this amount.
+fn axiom_function_heal_or_harm(
+    mut heal: EventWriter<DamageOrHealCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    wall_check: Query<Has<Wall>>,
-    mut summon: EventWriter<SummonCreature>,
-    position: Query<&Position>,
+    is_spellproof: Query<Has<Spellproof>>,
 ) {
     let synapse_data = spell_stack.spells.last().unwrap();
-    let caster_position = position.get(synapse_data.caster).unwrap();
-    // Get the caster's position.
-    if let Some(cage_tile) = synapse_data.targets.last() {
-        let mut possible_centers = Vec::new();
-        for cage_offset_x in -3..=3 {
-            for cage_offset_y in -3..=3 {
-                possible_centers.push(Position::new(
-                    cage_tile.x + cage_offset_x,
-                    cage_tile.y + cage_offset_y,
-                ));
-            }
-        }
-        let mut rng = rand::thread_rng();
-        possible_centers.shuffle(&mut rng);
-        let mut chosen_center = None;
-        let mut creatures_in_cage = Vec::new();
-        for possible_center in possible_centers {
-            let mut good_candidate = true;
-            for cage_offset_x in -3..=3 {
-                for cage_offset_y in -3..=3 {
-                    if let Some(found_obstruction) = map.get_entity_at(
-                        possible_center.x + cage_offset_x,
-                        possible_center.y + cage_offset_y,
-                    ) {
-                        if wall_check.get(*found_obstruction).unwrap() {
-                            good_candidate = false;
-                        } else {
-                            creatures_in_cage
-                                .push(Position::new(4 + cage_offset_x, 4 + cage_offset_y));
-                        }
-                    }
-                    if !good_candidate {
-                        break;
-                    }
-                }
-                if !good_candidate {
-                    creatures_in_cage.clear();
-                    break;
-                }
-            }
-            if good_candidate {
-                chosen_center = Some(possible_center);
-                break;
-            }
-        }
-        if let Some(chosen_center) = chosen_center {
-            let cage = generate_room(2);
-            for (idx, tile_char) in cage.iter().enumerate() {
-                let position = Position::new(
-                    idx as i32 % 10 + chosen_center.x - 4,
-                    idx as i32 / 10 + chosen_center.y - 4,
-                );
-                let species = match tile_char {
-                    '#' => Species::Wall,
-                    'H' => Species::Hunter,
-                    'S' => Species::Spawner,
-                    'T' => Species::Tinker,
-                    '@' => Species::Player,
-                    'W' => Species::WeakWall,
-                    '2' => Species::Second,
-                    'A' => Species::Apiarist,
-                    'F' => Species::Shrike,
-                    '^' | '>' | '<' | 'V' => Species::Airlock,
-                    _ => continue,
-                };
-                let momentum = match tile_char {
-                    '^' => OrdDir::Up,
-                    '>' => OrdDir::Right,
-                    '<' => OrdDir::Left,
-                    'V' | _ => OrdDir::Down,
-                };
-                summon.send(SummonCreature {
-                    species,
-                    position,
-                    momentum,
-                    summon_tile: *caster_position,
-                    summoner: Some(synapse_data.caster),
+    if let Axiom::HealOrHarm { amount } = synapse_data.axioms[synapse_data.step] {
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            let is_spellproof = is_spellproof.get(entity).unwrap();
+            if !is_spellproof {
+                heal.send(DamageOrHealCreature {
+                    entity,
+                    culprit: synapse_data.caster,
+                    hp_mod: amount,
                 });
             }
         }
+    } else {
+        panic!();
     }
 }
 
@@ -592,6 +602,78 @@ fn axiom_function_abjuration(
             }
         }
     }
+}
+
+/// Any Teleport event will target all tiles between its start and destination tiles.
+fn axiom_mutator_trace(mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    synapse_data.synapse_flags.insert(SynapseFlag::Trace);
+}
+
+/// All targeted tiles expand to also target their orthogonally adjacent tiles.
+fn axiom_mutator_spread(
+    mut spell_stack: ResMut<SpellStack>,
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let mut output = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
+    for target in &synapse_data.targets {
+        let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
+        for (i, direction) in adjacent.iter().enumerate() {
+            let mut new_pos = *target;
+            let offset = direction.as_offset();
+            new_pos.shift(offset.0, offset.1);
+            output[i].push(new_pos);
+        }
+    }
+    // All upwards, then all rightwards, etc, for a consistent animation effect.
+    for ord_dir_vec in output {
+        magic_vfx.send(PlaceMagicVfx {
+            targets: ord_dir_vec.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::RedBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+        synapse_data.targets.extend(&ord_dir_vec);
+    }
+}
+
+/// Remove the Caster's tile from targets.
+fn axiom_mutator_untarget_caster(mut spell_stack: ResMut<SpellStack>, position: Query<&Position>) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    synapse_data.targets.remove(caster_position);
+}
+
+fn teleport_transmission(
+    In(teleport_event): In<TeleportEntity>,
+    position: Query<&Position>,
+    mut teleport_writer: EventWriter<TeleportEntity>,
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    if synapse_data.synapse_flags.contains(&SynapseFlag::Trace) {
+        let start = position.get(teleport_event.entity).unwrap();
+        let mut output = walk_grid(*start, teleport_event.destination);
+        if output.len() > 2 {
+            // Remove the start and ending.
+            output.pop();
+            output.remove(0);
+            // Add some visual beam effects.
+            magic_vfx.send(PlaceMagicVfx {
+                targets: output.clone(),
+                sequence: EffectSequence::Sequential { duration: 0.04 },
+                effect: EffectType::RedBlast,
+                decay: 0.5,
+                appear: 0.,
+            });
+            // Add these tiles to `targets`.
+            synapse_data.targets.extend(&output);
+        }
+    }
+    teleport_writer.send(teleport_event);
 }
 
 fn linear_beam(
@@ -661,4 +743,34 @@ fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
 
 pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
     spell_stack.spells.is_empty()
+}
+
+fn walk_grid(p0: Position, p1: Position) -> Vec<Position> {
+    let dx = p1.x - p0.x;
+    let dy = p1.y - p0.y;
+    let nx = dx.abs();
+    let ny = dy.abs();
+    let sign_x = dx.signum();
+    let sign_y = dy.signum();
+
+    let mut p = Position { x: p0.x, y: p0.y };
+    let mut points = vec![p];
+    let mut ix = 0;
+    let mut iy = 0;
+
+    while ix < nx || iy < ny {
+        match ((0.5 + ix as f32) / nx as f32).partial_cmp(&((0.5 + iy as f32) / ny as f32)) {
+            Some(Ordering::Less) => {
+                p.x += sign_x;
+                ix += 1;
+            }
+            _ => {
+                p.y += sign_y;
+                iy += 1;
+            }
+        }
+        points.push(p);
+    }
+
+    points
 }

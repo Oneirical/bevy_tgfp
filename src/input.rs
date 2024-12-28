@@ -16,11 +16,38 @@ pub fn keyboard_input(
     mut turn_manager: ResMut<TurnManager>,
     mut turn_end: EventWriter<EndTurn>,
 ) {
-    if input.just_pressed(KeyCode::Space) {
+    if input.just_pressed(KeyCode::Digit1) {
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
             spell: Spell {
-                axioms: vec![Axiom::Ego, Axiom::ArchitectCage],
+                axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
+            },
+        });
+        turn_manager.action_this_turn = PlayerAction::Spell;
+        turn_end.send(EndTurn { speed_level: 1 });
+    }
+    if input.just_pressed(KeyCode::Digit4) {
+        spell.send(CastSpell {
+            caster: player.get_single().unwrap(),
+            spell: Spell {
+                axioms: vec![Axiom::XBeam, Axiom::HealOrHarm { amount: -2 }],
+            },
+        });
+        turn_manager.action_this_turn = PlayerAction::Spell;
+        turn_end.send(EndTurn { speed_level: 1 });
+    }
+    if input.just_pressed(KeyCode::Digit5) {
+        spell.send(CastSpell {
+            caster: player.get_single().unwrap(),
+            spell: Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::Trace,
+                    Axiom::Dash { max_distance: 5 },
+                    Axiom::Spread,
+                    Axiom::UntargetCaster,
+                    Axiom::HealOrHarm { amount: -1 },
+                ],
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;

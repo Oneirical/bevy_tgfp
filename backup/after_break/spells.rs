@@ -452,6 +452,97 @@ fn axiom_function_random_caster_teleport(
     }
 }
 
+fn axiom_function_architect_cage(
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    wall_check: Query<Has<Wall>>,
+    mut summon: EventWriter<SummonCreature>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    // Get the caster's position.
+    if let Some(cage_tile) = synapse_data.targets.last() {
+        let mut possible_centers = Vec::new();
+        for cage_offset_x in -3..=3 {
+            for cage_offset_y in -3..=3 {
+                possible_centers.push(Position::new(
+                    cage_tile.x + cage_offset_x,
+                    cage_tile.y + cage_offset_y,
+                ));
+            }
+        }
+        let mut rng = rand::thread_rng();
+        possible_centers.shuffle(&mut rng);
+        let mut chosen_center = None;
+        let mut creatures_in_cage = Vec::new();
+        for possible_center in possible_centers {
+            let mut good_candidate = true;
+            for cage_offset_x in -3..=3 {
+                for cage_offset_y in -3..=3 {
+                    if let Some(found_obstruction) = map.get_entity_at(
+                        possible_center.x + cage_offset_x,
+                        possible_center.y + cage_offset_y,
+                    ) {
+                        if wall_check.get(*found_obstruction).unwrap() {
+                            good_candidate = false;
+                        } else {
+                            creatures_in_cage
+                                .push(Position::new(4 + cage_offset_x, 4 + cage_offset_y));
+                        }
+                    }
+                    if !good_candidate {
+                        break;
+                    }
+                }
+                if !good_candidate {
+                    creatures_in_cage.clear();
+                    break;
+                }
+            }
+            if good_candidate {
+                chosen_center = Some(possible_center);
+                break;
+            }
+        }
+        if let Some(chosen_center) = chosen_center {
+            let cage = generate_room(2);
+            for (idx, tile_char) in cage.iter().enumerate() {
+                let position = Position::new(
+                    idx as i32 % 10 + chosen_center.x - 4,
+                    idx as i32 / 10 + chosen_center.y - 4,
+                );
+                let species = match tile_char {
+                    '#' => Species::Wall,
+                    'H' => Species::Hunter,
+                    'S' => Species::Spawner,
+                    'T' => Species::Tinker,
+                    '@' => Species::Player,
+                    'W' => Species::WeakWall,
+                    '2' => Species::Second,
+                    'A' => Species::Apiarist,
+                    'F' => Species::Shrike,
+                    '^' | '>' | '<' | 'V' => Species::Airlock,
+                    _ => continue,
+                };
+                let momentum = match tile_char {
+                    '^' => OrdDir::Up,
+                    '>' => OrdDir::Right,
+                    '<' => OrdDir::Left,
+                    'V' | _ => OrdDir::Down,
+                };
+                summon.send(SummonCreature {
+                    species,
+                    position,
+                    momentum,
+                    summon_tile: *caster_position,
+                    summoner: Some(synapse_data.caster),
+                });
+            }
+        }
+    }
+}
+
 /// Force all creatures on targeted tiles to cast the remainder of the spell.
 /// This terminates execution of the spell.
 fn axiom_mutator_force_cast(

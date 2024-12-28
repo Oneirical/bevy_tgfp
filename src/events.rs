@@ -72,22 +72,18 @@ pub fn summon_creature(
         if !map.is_passable(event.position.x, event.position.y) {
             continue;
         }
-        let max_hp = match &event.species {
+        let max_hp = 6;
+        let hp = match &event.species {
             Species::Player => 6,
-            Species::Wall => 6,
-            Species::WeakWall => 6,
             Species::Hunter => 2,
             Species::Spawner => 3,
-            Species::Airlock => 6,
             Species::Apiarist => 3,
             Species::Shrike => 1,
-            Species::Second => 6,
+            Species::Second => 1,
             Species::Tinker => 2,
             Species::Architect => 3,
-        };
-        // Start at full health, in most cases.
-        let hp = match &event.species {
-            Species::Second => 1,
+            // Wall-type creatures just get full HP to avoid displaying
+            // their healthbar.
             _ => max_hp,
         };
         let mut new_creature = commands.spawn((
@@ -605,14 +601,6 @@ pub fn end_turn(
                             caster: npc_entity,
                             spell: Spell {
                                 axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
-                            },
-                        });
-                    }
-                    Species::Architect => {
-                        spell.send(CastSpell {
-                            caster: npc_entity,
-                            spell: Spell {
-                                axioms: vec![Axiom::Player, Axiom::ArchitectCage],
                             },
                         });
                     }
