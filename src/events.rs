@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{
-        get_species_sprite, Attackproof, Creature, Door, Health, HealthIndicator, Hunt, Intangible,
-        Player, Random, Species, Speed, Spellproof, Summoned, Wall,
+        get_species_sprite, Creature, Door, Health, HealthIndicator, Hunt, Intangible, Invincible,
+        Meleeproof, Player, Random, Species, Speed, Spellproof, Stab, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -125,13 +125,13 @@ pub fn summon_creature(
                 new_creature.insert(Player);
             }
             Species::Wall => {
-                new_creature.insert((Attackproof, Spellproof, Wall));
+                new_creature.insert((Meleeproof, Spellproof, Wall, Invincible));
             }
             Species::WeakWall => {
-                new_creature.insert((Attackproof, Wall));
+                new_creature.insert((Meleeproof, Wall, Invincible));
             }
             Species::Airlock => {
-                new_creature.insert((Attackproof, Spellproof, Door));
+                new_creature.insert((Meleeproof, Spellproof, Door, Invincible));
             }
             Species::Hunter | Species::Spawner | Species::Second => {
                 new_creature.insert(Hunt);
@@ -305,7 +305,8 @@ pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
     mut open: EventWriter<OpenDoor>,
-    flags: Query<(Has<Door>, Has<Attackproof>)>,
+    attacker_flags: Query<&Stab>,
+    defender_flags: Query<(Has<Door>, Has<Meleeproof>)>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&OrdDir, &mut Transform, Has<Player>)>,
     mut commands: Commands,
@@ -315,7 +316,7 @@ pub fn creature_collision(
             // No colliding with yourself.
             continue;
         }
-        let (is_door, cannot_be_attacked) = flags.get(event.collided_with).unwrap();
+        let (is_door, cannot_be_melee_attacked) = defender_flags.get(event.collided_with).unwrap();
         let (attacker_orientation, mut attacker_transform, is_player) =
             creature.get_mut(event.culprit).unwrap();
         if is_door {
@@ -323,12 +324,17 @@ pub fn creature_collision(
             open.send(OpenDoor {
                 entity: event.collided_with,
             });
-        } else if !cannot_be_attacked {
+        } else if !cannot_be_melee_attacked {
+            let damage = if let Ok(stab) = attacker_flags.get(event.culprit) {
+                -1 - stab.bonus_damage
+            } else {
+                -1
+            };
             // Melee attack.
             harm.send(DamageOrHealCreature {
                 entity: event.collided_with,
                 culprit: event.culprit,
-                hp_mod: -1,
+                hp_mod: damage,
             });
             // Melee attack animation.
             attacker_transform.translation.x +=
@@ -392,18 +398,23 @@ pub struct DamageOrHealCreature {
 pub fn harm_creature(
     mut events: EventReader<DamageOrHealCreature>,
     mut remove: EventWriter<RemoveCreature>,
-    mut spell: EventWriter<CastSpell>,
-    mut teleporter: EventWriter<TeleportEntity>,
-    mut creature: Query<(&mut Health, &Children, &Species)>,
+    mut creature: Query<(&mut Health, &Children)>,
     mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
+    defender_flags: Query<Has<Invincible>>,
 ) {
     for event in events.read() {
-        let (mut health, children, species) = creature.get_mut(event.entity).unwrap();
+        let (mut health, children) = creature.get_mut(event.entity).unwrap();
+        let is_invincible = defender_flags.get(event.entity).unwrap();
         // Apply damage or healing.
         match event.hp_mod.signum() {
-            -1 => health.hp = health.hp.saturating_sub((event.hp_mod * -1) as usize), // Damage
-            1 => health.hp = health.hp.saturating_add(event.hp_mod as usize),         // Healing
-            _ => (), // 0 values do nothing
+            -1 => {
+                if is_invincible {
+                    continue;
+                }
+                health.hp = health.hp.saturating_sub((event.hp_mod * -1) as usize)
+            } // Damage
+            1 => health.hp = health.hp.saturating_add(event.hp_mod as usize), // Healing
+            _ => (),                                                          // 0 values do nothing
         }
         // Update the healthbar.
         for child in children.iter() {
@@ -416,14 +427,6 @@ pub fn harm_creature(
         if health.hp == 0 {
             remove.send(RemoveCreature {
                 entity: event.entity,
-            });
-        } else if matches!(species, Species::Architect) {
-            teleporter.send(TeleportEntity::new(event.culprit, 22, 1));
-            spell.send(CastSpell {
-                caster: event.entity,
-                spell: Spell {
-                    axioms: vec![Axiom::Ego, Axiom::Abjuration],
-                },
             });
         }
     }
@@ -596,32 +599,11 @@ pub fn end_turn(
             // Occasionally cast a spell.
             if turn_manager.turn_count % 1000 == 0 {
                 match npc_species {
-                    Species::Hunter => {
-                        spell.send(CastSpell {
-                            caster: npc_entity,
-                            spell: Spell {
-                                axioms: vec![Axiom::MomentumBeam, Axiom::Dash { max_distance: 5 }],
-                            },
-                        });
-                    }
                     Species::Second => {
                         spell.send(CastSpell {
                             caster: npc_entity,
                             spell: Spell {
                                 axioms: vec![Axiom::Plus, Axiom::DevourWall],
-                            },
-                        });
-                    }
-                    Species::Spawner => {
-                        spell.send(CastSpell {
-                            caster: npc_entity,
-                            spell: Spell {
-                                axioms: vec![
-                                    Axiom::Halo { radius: 3 },
-                                    Axiom::SummonCreature {
-                                        species: Species::Hunter,
-                                    },
-                                ],
                             },
                         });
                     }

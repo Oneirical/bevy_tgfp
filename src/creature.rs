@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashMap};
 
 use crate::{map::Position, OrdDir};
 
@@ -19,6 +19,20 @@ pub struct HealthIndicator {
     pub transform: Transform,
 }
 
+pub enum StatusEffect {
+    Invincible,
+    Stab,
+}
+
+pub struct PotencyAndStacks {
+    potency: usize,
+    stacks: usize,
+}
+
+pub struct StatusEffectsList {
+    pub effects: HashMap<StatusEffect, PotencyAndStacks>,
+}
+
 #[derive(Component)]
 pub enum Speed {
     Slow { wait_turns: usize },
@@ -31,6 +45,14 @@ pub struct Player;
 
 #[derive(Component)]
 pub struct Hunt;
+
+#[derive(Component)]
+pub struct Stab {
+    pub bonus_damage: isize,
+}
+
+#[derive(Component)]
+pub struct Invincible;
 
 // Performs random actions on its turn.
 #[derive(Component)]
@@ -51,7 +73,7 @@ pub struct Wall;
 pub struct Spellproof;
 
 #[derive(Component)]
-pub struct Attackproof;
+pub struct Meleeproof;
 
 #[derive(Component)]
 pub struct Intangible;
