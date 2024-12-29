@@ -752,7 +752,7 @@ pub fn end_turn(
                 continue;
             }
             // Occasionally cast a spell.
-            if turn_manager.turn_count % 1000 == 0 {
+            if turn_manager.turn_count % 5 == 0 {
                 match npc_species {
                     Species::Second => {
                         spell.send(CastSpell {

@@ -187,9 +187,9 @@ pub fn register_creatures(
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let mut spawned_player = false;
-    for i in 0..3 {
+    for i in 0..30 {
         let mut cage = generate_room(2 + i);
-        if i == 2 {
+        if i == 29 {
             cage.push('@');
         }
         for (idx, tile_char) in cage.iter().enumerate() {

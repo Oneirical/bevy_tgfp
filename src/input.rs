@@ -31,7 +31,7 @@ pub fn keyboard_input(
             caster: player.get_single().unwrap(),
             spell: Spell {
                 axioms: vec![
-                    Axiom::Plus,
+                    Axiom::Ego,
                     Axiom::StatusEffect {
                         effect: StatusEffect::Invincible,
                         potency: 1,

@@ -214,7 +214,7 @@ pub enum Axiom {
     Spread,
     /// Remove the Caster's tile from targets.
     UntargetCaster,
-    /// All Beam-type Forms will pierce through non-Wall creatures.
+    /// All Beam-type Forms will pierce through non-Spellproof creatures.
     PiercingBeams,
 }
 
@@ -443,7 +443,7 @@ fn axiom_form_momentum_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position_and_momentum: Query<(&Position, &OrdDir)>,
-    wall_query: Query<Has<Wall>>,
+    spellproof_query: Query<Has<Spellproof>>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let (caster_position, caster_momentum) =
@@ -460,7 +460,7 @@ fn axiom_form_momentum_beam(
         synapse_data
             .synapse_flags
             .contains(&SynapseFlag::PiercingBeams),
-        &wall_query,
+        &spellproof_query,
     );
     // Add some visual beam effects.
     magic_vfx.send(PlaceMagicVfx {
@@ -484,7 +484,7 @@ fn axiom_form_xbeam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
-    wall_query: Query<Has<Wall>>,
+    spellproof_query: Query<Has<Spellproof>>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
@@ -501,7 +501,7 @@ fn axiom_form_xbeam(
             synapse_data
                 .synapse_flags
                 .contains(&SynapseFlag::PiercingBeams),
-            &wall_query,
+            &spellproof_query,
         );
         // Add some visual beam effects.
         magic_vfx.send(PlaceMagicVfx {
@@ -523,7 +523,7 @@ fn axiom_form_plus_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
-    wall_query: Query<Has<Wall>>,
+    spellproof_query: Query<Has<Spellproof>>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
@@ -541,7 +541,7 @@ fn axiom_form_plus_beam(
             synapse_data
                 .synapse_flags
                 .contains(&SynapseFlag::PiercingBeams),
-            &wall_query,
+            &spellproof_query,
         );
         // Add some visual beam effects.
         magic_vfx.send(PlaceMagicVfx {
@@ -768,7 +768,7 @@ fn axiom_mutator_trace(mut spell_stack: ResMut<SpellStack>) {
     synapse_data.synapse_flags.insert(SynapseFlag::Trace);
 }
 
-/// All Beam-type Forms will pierce through non-Wall creatures.
+/// All Beam-type Forms will pierce through non-Spellproof creatures.
 fn axiom_mutator_piercing_beams(mut spell_stack: ResMut<SpellStack>) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     synapse_data
@@ -849,7 +849,7 @@ fn linear_beam(
     off_y: i32,
     map: &Map,
     is_piercing: bool,
-    wall_query: &Query<Has<Wall>>,
+    spellproof_query: &Query<Has<Spellproof>>,
 ) -> Vec<Position> {
     let mut distance_travelled = 0;
     let mut output = Vec::new();
@@ -861,8 +861,8 @@ fn linear_beam(
         output.push(start);
         // But if it is impassable, the beam stops.
         if is_piercing {
-            if let Some(possible_wall) = map.get_entity_at(start.x, start.y) {
-                if wall_query.get(*possible_wall).unwrap() {
+            if let Some(possible_block) = map.get_entity_at(start.x, start.y) {
+                if spellproof_query.get(*possible_block).unwrap() {
                     break;
                 }
             }
