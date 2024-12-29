@@ -67,6 +67,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_form_xbeam),
         );
         axioms.library.insert(
+            discriminant(&Axiom::PlusBeam),
+            world.register_system(axiom_form_plus_beam),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Touch),
             world.register_system(axiom_form_touch),
         );
@@ -115,6 +119,10 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::UntargetCaster),
             world.register_system(axiom_mutator_untarget_caster),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::PiercingBeams),
+            world.register_system(axiom_mutator_piercing_beams),
         );
         axioms
     }
@@ -167,6 +175,9 @@ pub enum Axiom {
     /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
     /// including the first solid tile encountered, which stops the beam.
     XBeam,
+    /// Fire 4 beams from the caster, towards the cardinal directions. Target all travelled tiles,
+    /// including the first solid tile encountered, which stops the beam.
+    PlusBeam,
     /// Target all orthogonally adjacent tiles to the caster.
     Plus,
     /// Target the tile adjacent to the caster, towards the caster's last move.
@@ -203,6 +214,8 @@ pub enum Axiom {
     Spread,
     /// Remove the Caster's tile from targets.
     UntargetCaster,
+    /// All Beam-type Forms will pierce through non-Wall creatures.
+    PiercingBeams,
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -261,6 +274,8 @@ pub enum SynapseFlag {
     NoStep,
     /// Any Teleport event will target all tiles between its start and destination tiles.
     Trace,
+    /// All Beam-type Forms will pierce non-Wall creatures.
+    PiercingBeams,
 }
 
 pub fn cast_new_spell(
@@ -428,6 +443,7 @@ fn axiom_form_momentum_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position_and_momentum: Query<(&Position, &OrdDir)>,
+    wall_query: Query<Has<Wall>>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let (caster_position, caster_momentum) =
@@ -435,7 +451,17 @@ fn axiom_form_momentum_beam(
     // Start the beam where the caster is standing.
     // The beam travels in the direction of the caster's last move.
     let (off_x, off_y) = caster_momentum.as_offset();
-    let output = linear_beam(*caster_position, 10, off_x, off_y, &map);
+    let output = linear_beam(
+        *caster_position,
+        10,
+        off_x,
+        off_y,
+        &map,
+        synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::PiercingBeams),
+        &wall_query,
+    );
     // Add some visual beam effects.
     magic_vfx.send(PlaceMagicVfx {
         targets: output.clone(),
@@ -458,6 +484,7 @@ fn axiom_form_xbeam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
+    wall_query: Query<Has<Wall>>,
 ) {
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
@@ -465,12 +492,65 @@ fn axiom_form_xbeam(
     for (dx, dy) in diagonals {
         // Start the beam where the caster is standing.
         // The beam travels in the direction of each diagonal.
-        let output = linear_beam(caster_position, 10, dx, dy, &map);
+        let output = linear_beam(
+            caster_position,
+            10,
+            dx,
+            dy,
+            &map,
+            synapse_data
+                .synapse_flags
+                .contains(&SynapseFlag::PiercingBeams),
+            &wall_query,
+        );
         // Add some visual beam effects.
         magic_vfx.send(PlaceMagicVfx {
             targets: output.clone(),
             sequence: EffectSequence::Sequential { duration: 0.04 },
             effect: EffectType::RedBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+        // Add these tiles to `targets`.
+        synapse_data.targets.extend(&output);
+    }
+}
+
+/// Fire 4 beams from the caster, towards the cardinal directions. Target all travelled tiles,
+/// including the first solid tile encountered, which stops the beam.
+fn axiom_form_plus_beam(
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+    wall_query: Query<Has<Wall>>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = *position.get(synapse_data.caster).unwrap();
+    let cardinals = [OrdDir::Up, OrdDir::Down, OrdDir::Left, OrdDir::Right];
+    for cardinal in cardinals {
+        let (dx, dy) = cardinal.as_offset();
+        // Start the beam where the caster is standing.
+        // The beam travels in the direction of each diagonal.
+        let output = linear_beam(
+            caster_position,
+            10,
+            dx,
+            dy,
+            &map,
+            synapse_data
+                .synapse_flags
+                .contains(&SynapseFlag::PiercingBeams),
+            &wall_query,
+        );
+        // Add some visual beam effects.
+        magic_vfx.send(PlaceMagicVfx {
+            targets: output.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: match cardinal {
+                OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
+                OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
+            },
             decay: 0.5,
             appear: 0.,
         });
@@ -688,6 +768,14 @@ fn axiom_mutator_trace(mut spell_stack: ResMut<SpellStack>) {
     synapse_data.synapse_flags.insert(SynapseFlag::Trace);
 }
 
+/// All Beam-type Forms will pierce through non-Wall creatures.
+fn axiom_mutator_piercing_beams(mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    synapse_data
+        .synapse_flags
+        .insert(SynapseFlag::PiercingBeams);
+}
+
 /// All targeted tiles expand to also target their orthogonally adjacent tiles.
 fn axiom_mutator_spread(
     mut spell_stack: ResMut<SpellStack>,
@@ -760,6 +848,8 @@ fn linear_beam(
     off_x: i32,
     off_y: i32,
     map: &Map,
+    is_piercing: bool,
+    wall_query: &Query<Has<Wall>>,
 ) -> Vec<Position> {
     let mut distance_travelled = 0;
     let mut output = Vec::new();
@@ -770,7 +860,13 @@ fn linear_beam(
         // The new tile is always added, even if it is impassable...
         output.push(start);
         // But if it is impassable, the beam stops.
-        if !map.is_passable(start.x, start.y) {
+        if is_piercing {
+            if let Some(possible_wall) = map.get_entity_at(start.x, start.y) {
+                if wall_query.get(*possible_wall).unwrap() {
+                    break;
+                }
+            }
+        } else if !map.is_passable(start.x, start.y) {
             break;
         }
     }

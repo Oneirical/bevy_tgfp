@@ -50,7 +50,9 @@ pub fn keyboard_input(
                 axioms: vec![
                     Axiom::Ego,
                     Axiom::PlaceStepTrap,
-                    Axiom::XBeam,
+                    Axiom::PiercingBeams,
+                    Axiom::PlusBeam,
+                    Axiom::Ego,
                     Axiom::HealOrHarm { amount: -2 },
                 ],
             },
