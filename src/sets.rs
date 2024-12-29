@@ -2,8 +2,9 @@ use bevy::prelude::*;
 
 use crate::{
     events::{
-        add_status_effects, alter_momentum, creature_collision, creature_step, echo_speed,
-        end_turn, harm_creature, open_door, remove_creature, summon_creature, teleport_entity,
+        add_status_effects, alter_momentum, assign_species_components, creature_collision,
+        creature_step, echo_speed, end_turn, harm_creature, open_door, remove_creature,
+        summon_creature, teleport_entity,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -18,6 +19,12 @@ impl Plugin for SetsPlugin {
         app.add_systems(
             Update,
             ((
+                // When a creature loses a status effect,
+                // it might lose a component (such as Spellproof)
+                // which is innate to its species.
+                // This will ensure entities keep their species-specific
+                // components when a turn begins.
+                assign_species_components,
                 keyboard_input.run_if(spell_stack_is_empty),
                 creature_step,
                 cast_new_spell,
@@ -30,6 +37,7 @@ impl Plugin for SetsPlugin {
             Update,
             ((
                 summon_creature,
+                assign_species_components,
                 register_creatures,
                 add_status_effects,
                 teleport_entity,

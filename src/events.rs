@@ -163,9 +163,42 @@ pub fn summon_creature(
             },
             SlideAnimation,
         ));
-        // Add any species-specific components.
-        // TODO: Offshore this to a function when transformation axioms get added to avoid repetition?
-        match &event.species {
+
+        if let Some(summoner) = event.summoner {
+            new_creature.insert(Summoned { summoner });
+        }
+        // Creatures which start out damaged show their HP bar in advance.
+        let (visibility, index) = hp_bar_visibility_and_index(hp, max_hp);
+
+        // Free the borrow on Commands.
+        let new_creature_entity = new_creature.id();
+        let hp_bar = commands
+            .spawn(HealthIndicator {
+                sprite: Sprite {
+                    image: asset_server.load("spritesheet.png"),
+                    custom_size: Some(Vec2::new(64., 64.)),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index,
+                    }),
+                    ..default()
+                },
+                visibility,
+                transform: Transform::from_xyz(0., 0., 1.),
+            })
+            .id();
+        commands.entity(new_creature_entity).add_child(hp_bar);
+    }
+}
+
+/// Add any species-specific components.
+pub fn assign_species_components(
+    changed_species: Query<(Entity, &Species), Changed<Species>>,
+    mut commands: Commands,
+) {
+    for (entity, species) in changed_species.iter() {
+        let mut new_creature = commands.entity(entity);
+        match species {
             Species::Player => {
                 new_creature.insert(Player);
             }
@@ -197,32 +230,6 @@ pub fn summon_creature(
             }
             _ => (),
         }
-
-        if let Some(summoner) = event.summoner {
-            new_creature.insert(Summoned { summoner });
-        }
-
-        // Creatures which start out damaged show their HP bar in advance.
-        let (visibility, index) = hp_bar_visibility_and_index(hp, max_hp);
-
-        // Free the borrow on Commands.
-        let new_creature_entity = new_creature.id();
-        let hp_bar = commands
-            .spawn(HealthIndicator {
-                sprite: Sprite {
-                    image: asset_server.load("spritesheet.png"),
-                    custom_size: Some(Vec2::new(64., 64.)),
-                    texture_atlas: Some(TextureAtlas {
-                        layout: atlas_layout.handle.clone(),
-                        index,
-                    }),
-                    ..default()
-                },
-                visibility,
-                transform: Transform::from_xyz(0., 0., 1.),
-            })
-            .id();
-        commands.entity(new_creature_entity).add_child(hp_bar);
     }
 }
 
@@ -620,7 +627,7 @@ pub fn end_turn(
         Without<Player>,
     >,
     map: Res<Map>,
-    mut effects: Query<(Entity, &mut StatusEffectsList)>,
+    mut effects: Query<(Entity, &mut StatusEffectsList, &Species)>,
     mut commands: Commands,
 ) {
     for event in events.read() {
@@ -634,7 +641,7 @@ pub fn end_turn(
             // The turncount increases.
             turn_manager.turn_count += 1;
             // Tick down status effects.
-            for (entity, mut effect_list) in effects.iter_mut() {
+            for (entity, mut effect_list, species) in effects.iter_mut() {
                 for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
                     potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
                     if potency_and_stacks.stacks == 0 {
@@ -646,6 +653,11 @@ pub fn end_turn(
                                 commands.entity(entity).remove::<Stab>();
                             }
                         }
+                        // HACK: Transforming the entity into its own species has no effect on
+                        // the creature, but it does trigger assign_species_components's change
+                        // detection, which will prevent walls from losing Invincible due to
+                        // running out of the Invincible status effect, for example.
+                        commands.entity(entity).insert(*species);
                     }
                 }
             }
