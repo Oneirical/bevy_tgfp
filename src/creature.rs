@@ -1,6 +1,6 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::{map::Position, OrdDir};
+use crate::{map::Position, spells::Spell, OrdDir};
 
 #[derive(Bundle)]
 pub struct Creature {
@@ -10,6 +10,7 @@ pub struct Creature {
     pub species: Species,
     pub health: Health,
     pub effects: StatusEffectsList,
+    pub spell: Spell,
 }
 
 // The graphical representation of Health: a health bar.
@@ -82,6 +83,13 @@ pub struct Meleeproof;
 pub struct Intangible;
 
 #[derive(Component)]
+pub struct WhenSteppedOn;
+
+// Breaks when stepped on.
+#[derive(Component)]
+pub struct Fragile;
+
+#[derive(Component)]
 pub struct Health {
     pub hp: usize,
     pub max_hp: usize,
@@ -99,7 +107,7 @@ pub enum Species {
     Second,
     Spawner,
     Airlock,
-    Architect,
+    Trap,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -115,6 +123,13 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Apiarist => 6,
         Species::Second => 7,
         Species::Tinker => 8,
-        Species::Architect => 24,
+        Species::Trap => 12,
+    }
+}
+
+pub fn is_naturally_intangible(species: &Species) -> bool {
+    match species {
+        Species::Trap => true,
+        _ => false,
     }
 }

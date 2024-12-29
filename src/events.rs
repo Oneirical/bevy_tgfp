@@ -4,9 +4,10 @@ use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
     creature::{
-        get_species_sprite, Creature, Door, Health, HealthIndicator, Hunt, Intangible, Invincible,
-        Meleeproof, Player, PotencyAndStacks, Random, Species, Speed, Spellproof, Stab,
-        StatusEffect, StatusEffectsList, Summoned, Wall,
+        get_species_sprite, is_naturally_intangible, Creature, Door, Fragile, Health,
+        HealthIndicator, Hunt, Intangible, Invincible, Meleeproof, Player, PotencyAndStacks,
+        Random, Species, Speed, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        WhenSteppedOn,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -24,6 +25,7 @@ impl Plugin for EventPlugin {
         app.add_event::<SummonCreature>();
         app.init_resource::<Events<EndTurn>>();
         app.add_event::<TeleportEntity>();
+        app.add_event::<SteppedOnTile>();
         app.add_event::<CreatureCollision>();
         app.add_event::<AlterMomentum>();
         app.add_event::<DamageOrHealCreature>();
@@ -97,8 +99,9 @@ pub struct SummonCreature {
     pub position: Position,
     pub species: Species,
     pub momentum: OrdDir,
-    pub summon_tile: Position,
+    pub summoner_tile: Position,
     pub summoner: Option<Entity>,
+    pub spell: Option<Spell>,
 }
 
 /// Place a new Creature on the map of Species and at Position.
@@ -111,7 +114,10 @@ pub fn summon_creature(
 ) {
     for event in events.read() {
         // Avoid summoning if the tile is already occupied.
-        if !map.is_passable(event.position.x, event.position.y) {
+        // Intangible creatures are allowed to spawn.
+        if !map.is_passable(event.position.x, event.position.y)
+            && !is_naturally_intangible(&event.species)
+        {
             continue;
         }
         let max_hp = 6;
@@ -123,7 +129,6 @@ pub fn summon_creature(
             Species::Shrike => 1,
             Species::Second => 1,
             Species::Tinker => 2,
-            Species::Architect => 3,
             // Wall-type creatures just get full HP to avoid displaying
             // their healthbar.
             _ => max_hp,
@@ -146,11 +151,16 @@ pub fn summon_creature(
                 effects: StatusEffectsList {
                     effects: HashMap::new(),
                 },
+                spell: if let Some(spell) = event.spell.clone() {
+                    spell
+                } else {
+                    Spell { axioms: Vec::new() }
+                },
             },
             Transform {
                 translation: Vec3 {
-                    x: event.summon_tile.x as f32 * 64.,
-                    y: event.summon_tile.y as f32 * 64.,
+                    x: event.summoner_tile.x as f32 * 64.,
+                    y: event.summoner_tile.y as f32 * 64.,
                     z: 0.,
                 },
                 rotation: Quat::from_rotation_z(match event.momentum {
@@ -204,6 +214,16 @@ pub fn assign_species_components(
             }
             Species::Wall => {
                 new_creature.insert((Meleeproof, Spellproof, Wall, Invincible));
+            }
+            Species::Trap => {
+                new_creature.insert((
+                    Meleeproof,
+                    Spellproof,
+                    Intangible,
+                    WhenSteppedOn,
+                    Fragile,
+                    Invincible,
+                ));
             }
             Species::WeakWall => {
                 new_creature.insert((Meleeproof, Wall, Invincible));
@@ -309,6 +329,7 @@ pub fn teleport_entity(
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
+    mut stepped: EventWriter<SteppedOnTile>,
     is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
@@ -326,6 +347,11 @@ pub fn teleport_entity(
             creature_position.update(event.destination.x, event.destination.y);
             // Also, animate this creature, making its teleport action visible on the screen.
             commands.entity(event.entity).insert(SlideAnimation);
+            // The creature steps on its destination tile, triggering traps there.
+            stepped.send(SteppedOnTile {
+                entity: event.entity,
+                position: event.destination,
+            });
         } else {
             // A creature collides with another entity.
             let collided_with = map
@@ -342,6 +368,38 @@ pub fn teleport_entity(
                     culprit: event.entity,
                     collided_with: *collided_with,
                 });
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct SteppedOnTile {
+    entity: Entity,
+    position: Position,
+}
+
+pub fn stepped_on_tile(
+    mut events: EventReader<SteppedOnTile>,
+    mut spell: EventWriter<CastSpell>,
+    mut remove: EventWriter<RemoveCreature>,
+    traps: Query<(&Position, &Spell), With<WhenSteppedOn>>,
+    fragile: Query<(Entity, &Position), With<Fragile>>,
+) {
+    for event in events.read() {
+        // Traps trigger their spell effect when stepped on.
+        for (position, axiom_sequence) in traps.iter() {
+            if event.position == *position {
+                spell.send(CastSpell {
+                    caster: event.entity,
+                    spell: axiom_sequence.clone(),
+                });
+            }
+        }
+        // Fragile floor entities are destroyed when stepped on.
+        for (entity, position) in fragile.iter() {
+            if event.position == *position {
+                remove.send(RemoveCreature { entity });
             }
         }
     }
@@ -589,7 +647,15 @@ pub fn remove_creature(
         // For now, avoid removing the player - the game panics without a player.
         if !is_player {
             // Remove the creature from Map
-            map.creatures.remove(position);
+            if let Some(preexisting_entity) = map.creatures.get(position) {
+                // Check that the entity being removed is actually the dead entity.
+                // REASON: Dying intangible creatures which are on top of a tangible
+                // creature will remove the tangible creature from the map instead
+                // of themselves.
+                if *preexisting_entity == event.entity {
+                    map.creatures.remove(position);
+                }
+            }
             // Remove the creature AND its children (health bar)
             commands.entity(event.entity).despawn_recursive();
             // Remove all spells cast by this creature

@@ -81,6 +81,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_function_summon_creature),
         );
         axioms.library.insert(
+            discriminant(&Axiom::PlaceStepTrap),
+            world.register_system(axiom_function_place_step_trap),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::DevourWall),
             world.register_system(axiom_function_devour_wall),
         );
@@ -175,6 +179,9 @@ pub enum Axiom {
     Dash { max_distance: i32 },
     /// The targeted passable tiles summon a new instance of species.
     SummonCreature { species: Species },
+    /// The targeted tiles summon a step-triggered trap with following axioms as the payload.
+    /// This terminates the spell.
+    PlaceStepTrap,
     /// Any targeted creature with the Wall component is removed.
     /// Each removed wall heals the caster +1.
     DevourWall,
@@ -538,13 +545,38 @@ fn axiom_function_summon_creature(
                 species,
                 position: *position,
                 momentum: OrdDir::Down,
-                summon_tile: *caster_position,
+                summoner_tile: *caster_position,
                 summoner: Some(synapse_data.caster),
+                spell: None,
             });
         }
     } else {
         panic!()
     }
+}
+
+/// The targeted tiles summon a step-triggered trap with following axioms as the payload.
+/// This terminates the spell.
+fn axiom_function_place_step_trap(
+    mut summon: EventWriter<SummonCreature>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let caster_position = position.get(synapse_data.caster).unwrap();
+    for position in &synapse_data.targets {
+        summon.send(SummonCreature {
+            species: Species::Trap,
+            position: *position,
+            momentum: OrdDir::Down,
+            summoner_tile: *caster_position,
+            summoner: Some(synapse_data.caster),
+            spell: Some(Spell {
+                axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
+            }),
+        });
+    }
+    synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
 }
 
 /// Any targeted creature with the Wall component is removed.
@@ -782,7 +814,10 @@ fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
     // Step forwards in the axiom queue.
     synapse_data.step += 1;
     // If the spell is finished, do not push it back.
-    if synapse_data.axioms.get(synapse_data.step).is_some() {
+    // The Terminate flag also prevents further execution.
+    if synapse_data.axioms.get(synapse_data.step).is_some()
+        && !synapse_data.synapse_flags.contains(&SynapseFlag::Terminate)
+    {
         spell_stack.spells.push(synapse_data);
     }
 }

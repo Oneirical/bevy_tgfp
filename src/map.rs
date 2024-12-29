@@ -144,8 +144,12 @@ pub fn register_creatures(
     mut map: ResMut<Map>,
     // Any entity that has a Position that just got added to it -
     // currently only possible as a result of having just been spawned in.
-    displaced_creatures: Query<(&Position, Entity), (Added<Position>, With<Species>)>,
-    intangible_creatures: Query<&Position, (Added<Intangible>, With<Species>)>,
+    // Naturally intangible creatures skip this.
+    displaced_creatures: Query<
+        (&Position, Entity),
+        (Added<Position>, With<Species>, Without<Intangible>),
+    >,
+    intangible_creatures: Query<(Entity, &Position), (Added<Intangible>, With<Species>)>,
     tangible_creatures: Query<&Position, With<Species>>,
     mut tangible_entities: RemovedComponents<Intangible>,
 ) {
@@ -157,7 +161,16 @@ pub fn register_creatures(
     }
 
     // Newly intangible creatures are removed from the map.
-    for intangible_position in intangible_creatures.iter() {
+    for (entity, intangible_position) in intangible_creatures.iter() {
+        if let Some(preexisting_entity) = map.creatures.get(intangible_position) {
+            // Check that the entity being removed is actually the intangible entity.
+            // REASON: If a creature spawns in already intangible on top of a
+            // tangible creature, without this check, it would remove
+            // the tangible creature from the map.
+            if *preexisting_entity != entity {
+                continue;
+            }
+        }
         map.creatures.remove(intangible_position);
     }
 
@@ -191,7 +204,6 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 '2' => Species::Second,
                 'A' => Species::Apiarist,
                 'F' => Species::Shrike,
-                'B' => Species::Architect,
                 '^' | '>' | '<' | 'V' => Species::Airlock,
                 _ => continue,
             };
@@ -210,8 +222,9 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 species,
                 position,
                 momentum,
-                summon_tile: Position::new(0, 0),
+                summoner_tile: Position::new(0, 0),
                 summoner: None,
+                spell: None,
             });
         }
     }
