@@ -10,8 +10,10 @@ use bevy::{
 };
 
 use crate::{
-    creature::{Player, Species, Spellproof, Summoned, Wall},
-    events::{DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity},
+    creature::{Player, Species, Spellproof, StatusEffect, Summoned, Wall},
+    events::{
+        AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
+    },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
@@ -89,6 +91,14 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::HealOrHarm { amount: 1 }),
             world.register_system(axiom_function_heal_or_harm),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::StatusEffect {
+                effect: StatusEffect::Invincible,
+                potency: 0,
+                stacks: 0,
+            }),
+            world.register_system(axiom_function_status_effect),
         );
         axioms.library.insert(
             discriminant(&Axiom::Trace),
@@ -172,6 +182,12 @@ pub enum Axiom {
     Abjuration,
     /// All targeted creatures heal or are harmed by this amount.
     HealOrHarm { amount: isize },
+    /// Give a status effect to all targeted creatures.
+    StatusEffect {
+        effect: StatusEffect,
+        potency: usize,
+        stacks: usize,
+    },
 
     // MUTATORS
     /// Any Teleport event will target all tiles between its start and destination tiles.
@@ -572,6 +588,36 @@ fn axiom_function_heal_or_harm(
                     entity,
                     culprit: synapse_data.caster,
                     hp_mod: amount,
+                });
+            }
+        }
+    } else {
+        panic!();
+    }
+}
+
+/// Give a status effect to all targeted creatures.
+fn axiom_function_status_effect(
+    mut status_effect: EventWriter<AddStatusEffect>,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    is_spellproof: Query<Has<Spellproof>>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    if let Axiom::StatusEffect {
+        effect,
+        potency,
+        stacks,
+    } = synapse_data.axioms[synapse_data.step]
+    {
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            let is_spellproof = is_spellproof.get(entity).unwrap();
+            if !is_spellproof {
+                status_effect.send(AddStatusEffect {
+                    entity,
+                    effect,
+                    potency,
+                    stacks,
                 });
             }
         }

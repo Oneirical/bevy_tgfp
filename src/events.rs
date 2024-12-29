@@ -1,11 +1,12 @@
 use std::f32::consts::PI;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
     creature::{
         get_species_sprite, Creature, Door, Health, HealthIndicator, Hunt, Intangible, Invincible,
-        Meleeproof, Player, Random, Species, Speed, Spellproof, Stab, Summoned, Wall,
+        Meleeproof, Player, PotencyAndStacks, Random, Species, Speed, Spellproof, Stab,
+        StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -29,6 +30,7 @@ impl Plugin for EventPlugin {
         app.add_event::<OpenDoor>();
         app.add_event::<RemoveCreature>();
         app.add_event::<EchoSpeed>();
+        app.add_event::<AddStatusEffect>();
         app.init_resource::<Events<CreatureStep>>();
         app.insert_resource(TurnManager {
             turn_count: 0,
@@ -48,6 +50,46 @@ pub enum PlayerAction {
     Step,
     Spell,
     Invalid,
+}
+
+#[derive(Event)]
+pub struct AddStatusEffect {
+    pub entity: Entity,
+    pub effect: StatusEffect,
+    pub potency: usize,
+    pub stacks: usize,
+}
+
+pub fn add_status_effects(
+    mut events: EventReader<AddStatusEffect>,
+    mut effects: Query<&mut StatusEffectsList>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        let mut effects_list = effects.get_mut(event.entity).unwrap();
+        if let Some(effect) = effects_list.effects.get(&event.effect) {
+            if event.potency < effect.potency {
+                continue;
+            }
+        }
+        effects_list.effects.insert(
+            event.effect,
+            PotencyAndStacks {
+                potency: event.potency,
+                stacks: event.stacks,
+            },
+        );
+        match event.effect {
+            StatusEffect::Invincible => {
+                commands.entity(event.entity).insert(Invincible);
+            }
+            StatusEffect::Stab => {
+                commands.entity(event.entity).insert(Stab {
+                    bonus_damage: event.potency as isize,
+                });
+            }
+        }
+    }
 }
 
 #[derive(Event)]
@@ -101,6 +143,9 @@ pub fn summon_creature(
                 },
                 momentum: event.momentum,
                 health: Health { max_hp, hp },
+                effects: StatusEffectsList {
+                    effects: HashMap::new(),
+                },
             },
             Transform {
                 translation: Vec3 {
@@ -310,6 +355,7 @@ pub fn creature_collision(
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&OrdDir, &mut Transform, Has<Player>)>,
     mut commands: Commands,
+    mut effects: Query<&mut StatusEffectsList>,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
@@ -326,6 +372,13 @@ pub fn creature_collision(
             });
         } else if !cannot_be_melee_attacked {
             let damage = if let Ok(stab) = attacker_flags.get(event.culprit) {
+                // Attacking something with Stab active resets the Stab bonus.
+                let mut status_effects = effects.get_mut(event.culprit).unwrap();
+                status_effects
+                    .effects
+                    .get_mut(&StatusEffect::Stab)
+                    .unwrap()
+                    .stacks = 0;
                 -1 - stab.bonus_damage
             } else {
                 -1
@@ -567,13 +620,37 @@ pub fn end_turn(
         Without<Player>,
     >,
     map: Res<Map>,
+    mut effects: Query<(Entity, &mut StatusEffectsList)>,
+    mut commands: Commands,
 ) {
     for event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
         if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
             return;
         }
-        turn_manager.turn_count += 1;
+
+        // Only on the first iteration of end_turn...
+        if event.speed_level == 1 {
+            // The turncount increases.
+            turn_manager.turn_count += 1;
+            // Tick down status effects.
+            for (entity, mut effect_list) in effects.iter_mut() {
+                for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
+                    potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
+                    if potency_and_stacks.stacks == 0 {
+                        match effect {
+                            StatusEffect::Invincible => {
+                                commands.entity(entity).remove::<Invincible>();
+                            }
+                            StatusEffect::Stab => {
+                                commands.entity(entity).remove::<Stab>();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
         for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {

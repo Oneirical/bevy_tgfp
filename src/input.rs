@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::Player,
+    creature::{Player, StatusEffect},
     events::{CreatureStep, EndTurn, PlayerAction, TurnManager},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
@@ -26,6 +26,23 @@ pub fn keyboard_input(
         turn_manager.action_this_turn = PlayerAction::Spell;
         turn_end.send(EndTurn { speed_level: 1 });
     }
+    if input.just_pressed(KeyCode::Digit2) {
+        spell.send(CastSpell {
+            caster: player.get_single().unwrap(),
+            spell: Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Invincible,
+                        potency: 1,
+                        stacks: 2,
+                    },
+                ],
+            },
+        });
+        turn_manager.action_this_turn = PlayerAction::Spell;
+        // No end_turn for the shield.
+    }
     if input.just_pressed(KeyCode::Digit4) {
         spell.send(CastSpell {
             caster: player.get_single().unwrap(),
@@ -47,6 +64,23 @@ pub fn keyboard_input(
                     Axiom::Spread,
                     Axiom::UntargetCaster,
                     Axiom::HealOrHarm { amount: -1 },
+                ],
+            },
+        });
+        turn_manager.action_this_turn = PlayerAction::Spell;
+        turn_end.send(EndTurn { speed_level: 1 });
+    }
+    if input.just_pressed(KeyCode::Digit6) {
+        spell.send(CastSpell {
+            caster: player.get_single().unwrap(),
+            spell: Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Stab,
+                        potency: 5,
+                        stacks: 20,
+                    },
                 ],
             },
         });

@@ -9,6 +9,7 @@ pub struct Creature {
     pub sprite: Sprite,
     pub species: Species,
     pub health: Health,
+    pub effects: StatusEffectsList,
 }
 
 // The graphical representation of Health: a health bar.
@@ -19,16 +20,18 @@ pub struct HealthIndicator {
     pub transform: Transform,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StatusEffect {
     Invincible,
     Stab,
 }
 
 pub struct PotencyAndStacks {
-    potency: usize,
-    stacks: usize,
+    pub potency: usize,
+    pub stacks: usize,
 }
 
+#[derive(Component)]
 pub struct StatusEffectsList {
     pub effects: HashMap<StatusEffect, PotencyAndStacks>,
 }
