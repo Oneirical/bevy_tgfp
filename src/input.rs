@@ -81,6 +81,14 @@ pub fn keyboard_input(
                     Axiom::Spread,
                     Axiom::UntargetCaster,
                     Axiom::HealOrHarm { amount: -1 },
+                    Axiom::PurgeTargets,
+                    Axiom::Touch,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Dizzy,
+                        potency: 1,
+                        stacks: 2,
+                    },
+                    Axiom::Dash { max_distance: 1 },
                 ],
             },
         });

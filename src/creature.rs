@@ -23,8 +23,12 @@ pub struct HealthIndicator {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StatusEffect {
+    // Cannot take damage.
     Invincible,
+    // Bonus melee damage, dispels on melee attack.
     Stab,
+    // Stun, no action.
+    Dizzy,
 }
 
 pub struct PotencyAndStacks {

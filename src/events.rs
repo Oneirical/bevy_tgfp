@@ -90,6 +90,7 @@ pub fn add_status_effects(
                     bonus_damage: event.potency as isize,
                 });
             }
+            StatusEffect::Dizzy => (),
         }
     }
 }
@@ -702,6 +703,8 @@ pub fn end_turn(
             return;
         }
 
+        let mut too_dizzy_to_act = Vec::new();
+
         // Only on the first iteration of end_turn...
         if event.speed_level == 1 {
             // The turncount increases.
@@ -710,7 +713,9 @@ pub fn end_turn(
             for (entity, mut effect_list, species) in effects.iter_mut() {
                 for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
                     potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
-                    if potency_and_stacks.stacks == 0 {
+                    if *effect == StatusEffect::Dizzy && potency_and_stacks.stacks > 0 {
+                        too_dizzy_to_act.push(entity);
+                    } else if potency_and_stacks.stacks == 0 {
                         match effect {
                             StatusEffect::Invincible => {
                                 commands.entity(entity).remove::<Invincible>();
@@ -718,6 +723,7 @@ pub fn end_turn(
                             StatusEffect::Stab => {
                                 commands.entity(entity).remove::<Stab>();
                             }
+                            StatusEffect::Dizzy => (),
                         }
                         // HACK: Transforming the entity into its own species has no effect on
                         // the creature, but it does trigger assign_species_components's change
@@ -732,6 +738,9 @@ pub fn end_turn(
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
         for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {
+            if too_dizzy_to_act.contains(&npc_entity) {
+                continue;
+            }
             if let Some(speed) = speed {
                 match speed {
                     Speed::Slow { wait_turns } => {
@@ -752,7 +761,7 @@ pub fn end_turn(
                 continue;
             }
             // Occasionally cast a spell.
-            if turn_manager.turn_count % 5 == 0 {
+            if turn_manager.turn_count % 500 == 0 {
                 match npc_species {
                     Species::Second => {
                         spell.send(CastSpell {

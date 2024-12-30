@@ -124,6 +124,10 @@ impl FromWorld for AxiomLibrary {
             discriminant(&Axiom::PiercingBeams),
             world.register_system(axiom_mutator_piercing_beams),
         );
+        axioms.library.insert(
+            discriminant(&Axiom::PurgeTargets),
+            world.register_system(axiom_mutator_purge_targets),
+        );
         axioms
     }
 }
@@ -216,6 +220,8 @@ pub enum Axiom {
     UntargetCaster,
     /// All Beam-type Forms will pierce through non-Spellproof creatures.
     PiercingBeams,
+    /// Remove all targets.
+    PurgeTargets,
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -810,6 +816,12 @@ fn axiom_mutator_untarget_caster(mut spell_stack: ResMut<SpellStack>, position: 
     let synapse_data = spell_stack.spells.last_mut().unwrap();
     let caster_position = position.get(synapse_data.caster).unwrap();
     synapse_data.targets.remove(caster_position);
+}
+
+/// Delete all targets.
+fn axiom_mutator_purge_targets(mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    synapse_data.targets.clear();
 }
 
 fn teleport_transmission(
