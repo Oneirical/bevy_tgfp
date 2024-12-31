@@ -4,7 +4,7 @@ use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
     creature::{
-        get_species_sprite, is_naturally_intangible, Creature, Door, Fragile, Health,
+        get_species_sprite, is_naturally_intangible, Creature, Dizzy, Door, Fragile, Health,
         HealthIndicator, Hunt, Intangible, Invincible, Meleeproof, Player, PotencyAndStacks,
         Random, Species, Speed, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
         WhenSteppedOn,
@@ -32,6 +32,7 @@ impl Plugin for EventPlugin {
         app.add_event::<OpenDoor>();
         app.add_event::<RemoveCreature>();
         app.add_event::<EchoSpeed>();
+        app.add_event::<DistributeNpcActions>();
         app.add_event::<AddStatusEffect>();
         app.init_resource::<Events<CreatureStep>>();
         app.insert_resource(TurnManager {
@@ -90,7 +91,9 @@ pub fn add_status_effects(
                     bonus_damage: event.potency as isize,
                 });
             }
-            StatusEffect::Dizzy => (),
+            StatusEffect::Dizzy => {
+                commands.entity(event.entity).insert(Dizzy);
+            }
         }
     }
 }
@@ -671,16 +674,62 @@ pub fn remove_creature(
 }
 
 #[derive(Event)]
-pub struct EndTurn {
-    pub speed_level: usize,
-}
+pub struct EndTurn;
 
 pub fn end_turn(
     mut events: EventReader<EndTurn>,
+    mut npc_actions: EventWriter<DistributeNpcActions>,
+    mut turn_manager: ResMut<TurnManager>,
+    mut effects: Query<(Entity, &mut StatusEffectsList, &Species)>,
+    mut commands: Commands,
+) {
+    for _event in events.read() {
+        // The player shouldn't be allowed to "wait" turns by stepping into walls.
+        if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+            return;
+        }
+
+        // The turncount increases.
+        turn_manager.turn_count += 1;
+        // Tick down status effects.
+        for (entity, mut effect_list, species) in effects.iter_mut() {
+            for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
+                potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
+                if potency_and_stacks.stacks == 0 {
+                    match effect {
+                        StatusEffect::Invincible => {
+                            commands.entity(entity).remove::<Invincible>();
+                        }
+                        StatusEffect::Stab => {
+                            commands.entity(entity).remove::<Stab>();
+                        }
+                        StatusEffect::Dizzy => {
+                            commands.entity(entity).remove::<Dizzy>();
+                        }
+                    }
+                    // HACK: Transforming the entity into its own species has no effect on
+                    // the creature, but it does trigger assign_species_components's change
+                    // detection, which will prevent walls from losing Invincible due to
+                    // running out of the Invincible status effect, for example.
+                    commands.entity(entity).insert(*species);
+                }
+            }
+        }
+        npc_actions.send(DistributeNpcActions { speed_level: 1 });
+    }
+}
+
+#[derive(Event)]
+pub struct DistributeNpcActions {
+    pub speed_level: usize,
+}
+
+pub fn distribute_npc_actions(
     mut step: EventWriter<CreatureStep>,
     mut spell: EventWriter<CastSpell>,
     mut echo: EventWriter<EchoSpeed>,
-    mut turn_manager: ResMut<TurnManager>,
+    mut events: EventReader<DistributeNpcActions>,
+    turn_manager: Res<TurnManager>,
     player: Query<&Position, With<Player>>,
     npcs: Query<
         (
@@ -690,55 +739,19 @@ pub fn end_turn(
             Option<&Speed>,
             Has<Hunt>,
             Has<Random>,
+            Has<Dizzy>,
         ),
         Without<Player>,
     >,
     map: Res<Map>,
-    mut effects: Query<(Entity, &mut StatusEffectsList, &Species)>,
-    mut commands: Commands,
 ) {
     for event in events.read() {
-        // The player shouldn't be allowed to "wait" turns by stepping into walls.
-        if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
-            return;
-        }
-
-        let mut too_dizzy_to_act = Vec::new();
-
-        // Only on the first iteration of end_turn...
-        if event.speed_level == 1 {
-            // The turncount increases.
-            turn_manager.turn_count += 1;
-            // Tick down status effects.
-            for (entity, mut effect_list, species) in effects.iter_mut() {
-                for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
-                    potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
-                    if *effect == StatusEffect::Dizzy && potency_and_stacks.stacks > 0 {
-                        too_dizzy_to_act.push(entity);
-                    } else if potency_and_stacks.stacks == 0 {
-                        match effect {
-                            StatusEffect::Invincible => {
-                                commands.entity(entity).remove::<Invincible>();
-                            }
-                            StatusEffect::Stab => {
-                                commands.entity(entity).remove::<Stab>();
-                            }
-                            StatusEffect::Dizzy => (),
-                        }
-                        // HACK: Transforming the entity into its own species has no effect on
-                        // the creature, but it does trigger assign_species_components's change
-                        // detection, which will prevent walls from losing Invincible due to
-                        // running out of the Invincible status effect, for example.
-                        commands.entity(entity).insert(*species);
-                    }
-                }
-            }
-        }
-
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
-        for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {
-            if too_dizzy_to_act.contains(&npc_entity) {
+        for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random, is_too_dizzy_to_act) in
+            npcs.iter()
+        {
+            if is_too_dizzy_to_act {
                 continue;
             }
             if let Some(speed) = speed {
@@ -805,9 +818,12 @@ pub struct EchoSpeed {
     pub speed_level: usize,
 }
 
-pub fn echo_speed(mut events: EventReader<EchoSpeed>, mut end_turn: EventWriter<EndTurn>) {
+pub fn echo_speed(
+    mut events: EventReader<EchoSpeed>,
+    mut end_turn: EventWriter<DistributeNpcActions>,
+) {
     for event in events.read() {
-        end_turn.send(EndTurn {
+        end_turn.send(DistributeNpcActions {
             speed_level: event.speed_level,
         });
     }

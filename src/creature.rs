@@ -62,6 +62,9 @@ pub struct Stab {
 #[derive(Component)]
 pub struct Invincible;
 
+#[derive(Component)]
+pub struct Dizzy;
+
 // Performs random actions on its turn.
 #[derive(Component)]
 pub struct Random;

@@ -828,7 +828,39 @@ These are simply some manipulation of the spell's targets. Without `UntargetCast
 And now, moving on to the real main course: `StatusEffect`.
 
 ```rust
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum StatusEffect {
+    // Cannot take damage.
+    Invincible,
+    // Bonus melee damage, dispels on melee attack.
+    Stab,
+    // Stun, no action.
+    Dizzy,
+}
+
+pub struct PotencyAndStacks {
+    pub potency: usize,
+    pub stacks: usize,
+}
+
+#[derive(Component)]
+pub struct StatusEffectsList {
+    pub effects: HashMap<StatusEffect, PotencyAndStacks>,
+}
+
+#[derive(Component)]
+pub struct Stab {
+    pub bonus_damage: isize,
+}
+
+#[derive(Component)]
+pub struct Invincible;
+
+#[derive(Component)]
+pub struct Dizzy;
 ```
+
+Status effects will have a potency (example: Stab VI deals 6 bonus damage) and an amount of stacks (example: after 5 turns, the effect is dispelled).
 
 ```rust
 ```

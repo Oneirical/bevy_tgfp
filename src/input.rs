@@ -24,7 +24,7 @@ pub fn keyboard_input(
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::Digit2) {
         spell.send(CastSpell {
@@ -58,7 +58,7 @@ pub fn keyboard_input(
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::Digit4) {
         spell.send(CastSpell {
@@ -68,7 +68,7 @@ pub fn keyboard_input(
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::Digit5) {
         spell.send(CastSpell {
@@ -93,7 +93,7 @@ pub fn keyboard_input(
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::Digit6) {
         spell.send(CastSpell {
@@ -110,7 +110,7 @@ pub fn keyboard_input(
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::KeyW) {
         events.send(CreatureStep {
@@ -118,7 +118,7 @@ pub fn keyboard_input(
             entity: player.get_single().unwrap(),
         });
         turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::KeyD) {
         events.send(CreatureStep {
@@ -126,7 +126,7 @@ pub fn keyboard_input(
             entity: player.get_single().unwrap(),
         });
         turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::KeyA) {
         events.send(CreatureStep {
@@ -134,7 +134,7 @@ pub fn keyboard_input(
             entity: player.get_single().unwrap(),
         });
         turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::KeyS) {
         events.send(CreatureStep {
@@ -142,6 +142,6 @@ pub fn keyboard_input(
             entity: player.get_single().unwrap(),
         });
         turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn { speed_level: 1 });
+        turn_end.send(EndTurn);
     }
 }
