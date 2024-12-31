@@ -71,10 +71,13 @@ pub fn add_status_effects(
     for event in events.read() {
         let mut effects_list = effects.get_mut(event.entity).unwrap();
         if let Some(effect) = effects_list.effects.get(&event.effect) {
+            // Re-applying a status effect which is already possessed does not work
+            // if the new effect has a lesser potency.
             if event.potency < effect.potency {
                 continue;
             }
         }
+        // Mark the creature as possessing that status effect.
         effects_list.effects.insert(
             event.effect,
             PotencyAndStacks {
@@ -82,6 +85,7 @@ pub fn add_status_effects(
                 stacks: event.stacks,
             },
         );
+        // Insert the components corresponding to the new status effect.
         match event.effect {
             StatusEffect::Invincible => {
                 commands.entity(event.entity).insert(Invincible);

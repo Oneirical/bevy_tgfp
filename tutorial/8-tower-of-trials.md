@@ -828,6 +828,7 @@ These are simply some manipulation of the spell's targets. Without `UntargetCast
 And now, moving on to the real main course: `StatusEffect`.
 
 ```rust
+// creature.rs
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StatusEffect {
     // Cannot take damage.
@@ -861,6 +862,194 @@ pub struct Dizzy;
 ```
 
 Status effects will have a potency (example: Stab VI deals 6 bonus damage) and an amount of stacks (example: after 5 turns, the effect is dispelled).
+
+`StatusEffectsList` will be a new Component, part of the `Creature` bundle.
+
+```rust
+// creature.rs
+#[derive(Bundle)]
+pub struct Creature {
+    pub position: Position,
+    pub momentum: OrdDir,
+    pub sprite: Sprite,
+    pub species: Species,
+    pub health: Health,
+    pub effects: StatusEffectsList, // NEW!
+}
+```
+
+```rust
+// events.rs
+/// Place a new Creature on the map of Species and at Position.
+pub fn summon_creature(
+    // SNIP
+) {
+        // SNIP
+        let mut new_creature = commands.spawn((
+            Creature {
+                // SNIP
+                health: Health { max_hp, hp },
+                // NEW!
+                effects: StatusEffectsList {
+                    effects: HashMap::new(),
+                },
+                // End NEW.
+        // SNIP
+
+```
+
+This new mechanic comes with its own event-based system, where respective `Component`s are added to affected creatures whenever they receive a new status effect.
+
+```rust
+// events.rs
+#[derive(Event)]
+pub struct AddStatusEffect {
+    pub entity: Entity,
+    pub effect: StatusEffect,
+    pub potency: usize,
+    pub stacks: usize,
+}
+
+pub fn add_status_effects(
+    mut events: EventReader<AddStatusEffect>,
+    mut effects: Query<&mut StatusEffectsList>,
+    mut commands: Commands,
+) {
+    for event in events.read() {
+        let mut effects_list = effects.get_mut(event.entity).unwrap();
+        if let Some(effect) = effects_list.effects.get(&event.effect) {
+            // Re-applying a status effect which is already possessed does not work
+            // if the new effect has a lesser potency.
+            if event.potency < effect.potency {
+                continue;
+            }
+        }
+        // Mark the creature as possessing that status effect.
+        effects_list.effects.insert(
+            event.effect,
+            PotencyAndStacks {
+                potency: event.potency,
+                stacks: event.stacks,
+            },
+        );
+        // Insert the components corresponding to the new status effect.
+        match event.effect {
+            StatusEffect::Invincible => {
+                commands.entity(event.entity).insert(Invincible);
+            }
+            StatusEffect::Stab => {
+                commands.entity(event.entity).insert(Stab {
+                    bonus_damage: event.potency as isize,
+                });
+            }
+            StatusEffect::Dizzy => {
+                commands.entity(event.entity).insert(Dizzy);
+            }
+        }
+    }
+}
+```
+
+Each of these 3 status effects has an impact somewhere in related systems. Let's start with `Invinciblè`, which will block attempted health point deductions.
+
+```rust
+// events.rs
+pub fn harm_creature(
+    mut events: EventReader<DamageOrHealCreature>,
+    mut remove: EventWriter<RemoveCreature>,
+    mut creature: Query<(&mut Health, &Children)>,
+    mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
+    defender_flags: Query<Has<Invincible>>, // NEW!
+) {
+    for event in events.read() {
+        let (mut health, children) = creature.get_mut(event.entity).unwrap();
+        let is_invincible = defender_flags.get(event.entity).unwrap();
+        // Apply damage or healing.
+        match event.hp_mod.signum() {
+            -1 => {
+            // NEW!
+                if is_invincible {
+                    continue;
+                }
+            // End NEW.
+```
+
+Next up, `Stab` will add bonus damage equal to its `potency` on a melee attack, but will set its own duration to 0 afterwards.
+
+```rust
+// events.rs
+pub fn creature_collision(
+    mut events: EventReader<CreatureCollision>,
+    mut harm: EventWriter<DamageOrHealCreature>,
+    mut open: EventWriter<OpenDoor>,
+    attacker_flags: Query<&Stab>, // NEW!
+    defender_flags: Query<(Has<Door>, Has<Meleeproof>)>,
+    mut turn_manager: ResMut<TurnManager>,
+    mut creature: Query<(&OrdDir, &mut Transform, Has<Player>)>,
+    mut commands: Commands,
+    mut effects: Query<&mut StatusEffectsList>,
+) {
+    for event in events.read() {
+        if event.culprit == event.collided_with {
+            // No colliding with yourself.
+            continue;
+        }
+        let (is_door, cannot_be_melee_attacked) = defender_flags.get(event.collided_with).unwrap();
+        let (attacker_orientation, mut attacker_transform, is_player) =
+            creature.get_mut(event.culprit).unwrap();
+        if is_door {
+            // Open doors.
+            open.send(OpenDoor {
+                entity: event.collided_with,
+            });
+        } else if !cannot_be_melee_attacked {
+        // NEW!
+            let damage = if let Ok(stab) = attacker_flags.get(event.culprit) {
+                // Attacking something with Stab active resets the Stab bonus.
+                let mut status_effects = effects.get_mut(event.culprit).unwrap();
+                status_effects
+                    .effects
+                    .get_mut(&StatusEffect::Stab)
+                    .unwrap()
+                    .stacks = 0;
+                -1 - stab.bonus_damage
+            } else {
+                -1
+            };
+        // End NEW.
+            // Melee attack.
+            harm.send(DamageOrHealCreature {
+                entity: event.collided_with,
+                culprit: event.culprit,
+                hp_mod: damage, // CHANGED, now uses the variable "damage"
+            });
+```
+
+Finally, `Dizzy` will exclude affected creatures from the loop in `end_turn`, preventing them from taking actions.
+
+```rust
+```
+
+```rust
+```
+
+```rust
+```
+
+```rust
+```
+
+```rust
+```
+
+```rust
+```
+
+```rust
+```
+
+```rust
+```
 
 ```rust
 ```
