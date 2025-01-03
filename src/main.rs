@@ -8,7 +8,9 @@ mod spells;
 
 use bevy::{
     ecs::schedule::{LogLevel, ScheduleBuildSettings},
+    image::{ImageFilterMode, ImageSamplerDescriptor},
     prelude::*,
+    window::WindowResolution,
 };
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
@@ -16,9 +18,24 @@ use map::{MapPlugin, Position};
 use sets::SetsPlugin;
 use spells::SpellPlugin;
 
+pub const TILE_SIZE: f32 = 4.;
+
 fn main() {
+    let app_window = Some(Window {
+        title: "The Games Foxes Play".into(),
+        resolution: WindowResolution::new(5120., 2880.).with_scale_factor_override(16.),
+        mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+        ..default()
+    });
     App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    primary_window: app_window,
+                    ..default()
+                }),
+        )
         .add_plugins((
             SetsPlugin,
             SpellPlugin,

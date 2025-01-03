@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{creature::Player, map::Position};
+use crate::{creature::Player, map::Position, TILE_SIZE};
 
 pub struct GraphicsPlugin;
 
@@ -55,24 +55,25 @@ pub fn adjust_transforms(
         if is_animated {
             // The sprite approaches its destination.
             let current_translation = trans.translation;
-            let target_translation = Vec3::new(pos.x as f32 * 64., pos.y as f32 * 64., 0.);
+            let target_translation =
+                Vec3::new(pos.x as f32 * TILE_SIZE, pos.y as f32 * TILE_SIZE, 0.);
             // The creature is more than 0.5 pixels away from its destination - smooth animation.
             if ((target_translation.x - current_translation.x).abs()
                 + (target_translation.y - current_translation.y).abs())
-                > 0.5
+                > 0.05
             {
                 trans.translation = trans
                     .translation
-                    .lerp(target_translation, 6. * time.delta_secs());
+                    .lerp(target_translation, 10. * time.delta_secs());
             // Otherwise, the animation is over - clip the creature onto the grid.
             } else {
                 commands.entity(entity).remove::<SlideAnimation>();
             }
         } else {
             // For creatures with no animation.
-            // Multiplied by the graphical size of a tile, which is 64x64.
-            trans.translation.x = pos.x as f32 * 64.;
-            trans.translation.y = pos.y as f32 * 64.;
+            // Multiplied by the graphical size of a tile, which is TILE_SIZE.
+            trans.translation.x = pos.x as f32 * TILE_SIZE;
+            trans.translation.y = pos.y as f32 * TILE_SIZE;
         }
         if is_player {
             // The camera follows the player.
@@ -164,7 +165,7 @@ pub fn place_magic_effects(
                 position: *target,
                 sprite: Sprite {
                     image: asset_server.load("spritesheet.png"),
-                    custom_size: Some(Vec2::new(64., 64.)),
+                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
                     texture_atlas: Some(TextureAtlas {
                         layout: atlas_layout.handle.clone(),
                         index: get_effect_sprite(&event.effect),

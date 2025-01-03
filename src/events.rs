@@ -15,7 +15,7 @@ use crate::{
     },
     map::{Map, Position},
     spells::{Axiom, CastSpell, Spell, SpellStack},
-    OrdDir,
+    OrdDir, TILE_SIZE,
 };
 
 pub struct EventPlugin;
@@ -147,7 +147,7 @@ pub fn summon_creature(
                 species: event.species,
                 sprite: Sprite {
                     image: asset_server.load("spritesheet.png"),
-                    custom_size: Some(Vec2::new(64., 64.)),
+                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
                     texture_atlas: Some(TextureAtlas {
                         layout: atlas_layout.handle.clone(),
                         index: get_species_sprite(&event.species),
@@ -167,8 +167,8 @@ pub fn summon_creature(
             },
             Transform {
                 translation: Vec3 {
-                    x: event.summoner_tile.x as f32 * 64.,
-                    y: event.summoner_tile.y as f32 * 64.,
+                    x: event.summoner_tile.x as f32 * TILE_SIZE,
+                    y: event.summoner_tile.y as f32 * TILE_SIZE,
                     z: 0.,
                 },
                 rotation: Quat::from_rotation_z(match event.momentum {
@@ -177,7 +177,7 @@ pub fn summon_creature(
                     OrdDir::Up => PI,
                     OrdDir::Left => 3. * PI / 2.,
                 }),
-                scale: Vec3::new(1., 1., 1.),
+                ..Default::default()
             },
             SlideAnimation,
         ));
@@ -194,7 +194,7 @@ pub fn summon_creature(
             .spawn(HealthIndicator {
                 sprite: Sprite {
                     image: asset_server.load("spritesheet.png"),
-                    custom_size: Some(Vec2::new(64., 64.)),
+                    custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
                     texture_atlas: Some(TextureAtlas {
                         layout: atlas_layout.handle.clone(),
                         index,
@@ -429,6 +429,7 @@ pub fn creature_collision(
     mut creature: Query<(&OrdDir, &mut Transform, Has<Player>)>,
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
+    position: Query<&Position>,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
@@ -463,10 +464,11 @@ pub fn creature_collision(
                 hp_mod: damage,
             });
             // Melee attack animation.
-            attacker_transform.translation.x +=
-                attacker_orientation.as_offset().0 as f32 * 64. / 4.;
-            attacker_transform.translation.y +=
-                attacker_orientation.as_offset().1 as f32 * 64. / 4.;
+            // This must be calculated and cannot be "momentum", it has not been altered yet.
+            let atk_pos = position.get(event.culprit).unwrap();
+            let def_pos = position.get(event.collided_with).unwrap();
+            attacker_transform.translation.x += (def_pos.x - atk_pos.x) as f32 * TILE_SIZE / 4.;
+            attacker_transform.translation.y += (def_pos.y - atk_pos.y) as f32 * TILE_SIZE / 4.;
             commands.entity(event.culprit).insert(SlideAnimation);
         } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) && is_player {
             // The player spent their turn walking into a wall, disallow the turn from ending.
@@ -591,7 +593,7 @@ pub fn open_door(
                     position: Position::new(position.x + offset.0, position.y + offset.1),
                     sprite: Sprite {
                         image: asset_server.load("spritesheet.png"),
-                        custom_size: Some(Vec2::new(64., 64.)),
+                        custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
                         texture_atlas: Some(TextureAtlas {
                             layout: atlas_layout.handle.clone(),
                             index: get_effect_sprite(&EffectType::Airlock),
@@ -610,8 +612,8 @@ pub fn open_door(
                 SlideAnimation,
                 Transform {
                     translation: Vec3 {
-                        x: position.x as f32 * 64.,
-                        y: position.y as f32 * 64.,
+                        x: position.x as f32 * TILE_SIZE,
+                        y: position.y as f32 * TILE_SIZE,
                         // The pane needs to hide under actual tiles, such as walls.
                         z: -1.,
                     },
