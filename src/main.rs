@@ -5,6 +5,7 @@ mod input;
 mod map;
 mod sets;
 mod spells;
+mod ui;
 
 use bevy::{
     ecs::schedule::{LogLevel, ScheduleBuildSettings},
@@ -17,6 +18,7 @@ use graphics::GraphicsPlugin;
 use map::{MapPlugin, Position};
 use sets::SetsPlugin;
 use spells::SpellPlugin;
+use ui::UIPlugin;
 
 pub const TILE_SIZE: f32 = 4.;
 
@@ -42,6 +44,7 @@ fn main() {
             EventPlugin,
             GraphicsPlugin,
             MapPlugin,
+            UIPlugin,
         ))
         .edit_schedule(Update, |schedule| {
             schedule.set_build_settings(ScheduleBuildSettings {
