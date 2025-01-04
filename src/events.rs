@@ -1,13 +1,17 @@
 use std::f32::consts::PI;
 
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
+use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
     creature::{
-        get_species_sprite, is_naturally_intangible, Creature, Dizzy, Door, Fragile, Health,
-        HealthIndicator, Hunt, Intangible, Invincible, Meleeproof, Player, PotencyAndStacks,
-        Random, Species, Speed, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
-        WhenSteppedOn,
+        get_soul_sprite, get_species_sprite, is_naturally_intangible, Creature, Dizzy, Door,
+        Fragile, Health, HealthIndicator, Hunt, Intangible, Invincible, Meleeproof, Player,
+        PotencyAndStacks, Random, Soul, Species, Speed, Spellproof, Stab, StatusEffect,
+        StatusEffectsList, Summoned, Wall, WhenSteppedOn,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -15,6 +19,7 @@ use crate::{
     },
     map::{Map, Position},
     spells::{Axiom, CastSpell, Spell, SpellStack},
+    ui::SoulSlot,
     OrdDir, TILE_SIZE,
 };
 
@@ -34,11 +39,13 @@ impl Plugin for EventPlugin {
         app.add_event::<EchoSpeed>();
         app.add_event::<DistributeNpcActions>();
         app.add_event::<AddStatusEffect>();
+        app.add_event::<DrawSoul>();
         app.init_resource::<Events<CreatureStep>>();
         app.insert_resource(TurnManager {
             turn_count: 0,
             action_this_turn: PlayerAction::Invalid,
         });
+        app.init_resource::<SoulWheel>();
     }
 }
 
@@ -49,9 +56,110 @@ pub struct TurnManager {
     pub action_this_turn: PlayerAction,
 }
 
+#[derive(Resource)]
+pub struct SoulWheel {
+    pub souls: [Option<Soul>; 8],
+    pub draw_pile: HashMap<Soul, usize>,
+    pub discard_pile: HashMap<Soul, usize>,
+}
+
+impl FromWorld for SoulWheel {
+    fn from_world(_world: &mut World) -> Self {
+        let mut soul_wheel = Self {
+            souls: [None; 8],
+            draw_pile: HashMap::new(),
+            discard_pile: HashMap::new(),
+        };
+        soul_wheel.draw_pile.insert(Soul::Saintly, 0);
+        soul_wheel.draw_pile.insert(Soul::Ordered, 2);
+        soul_wheel.draw_pile.insert(Soul::Artistic, 2);
+        soul_wheel.draw_pile.insert(Soul::Unhinged, 0);
+        soul_wheel.draw_pile.insert(Soul::Feral, 0);
+        soul_wheel.draw_pile.insert(Soul::Vile, 2);
+        soul_wheel.discard_pile.insert(Soul::Saintly, 0);
+        soul_wheel.discard_pile.insert(Soul::Ordered, 0);
+        soul_wheel.discard_pile.insert(Soul::Artistic, 0);
+        soul_wheel.discard_pile.insert(Soul::Unhinged, 0);
+        soul_wheel.discard_pile.insert(Soul::Feral, 0);
+        soul_wheel.discard_pile.insert(Soul::Vile, 0);
+        soul_wheel
+    }
+}
+
+impl SoulWheel {
+    fn castes_with_non_zero_souls(&self) -> HashSet<Soul> {
+        let mut output = HashSet::new();
+        for (caste, amount) in &self.draw_pile {
+            if amount != &0 {
+                output.insert(*caste);
+            }
+        }
+        output
+    }
+
+    fn draw_random_caste(&mut self) -> Option<Soul> {
+        let possible_castes = self.castes_with_non_zero_souls();
+        let mut rng = thread_rng();
+        if let Some(drawn_soul) = possible_castes.iter().choose(&mut rng) {
+            self.draw_pile
+                .entry(*drawn_soul)
+                .and_modify(|count| *count -= 1);
+            return Some(*drawn_soul);
+        }
+        None
+    }
+}
+
+#[derive(Event)]
+pub struct DrawSoul {
+    pub amount: usize,
+}
+
+pub fn draw_soul(
+    mut events: EventReader<DrawSoul>,
+    mut soul_wheel: ResMut<SoulWheel>,
+    mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
+    mut turn_manager: ResMut<TurnManager>,
+) {
+    for event in events.read() {
+        for _i in 0..event.amount {
+            let mut index_to_fill = None;
+
+            // Find an empty slot in the Soul Wheel.
+            for (index, soul_slot) in soul_wheel.souls.iter().enumerate() {
+                if soul_slot.is_none() {
+                    index_to_fill = Some(index);
+                    break;
+                }
+            }
+
+            if let Some(index) = index_to_fill {
+                // Draw a new soul from the deck.
+                if let Some(new_soul) = soul_wheel.draw_random_caste() {
+                    soul_wheel.souls[index] = Some(new_soul);
+                    // Reflect this new soul in the UI wheel.
+                    for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
+                        if ui_slot_marker.index == index {
+                            ui_slot_node.texture_atlas.as_mut().unwrap().index =
+                                get_soul_sprite(&new_soul);
+                        }
+                    }
+                } else {
+                    // There is nothing left in the draw pile!
+                    turn_manager.action_this_turn = PlayerAction::Invalid;
+                }
+            } else {
+                // There is no empty space in the Wheel!
+                turn_manager.action_this_turn = PlayerAction::Invalid;
+            }
+        }
+    }
+}
+
 pub enum PlayerAction {
     Step,
     Spell,
+    Draw,
     Invalid,
 }
 
@@ -426,7 +534,7 @@ pub fn creature_collision(
     attacker_flags: Query<&Stab>,
     defender_flags: Query<(Has<Door>, Has<Meleeproof>)>,
     mut turn_manager: ResMut<TurnManager>,
-    mut creature: Query<(&OrdDir, &mut Transform, Has<Player>)>,
+    mut creature: Query<(&mut Transform, Has<Player>)>,
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
@@ -437,8 +545,7 @@ pub fn creature_collision(
             continue;
         }
         let (is_door, cannot_be_melee_attacked) = defender_flags.get(event.collided_with).unwrap();
-        let (attacker_orientation, mut attacker_transform, is_player) =
-            creature.get_mut(event.culprit).unwrap();
+        let (mut attacker_transform, is_player) = creature.get_mut(event.culprit).unwrap();
         if is_door {
             // Open doors.
             open.send(OpenDoor {

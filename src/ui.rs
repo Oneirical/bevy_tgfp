@@ -16,6 +16,11 @@ const SOUL_WHEEL_CONTAINER_SIZE: f32 = 33.;
 const SOUL_WHEEL_RADIUS: f32 = 8.;
 const SOUL_WHEEL_SLOT_SPRITE_SIZE: f32 = 4.;
 
+#[derive(Component)]
+pub struct SoulSlot {
+    pub index: usize,
+}
+
 fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -48,8 +53,8 @@ fn setup(
                     let rot = PI / 4.;
                     // Soul slots, arranged in a circle formation.
                     for i in 0..8 {
-                        let i = i as f32;
                         parent.spawn((
+                            SoulSlot { index: i },
                             ImageNode {
                                 image: asset_server.load("spritesheet.png"),
                                 texture_atlas: Some(TextureAtlas {
@@ -60,12 +65,12 @@ fn setup(
                             },
                             Node {
                                 left: Val::Px(
-                                    (i * rot).cos() * SOUL_WHEEL_RADIUS
+                                    ((i + 6) as f32 * rot).cos() * SOUL_WHEEL_RADIUS
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE,
                                 ),
                                 top: Val::Px(
-                                    (i * rot).sin() * SOUL_WHEEL_RADIUS
+                                    ((i + 6) as f32 * rot).sin() * SOUL_WHEEL_RADIUS
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE,
                                 ),
@@ -76,7 +81,7 @@ fn setup(
                             },
                         ));
                         parent.spawn((
-                            Text::new((i + 1.).to_string()),
+                            Text::new((i + 1).to_string()),
                             TextFont {
                                 font: asset_server.load("fonts/Play-Regular.ttf"),
                                 font_size: 1.,
@@ -85,12 +90,12 @@ fn setup(
                             Label,
                             Node {
                                 left: Val::Px(
-                                    SOUL_WHEEL_RADIUS / 1.9 * ((i - 2.) * rot).cos()
+                                    SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).cos()
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7,
                                 ),
                                 top: Val::Px(
-                                    SOUL_WHEEL_RADIUS / 1.9 * ((i - 2.) * rot).sin()
+                                    SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).sin()
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
                                         - 0.3,

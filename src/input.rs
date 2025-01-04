@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{Player, StatusEffect},
-    events::{CreatureStep, EndTurn, PlayerAction, TurnManager},
+    events::{CreatureStep, DrawSoul, EndTurn, PlayerAction, TurnManager},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -11,6 +11,7 @@ use crate::{
 pub fn keyboard_input(
     player: Query<Entity, With<Player>>,
     mut spell: EventWriter<CastSpell>,
+    mut draw_soul: EventWriter<DrawSoul>,
     mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
     mut turn_manager: ResMut<TurnManager>,
@@ -110,6 +111,11 @@ pub fn keyboard_input(
             },
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
+        turn_end.send(EndTurn);
+    }
+    if input.just_pressed(KeyCode::KeyQ) {
+        draw_soul.send(DrawSoul { amount: 1 });
+        turn_manager.action_this_turn = PlayerAction::Draw;
         turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::KeyW) {

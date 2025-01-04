@@ -13,6 +13,28 @@ pub struct Creature {
     pub spell: Spell,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Soul {
+    Saintly,
+    Ordered,
+    Artistic,
+    Unhinged,
+    Feral,
+    Vile,
+}
+
+/// Get the appropriate texture from the spritesheet depending on the soul type.
+pub fn get_soul_sprite(soul: &Soul) -> usize {
+    match soul {
+        Soul::Saintly => 160,
+        Soul::Ordered => 161,
+        Soul::Artistic => 162,
+        Soul::Unhinged => 163,
+        Soul::Feral => 164,
+        Soul::Vile => 165,
+    }
+}
+
 // The graphical representation of Health: a health bar.
 #[derive(Bundle)]
 pub struct HealthIndicator {
