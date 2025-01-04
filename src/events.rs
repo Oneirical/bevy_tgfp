@@ -276,12 +276,12 @@ fn hp_bar_visibility_and_index(hp: usize, max_hp: usize) -> (Visibility, usize) 
                 178
             } else {
                 match hp {
-                    5 => 178,
-                    4 => 179,
-                    3 => 180,
-                    2 => 181,
-                    1 => 182,
-                    _ => 183,
+                    5 => 238,
+                    4 => 239,
+                    3 => 240,
+                    2 => 241,
+                    1 => 242,
+                    _ => 243,
                 }
             }
         },

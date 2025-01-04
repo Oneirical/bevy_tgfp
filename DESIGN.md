@@ -66,6 +66,7 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 
 - Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere. It can be noticed through one of its erratic behaviours.
 - Spawn all new room tiles "moving from" a main "reality generator" room.
+- "When a soul is drawn, draw a soul, give status effect that makes you lose 1 soul from the wheel next turn". A way to peek at the future at the cost of faster churn.
 
 # Coding
 
