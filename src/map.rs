@@ -1,9 +1,12 @@
 use std::cmp::min;
 
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
 use rand::{
     seq::{IteratorRandom, SliceRandom},
-    thread_rng,
+    thread_rng, Rng,
 };
 
 use crate::{
@@ -186,10 +189,20 @@ pub fn register_creatures(
 }
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
-    let cage = mega_cage();
+    let size = 9;
+    let mut cage = generate_cage(true, size);
+    airlocks_and_creatures(
+        &mut cage,
+        size,
+        &[OrdDir::Up, OrdDir::Left, OrdDir::Right, OrdDir::Down],
+        4,
+    );
 
-    for (idx, tile_char) in cage.chars().enumerate() {
-        let position = Position::new(idx as i32 % 44, idx as i32 / 44);
+    for (idx, tile_char) in cage.iter().enumerate() {
+        let position = Position::new(
+            idx as i32 % size as i32,
+            size as i32 - 1 - idx as i32 / size as i32,
+        );
         let species = match tile_char {
             '#' => Species::Wall,
             'H' => Species::Hunter,
@@ -220,331 +233,105 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     }
 }
 
-use rand::Rng;
+fn airlocks_and_creatures(
+    cage: &mut Vec<char>,
+    size: usize,
+    connections: &[OrdDir],
+    creatures_amount: usize,
+) {
+    for airlock in connections {
+        match airlock {
+            OrdDir::Up => {
+                cage[size / 2] = '^';
+            }
+            OrdDir::Left => {
+                cage[size * (size / 2)] = '<';
+            }
+            OrdDir::Right => {
+                cage[size * (size / 2 + 1) - 1] = '>';
+            }
+            OrdDir::Down => {
+                cage[size * size - size / 2 - 1] = 'V';
+            }
+        }
+    }
 
-const SIZE: usize = 9;
+    let creature_chars = ['A', 'T', 'F', '2', 'H'];
 
-pub fn mega_cage() -> String {
-    let mut rng = thread_rng();
-    let replacement_chars = ['A', 'T', 'F', '2', 'H'];
-
-    let mut map_string = String::from(
-        "
-###########################################
-##########......###.....###......##########
-##...WWW......WWW.........WWW......WWW...##
-##...<......WWW.............WWW......>...##
-##...W....WWW.................WWW....W...##
-##WWWWVWWWW.....................WWWWVWWWW##
-##...W.............WWWWW.............W...##
-#....<............W.....W............>....#
-#..WWW............W.WWW.W............WWW..#
-#.WW..............WVWWWVW..............WW.#
-##W...............W.....W...............W##
-##.........WW.....W.....W.....WW.........##
-#.........WWWW....WW...WW....WWWW.........#
-#.........WWWW.....W...W.....WWWW.........#
-#..........WW......WVWVW......WW..........#
-#.........................................#
-#.........................................#
-#................WW.....WW................#
-#......WWWWWW....W.......W....WWWWWW......#
-#.....W..<..WWW.............WWW..>..W.....#
-#.....W.WW....<.............>....WW.W.....#
-#.....W.W.....W......@......W.....W.W.....#
-#.....W.WW....<.............>....WW.W.....#
-#.....W..<..WWW.............WWW..>..W.....#
-#......WWWWWW....W.......W....WWWWWW......#
-#................WW.....WW................#
-#.........................................#
-#.........................................#
-#..................W^W^W..................#
-#..........WW......W...W......WW..........#
-#.........WWWW....WW...WW....WWWW.........#
-##........WWWW....W.....W....WWWW........##
-##W........WW.....W.....W.....WW........W##
-#.WW..............W.W.W.W..............WW.#
-#..WWW............W.W.W.W............WWW..#
-#....<............WWW.WWW............>....#
-##...W.............WWWWW.............W...##
-##WWWW^WWWW.....................WWWW^WWWW##
-##...W....WWW.................WWW....W...##
-##...<......WWW.............WWW......>...##
-##...WWW......WWW.........WWW......WWW...##
-##########......###.....###......##########
-############################################",
-    );
-
-    let dot_positions: Vec<usize> = map_string
-        .char_indices()
-        .filter(|&(_, c)| c == '.')
+    let floor_positions: Vec<usize> = cage
+        .iter()
+        .enumerate()
+        .filter(|&(_, c)| *c == '.')
         .map(|(i, _)| i)
         .collect();
 
-    let selected_positions = dot_positions
-        .choose_multiple(&mut rng, 60)
-        .cloned()
-        .collect::<Vec<usize>>();
+    let mut rng = thread_rng();
+    let creature_spawn_points = floor_positions.choose_multiple(&mut rng, creatures_amount);
 
-    for pos in selected_positions {
-        let replacement = *replacement_chars.choose(&mut rng).unwrap();
-        map_string.replace_range(pos..pos + 1, &replacement.to_string());
-    }
-
-    map_string
-}
-
-pub fn generate_room(creatures_in_cage: usize) -> Vec<char> {
-    let mut grid = vec![vec!['#'; SIZE]; SIZE];
-    let mut rng = rand::thread_rng();
-
-    // Set the X markers
-    grid[0][4] = '^';
-    grid[4][0] = '<';
-    grid[4][8] = '>';
-    grid[8][4] = 'V';
-
-    // Create a variable central area
-    create_variable_center(&mut grid, &mut rng);
-
-    // Connect X markers to the center
-    connect_to_center(&mut grid, 0, 4, 4, 4);
-    connect_to_center(&mut grid, 4, 0, 4, 4);
-    connect_to_center(&mut grid, 4, 8, 4, 4);
-    connect_to_center(&mut grid, 8, 4, 4, 4);
-
-    // Add random paths
-    for _ in 0..rng.gen_range(10..20) {
-        let x = rng.gen_range(1..8);
-        let y = rng.gen_range(1..8);
-        if grid[x][y] == '#' {
-            grid[x][y] = '.';
-            // Expand the path
-            for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
-                let nx = x as i32 + dx;
-                let ny = y as i32 + dy;
-                if nx > 0 && nx < SIZE as i32 - 1 && ny > 0 && ny < SIZE as i32 - 1 {
-                    if rng.gen_bool(0.5) {
-                        grid[nx as usize][ny as usize] = '.';
-                    }
-                }
-            }
-        }
-    }
-
-    // Ensure all floor tiles are connected
-    ensure_connectivity(&mut grid);
-
-    // Replace inner walls with 'W'
-    replace_inner_walls(&mut grid);
-
-    // Place '@' and 'H' on random floor tiles
-    place_special_tiles(&mut grid, &mut rng, creatures_in_cage);
-
-    grid.into_iter()
-        .flat_map(|row| row.into_iter().chain(std::iter::once('\n')))
-        .collect()
-}
-
-fn connect_to_center(
-    grid: &mut Vec<Vec<char>>,
-    start_x: usize,
-    start_y: usize,
-    end_x: usize,
-    end_y: usize,
-) {
-    let mut x = start_x;
-    let mut y = start_y;
-    while x != end_x || y != end_y {
-        grid[x][y] = '.';
-        if x < end_x {
-            x += 1;
-        } else if x > end_x {
-            x -= 1;
-        } else if y < end_y {
-            y += 1;
-        } else if y > end_y {
-            y -= 1;
-        }
+    for pos in creature_spawn_points {
+        let new_creature = *creature_chars.choose(&mut rng).unwrap();
+        cage[*pos] = new_creature;
     }
 }
 
-fn ensure_connectivity(grid: &mut Vec<Vec<char>>) {
-    let mut visited = vec![vec![false; SIZE]; SIZE];
-    let mut stack = vec![];
-
-    // Find the first floor tile
-    'outer: for i in 0..SIZE {
-        for j in 0..SIZE {
-            if grid[i][j] == '.' {
-                stack.push((i, j));
-                visited[i][j] = true;
-                break 'outer;
+pub fn generate_cage(spawn_player: bool, size: usize) -> Vec<char> {
+    let mut tiles = Vec::new();
+    for _i in 0..100 {
+        let mut passable_tiles = 0;
+        let mut idx_start = 0;
+        let mut rng = thread_rng();
+        for i in 0..size.pow(2) {
+            // If the player is here, it spawns in the middle.
+            if spawn_player && xy_idx(i, size) == ((size - 1) / 2, (size - 1) / 2) {
+                tiles.push('@');
+                passable_tiles += 1;
+            // Edges get walls 100% of the time, other tiles, 30% of the time.
+            } else if is_edge(i, size) || rng.gen::<f32>() < 0.3 {
+                tiles.push('#');
+            // Everything else is a floor.
+            } else {
+                tiles.push('.');
+                passable_tiles += 1;
+                idx_start = i;
             }
+        }
+        // Every passable tile must be connected to all other passable tiles, no "islands".
+        if passable_tiles == get_connected_tiles(idx_start, size, &tiles) {
+            return tiles;
+        } else {
+            tiles.clear();
         }
     }
+    panic!("Cage generation timeout achieved.");
+}
 
-    // DFS to mark all connected tiles
-    while let Some((x, y)) = stack.pop() {
-        for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
-            let nx = x as i32 + dx;
-            let ny = y as i32 + dy;
-            if nx >= 0 && nx < SIZE as i32 && ny >= 0 && ny < SIZE as i32 {
-                let nx = nx as usize;
-                let ny = ny as usize;
-                if (grid[nx][ny] == '.') && !visited[nx][ny] {
-                    visited[nx][ny] = true;
-                    stack.push((nx, ny));
-                }
-            }
-        }
-    }
+fn xy_idx(idx: usize, size: usize) -> (usize, usize) {
+    (idx % size, idx / size)
+}
 
-    // Connect any unvisited floor tiles
-    for i in 0..SIZE {
-        for j in 0..SIZE {
-            if (grid[i][j] == '.') && !visited[i][j] {
-                connect_to_nearest_visited(grid, &visited, i, j);
-            }
-        }
+fn is_edge(idx: usize, size: usize) -> bool {
+    if idx % size == 0 || idx % size == size - 1 || idx / size == 0 || idx / size == size - 1 {
+        true
+    } else {
+        false
     }
 }
 
-fn connect_to_nearest_visited(
-    grid: &mut Vec<Vec<char>>,
-    visited: &Vec<Vec<bool>>,
-    x: usize,
-    y: usize,
-) {
-    let mut queue = std::collections::VecDeque::new();
-    queue.push_back((x, y, Vec::<(usize, usize)>::new()));
-    let mut seen = vec![vec![false; SIZE]; SIZE];
-    seen[x][y] = true;
-
-    while let Some((cx, cy, path)) = queue.pop_front() {
-        if visited[cx][cy] {
-            for &(px, py) in &path {
-                grid[px][py] = '.';
-            }
-            return;
-        }
-
-        for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
-            let nx = cx as i32 + dx;
-            let ny = cy as i32 + dy;
-            if nx >= 0 && nx < SIZE as i32 && ny >= 0 && ny < SIZE as i32 {
-                let nx = nx as usize;
-                let ny = ny as usize;
-                if !seen[nx][ny] {
-                    seen[nx][ny] = true;
-                    let mut new_path = path.clone();
-                    new_path.push((nx, ny));
-                    queue.push_back((nx, ny, new_path));
-                }
+fn get_connected_tiles(idx_start: usize, size: usize, cage: &Vec<char>) -> usize {
+    // All previously found floor tiles.
+    let mut connected_indices = HashSet::new();
+    connected_indices.insert(idx_start);
+    // The new neighbours to inspect.
+    let mut frontier_indices = vec![idx_start];
+    while let Some(frontier) = frontier_indices.pop() {
+        // Get each frontier's 4 adjacent neighbours.
+        for neighbour in [frontier + 1, frontier - 1, frontier + size, frontier - size] {
+            // Add all floors that are not already known.
+            if cage[neighbour] != '#' && !connected_indices.contains(&neighbour) {
+                frontier_indices.push(neighbour);
+                connected_indices.insert(neighbour);
             }
         }
     }
-}
-
-fn create_variable_center(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng) {
-    // Start with a clear 5x5 center
-    for i in 4..5 {
-        for j in 4..5 {
-            grid[i][j] = '.';
-        }
-    }
-
-    // Randomly add some walls in the center
-    for _ in 0..rng.gen_range(1..9) {
-        let x = rng.gen_range(2..7);
-        let y = rng.gen_range(2..7);
-        grid[x][y] = '#';
-    }
-
-    // Ensure the center remains connected
-    let mut center_grid = grid[2..7]
-        .iter()
-        .map(|row| row[2..7].to_vec())
-        .collect::<Vec<_>>();
-    ensure_connectivity_subgrid(&mut center_grid);
-    for i in 0..5 {
-        for j in 0..5 {
-            grid[i + 2][j + 2] = center_grid[i][j];
-        }
-    }
-}
-
-fn ensure_connectivity_subgrid(grid: &mut Vec<Vec<char>>) {
-    let size = grid.len();
-    let mut visited = vec![vec![false; size]; size];
-    let mut stack = vec![];
-
-    // Find the first floor tile
-    'outer: for i in 0..size {
-        for j in 0..size {
-            if grid[i][j] == '.' {
-                stack.push((i, j));
-                visited[i][j] = true;
-                break 'outer;
-            }
-        }
-    }
-
-    // DFS to mark all connected tiles
-    while let Some((x, y)) = stack.pop() {
-        for &(dx, dy) in &[(0, 1), (1, 0), (0, -1), (-1, 0)] {
-            let nx = x as i32 + dx;
-            let ny = y as i32 + dy;
-            if nx >= 0 && nx < size as i32 && ny >= 0 && ny < size as i32 {
-                let nx = nx as usize;
-                let ny = ny as usize;
-                if grid[nx][ny] == '.' && !visited[nx][ny] {
-                    visited[nx][ny] = true;
-                    stack.push((nx, ny));
-                }
-            }
-        }
-    }
-
-    // Connect any unvisited floor tiles
-    for i in 0..size {
-        for j in 0..size {
-            if grid[i][j] == '.' && !visited[i][j] {
-                grid[i][j] = '#';
-            }
-        }
-    }
-}
-
-fn replace_inner_walls(grid: &mut Vec<Vec<char>>) {
-    for i in 1..SIZE - 1 {
-        for j in 1..SIZE - 1 {
-            if grid[i][j] == '#' {
-                grid[i][j] = 'W';
-            }
-        }
-    }
-}
-
-fn place_special_tiles(grid: &mut Vec<Vec<char>>, rng: &mut impl Rng, amount: usize) {
-    let mut floor_tiles: Vec<(usize, usize)> = Vec::new();
-
-    grid[0][4] = 'V';
-    grid[4][0] = '<';
-    grid[4][8] = '>';
-    grid[8][4] = '^';
-
-    for i in 0..SIZE {
-        for j in 0..SIZE {
-            if grid[i][j] == '.' {
-                floor_tiles.push((i, j));
-            }
-        }
-    }
-
-    for i in 0..min(amount, floor_tiles.len()) {
-        floor_tiles.shuffle(rng);
-        let (x, y) = floor_tiles[i];
-        grid[x][y] = *['A', 'T', 'F', '2', 'H'].choose(rng).unwrap();
-    }
+    connected_indices.len()
 }
