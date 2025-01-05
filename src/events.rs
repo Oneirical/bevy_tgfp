@@ -10,7 +10,7 @@ use crate::{
     creature::{
         get_soul_sprite, get_species_sprite, is_naturally_intangible, Creature, Dizzy, Door,
         Fragile, Health, HealthIndicator, Hunt, Intangible, Invincible, Meleeproof, Player,
-        PotencyAndStacks, Random, Soul, Species, Speed, Spellproof, Stab, StatusEffect,
+        PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
         StatusEffectsList, Summoned, Wall, WhenSteppedOn,
     },
     graphics::{
@@ -40,6 +40,7 @@ impl Plugin for EventPlugin {
         app.add_event::<DistributeNpcActions>();
         app.add_event::<AddStatusEffect>();
         app.add_event::<DrawSoul>();
+        app.add_event::<UseWheelSoul>();
         app.init_resource::<Events<CreatureStep>>();
         app.insert_resource(TurnManager {
             turn_count: 0,
@@ -71,11 +72,11 @@ impl FromWorld for SoulWheel {
             discard_pile: HashMap::new(),
         };
         soul_wheel.draw_pile.insert(Soul::Saintly, 0);
-        soul_wheel.draw_pile.insert(Soul::Ordered, 2);
-        soul_wheel.draw_pile.insert(Soul::Artistic, 2);
+        soul_wheel.draw_pile.insert(Soul::Ordered, 0);
+        soul_wheel.draw_pile.insert(Soul::Artistic, 0);
         soul_wheel.draw_pile.insert(Soul::Unhinged, 0);
         soul_wheel.draw_pile.insert(Soul::Feral, 0);
-        soul_wheel.draw_pile.insert(Soul::Vile, 2);
+        soul_wheel.draw_pile.insert(Soul::Vile, 0);
         soul_wheel.discard_pile.insert(Soul::Saintly, 0);
         soul_wheel.discard_pile.insert(Soul::Ordered, 0);
         soul_wheel.discard_pile.insert(Soul::Artistic, 0);
@@ -150,6 +151,57 @@ pub fn draw_soul(
                 }
             } else {
                 // There is no empty space in the Wheel!
+                turn_manager.action_this_turn = PlayerAction::Invalid;
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct UseWheelSoul {
+    pub index: usize,
+}
+
+pub fn use_wheel_soul(
+    mut events: EventReader<UseWheelSoul>,
+    mut soul_wheel: ResMut<SoulWheel>,
+    mut spell: EventWriter<CastSpell>,
+    mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
+    mut turn_manager: ResMut<TurnManager>,
+    player: Query<(Entity, &Spellbook), With<Player>>,
+) {
+    for event in events.read() {
+        let mut newly_discarded = None;
+        if let Some(soul) = soul_wheel.souls.get(event.index).unwrap() {
+            // Cast the spell corresponding to this soul type.
+            let (player_entity, spellbook) = player.get_single().unwrap();
+            spell.send(CastSpell {
+                caster: player_entity,
+                spell: spellbook.spells.get(soul).unwrap().clone(),
+            });
+            // Discard the soul into the discard pile.
+            newly_discarded = Some(*soul);
+            // Empty this soul slot.
+            soul_wheel.souls[event.index] = None;
+            // Update the UI accordingly.
+            for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
+                if ui_slot_marker.index == event.index {
+                    ui_slot_node.texture_atlas.as_mut().unwrap().index = 167;
+                }
+            }
+        } else {
+            // That soul slot is empty!
+            turn_manager.action_this_turn = PlayerAction::Invalid;
+        }
+        // The spent soul is sent to the discard pile.
+        if let Some(newly_discarded) = newly_discarded {
+            soul_wheel
+                .discard_pile
+                .entry(newly_discarded)
+                .and_modify(|amount| *amount += 1);
+            if newly_discarded == Soul::Ordered {
+                // TODO HACK: This makes the shield not take a turn. It should
+                // probably be a "Timeless" axiom instead.
                 turn_manager.action_this_turn = PlayerAction::Invalid;
             }
         }
@@ -271,6 +323,93 @@ pub fn summon_creature(
                     spell
                 } else {
                     Spell { axioms: Vec::new() }
+                },
+                soul: match &event.species {
+                    Species::Player => Soul::Saintly,
+                    Species::Wall => Soul::Ordered,
+                    Species::WeakWall => Soul::Ordered,
+                    Species::Hunter => Soul::Saintly,
+                    Species::Shrike => Soul::Feral,
+                    Species::Apiarist => Soul::Ordered,
+                    Species::Tinker => Soul::Artistic,
+                    Species::Second => Soul::Vile,
+                    _ => Soul::Unhinged,
+                },
+                spellbook: {
+                    let mut book = HashMap::new();
+                    book.insert(
+                        Soul::Saintly,
+                        Spell {
+                            axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
+                        },
+                    );
+                    book.insert(
+                        Soul::Ordered,
+                        Spell {
+                            axioms: vec![
+                                Axiom::Ego,
+                                Axiom::StatusEffect {
+                                    effect: StatusEffect::Invincible,
+                                    potency: 1,
+                                    stacks: 2,
+                                },
+                            ],
+                        },
+                    );
+                    book.insert(
+                        Soul::Artistic,
+                        Spell {
+                            axioms: vec![
+                                Axiom::Ego,
+                                Axiom::PlaceStepTrap,
+                                Axiom::PiercingBeams,
+                                Axiom::PlusBeam,
+                                Axiom::Ego,
+                                Axiom::HealOrHarm { amount: -2 },
+                            ],
+                        },
+                    );
+                    book.insert(
+                        Soul::Unhinged,
+                        Spell {
+                            axioms: vec![Axiom::XBeam, Axiom::HealOrHarm { amount: -2 }],
+                        },
+                    );
+                    book.insert(
+                        Soul::Feral,
+                        Spell {
+                            axioms: vec![
+                                Axiom::Ego,
+                                Axiom::Trace,
+                                Axiom::Dash { max_distance: 5 },
+                                Axiom::Spread,
+                                Axiom::UntargetCaster,
+                                Axiom::HealOrHarm { amount: -1 },
+                                Axiom::PurgeTargets,
+                                Axiom::Touch,
+                                Axiom::StatusEffect {
+                                    effect: StatusEffect::Dizzy,
+                                    potency: 1,
+                                    stacks: 2,
+                                },
+                                Axiom::Dash { max_distance: 1 },
+                            ],
+                        },
+                    );
+                    book.insert(
+                        Soul::Vile,
+                        Spell {
+                            axioms: vec![
+                                Axiom::Ego,
+                                Axiom::StatusEffect {
+                                    effect: StatusEffect::Stab,
+                                    potency: 5,
+                                    stacks: 20,
+                                },
+                            ],
+                        },
+                    );
+                    Spellbook { spells: book }
                 },
             },
             Transform {
@@ -747,12 +886,13 @@ pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
     mut map: ResMut<Map>,
-    creature: Query<(&Position, Has<Player>)>,
+    creature: Query<(&Position, &Soul, Has<Player>)>,
     mut spell_stack: ResMut<SpellStack>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut soul_wheel: ResMut<SoulWheel>,
 ) {
     for event in events.read() {
-        let (position, is_player) = creature.get(event.entity).unwrap();
+        let (position, soul, is_player) = creature.get(event.entity).unwrap();
         // Visually flash an X where the creature was removed.
         magic_vfx.send(PlaceMagicVfx {
             targets: vec![*position],
@@ -775,6 +915,11 @@ pub fn remove_creature(
             }
             // Remove the creature AND its children (health bar)
             commands.entity(event.entity).despawn_recursive();
+            // Add this entity's soul to the soul wheel
+            soul_wheel
+                .draw_pile
+                .entry(*soul)
+                .and_modify(|amount| *amount += 1);
             // Remove all spells cast by this creature
             // (this entity doesn't exist anymore, casting its spells would crash the game)
             spell_stack

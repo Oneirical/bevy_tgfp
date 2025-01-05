@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     creature::{Player, StatusEffect},
-    events::{CreatureStep, DrawSoul, EndTurn, PlayerAction, TurnManager},
+    events::{CreatureStep, DrawSoul, EndTurn, PlayerAction, TurnManager, UseWheelSoul},
     spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
@@ -10,108 +10,31 @@ use crate::{
 /// Each frame, if a button is pressed, move the player 1 tile.
 pub fn keyboard_input(
     player: Query<Entity, With<Player>>,
-    mut spell: EventWriter<CastSpell>,
+    mut use_wheel_soul: EventWriter<UseWheelSoul>,
     mut draw_soul: EventWriter<DrawSoul>,
     mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
     mut turn_manager: ResMut<TurnManager>,
     mut turn_end: EventWriter<EndTurn>,
 ) {
-    if input.just_pressed(KeyCode::Digit1) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
-            },
-        });
-        turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn);
-    }
-    if input.just_pressed(KeyCode::Digit2) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Invincible,
-                        potency: 1,
-                        stacks: 2,
-                    },
-                ],
-            },
-        });
-        turn_manager.action_this_turn = PlayerAction::Spell;
-        // No end_turn for the shield.
-    }
-    if input.just_pressed(KeyCode::Digit3) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::PlaceStepTrap,
-                    Axiom::PiercingBeams,
-                    Axiom::PlusBeam,
-                    Axiom::Ego,
-                    Axiom::HealOrHarm { amount: -2 },
-                ],
-            },
-        });
-        turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn);
-    }
-    if input.just_pressed(KeyCode::Digit4) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![Axiom::XBeam, Axiom::HealOrHarm { amount: -2 }],
-            },
-        });
-        turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn);
-    }
-    if input.just_pressed(KeyCode::Digit5) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::Trace,
-                    Axiom::Dash { max_distance: 5 },
-                    Axiom::Spread,
-                    Axiom::UntargetCaster,
-                    Axiom::HealOrHarm { amount: -1 },
-                    Axiom::PurgeTargets,
-                    Axiom::Touch,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Dizzy,
-                        potency: 1,
-                        stacks: 2,
-                    },
-                    Axiom::Dash { max_distance: 1 },
-                ],
-            },
-        });
-        turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn);
-    }
-    if input.just_pressed(KeyCode::Digit6) {
-        spell.send(CastSpell {
-            caster: player.get_single().unwrap(),
-            spell: Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Stab,
-                        potency: 5,
-                        stacks: 20,
-                    },
-                ],
-            },
-        });
-        turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn);
+    let soul_keys = [
+        KeyCode::Digit1,
+        KeyCode::Digit2,
+        KeyCode::Digit3,
+        KeyCode::Digit4,
+        KeyCode::Digit5,
+        KeyCode::Digit6,
+        KeyCode::Digit7,
+        KeyCode::Digit8,
+    ];
+    if input.any_just_pressed(soul_keys) {
+        for (i, key) in soul_keys.iter().enumerate() {
+            if input.just_pressed(*key) {
+                use_wheel_soul.send(UseWheelSoul { index: i });
+                turn_manager.action_this_turn = PlayerAction::Spell;
+                turn_end.send(EndTurn);
+            }
+        }
     }
     if input.just_pressed(KeyCode::KeyQ) {
         draw_soul.send(DrawSoul { amount: 1 });

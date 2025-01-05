@@ -11,9 +11,11 @@ pub struct Creature {
     pub health: Health,
     pub effects: StatusEffectsList,
     pub spell: Spell,
+    pub spellbook: Spellbook,
+    pub soul: Soul,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Soul {
     Saintly,
     Ordered,
@@ -33,6 +35,11 @@ pub fn get_soul_sprite(soul: &Soul) -> usize {
         Soul::Feral => 164,
         Soul::Vile => 165,
     }
+}
+
+#[derive(Component)]
+pub struct Spellbook {
+    pub spells: HashMap<Soul, Spell>,
 }
 
 // The graphical representation of Health: a health bar.

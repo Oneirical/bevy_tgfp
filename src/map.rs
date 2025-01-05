@@ -186,53 +186,113 @@ pub fn register_creatures(
 }
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
-    let mut spawned_player = false;
-    for i in 0..30 {
-        let mut cage = generate_room(2 + i);
-        if i == 29 {
-            cage.push('@');
-        }
-        for (idx, tile_char) in cage.iter().enumerate() {
-            let position = Position::new(idx as i32 % 10, idx as i32 / 10 + i as i32 * 9);
-            let species = match tile_char {
-                '#' => Species::Wall,
-                'H' => Species::Hunter,
-                'S' => Species::Spawner,
-                'T' => Species::Tinker,
-                '@' => Species::Player,
-                'W' => Species::WeakWall,
-                '2' => Species::Second,
-                'A' => Species::Apiarist,
-                'F' => Species::Shrike,
-                '^' | '>' | '<' | 'V' => Species::Airlock,
-                _ => continue,
-            };
-            let momentum = match tile_char {
-                '^' => OrdDir::Up,
-                '>' => OrdDir::Right,
-                '<' => OrdDir::Left,
-                'V' | _ => OrdDir::Down,
-            };
-            if spawned_player && matches!(species, Species::Player) {
-                continue;
-            } else if !spawned_player && matches!(species, Species::Player) {
-                spawned_player = true;
-            }
-            summon.send(SummonCreature {
-                species,
-                position,
-                momentum,
-                summoner_tile: Position::new(0, 0),
-                summoner: None,
-                spell: None,
-            });
-        }
+    let cage = mega_cage();
+
+    for (idx, tile_char) in cage.chars().enumerate() {
+        let position = Position::new(idx as i32 % 44, idx as i32 / 44);
+        let species = match tile_char {
+            '#' => Species::Wall,
+            'H' => Species::Hunter,
+            'S' => Species::Spawner,
+            'T' => Species::Tinker,
+            '@' => Species::Player,
+            'W' => Species::WeakWall,
+            '2' => Species::Second,
+            'A' => Species::Apiarist,
+            'F' => Species::Shrike,
+            '^' | '>' | '<' | 'V' => Species::Airlock,
+            _ => continue,
+        };
+        let momentum = match tile_char {
+            '^' => OrdDir::Up,
+            '>' => OrdDir::Right,
+            '<' => OrdDir::Left,
+            'V' | _ => OrdDir::Down,
+        };
+        summon.send(SummonCreature {
+            species,
+            position,
+            momentum,
+            summoner_tile: Position::new(0, 0),
+            summoner: None,
+            spell: None,
+        });
     }
 }
 
 use rand::Rng;
 
 const SIZE: usize = 9;
+
+pub fn mega_cage() -> String {
+    let mut rng = thread_rng();
+    let replacement_chars = ['A', 'T', 'F', '2', 'H'];
+
+    let mut map_string = String::from(
+        "
+###########################################
+##########......###.....###......##########
+##...WWW......WWW.........WWW......WWW...##
+##...<......WWW.............WWW......>...##
+##...W....WWW.................WWW....W...##
+##WWWWVWWWW.....................WWWWVWWWW##
+##...W.............WWWWW.............W...##
+#....<............W.....W............>....#
+#..WWW............W.WWW.W............WWW..#
+#.WW..............WVWWWVW..............WW.#
+##W...............W.....W...............W##
+##.........WW.....W.....W.....WW.........##
+#.........WWWW....WW...WW....WWWW.........#
+#.........WWWW.....W...W.....WWWW.........#
+#..........WW......WVWVW......WW..........#
+#.........................................#
+#.........................................#
+#................WW.....WW................#
+#......WWWWWW....W.......W....WWWWWW......#
+#.....W..<..WWW.............WWW..>..W.....#
+#.....W.WW....<.............>....WW.W.....#
+#.....W.W.....W......@......W.....W.W.....#
+#.....W.WW....<.............>....WW.W.....#
+#.....W..<..WWW.............WWW..>..W.....#
+#......WWWWWW....W.......W....WWWWWW......#
+#................WW.....WW................#
+#.........................................#
+#.........................................#
+#..................W^W^W..................#
+#..........WW......W...W......WW..........#
+#.........WWWW....WW...WW....WWWW.........#
+##........WWWW....W.....W....WWWW........##
+##W........WW.....W.....W.....WW........W##
+#.WW..............W.W.W.W..............WW.#
+#..WWW............W.W.W.W............WWW..#
+#....<............WWW.WWW............>....#
+##...W.............WWWWW.............W...##
+##WWWW^WWWW.....................WWWW^WWWW##
+##...W....WWW.................WWW....W...##
+##...<......WWW.............WWW......>...##
+##...WWW......WWW.........WWW......WWW...##
+##########......###.....###......##########
+############################################",
+    );
+
+    let dot_positions: Vec<usize> = map_string
+        .char_indices()
+        .filter(|&(_, c)| c == '.')
+        .map(|(i, _)| i)
+        .collect();
+
+    let selected_positions = dot_positions
+        .choose_multiple(&mut rng, 60)
+        .cloned()
+        .collect::<Vec<usize>>();
+
+    for pos in selected_positions {
+        let replacement = *replacement_chars.choose(&mut rng).unwrap();
+        map_string.replace_range(pos..pos + 1, &replacement.to_string());
+    }
+
+    map_string
+}
 
 pub fn generate_room(creatures_in_cage: usize) -> Vec<char> {
     let mut grid = vec![vec!['#'; SIZE]; SIZE];
