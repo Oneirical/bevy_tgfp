@@ -190,73 +190,57 @@ pub fn register_creatures(
 
 fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let size = 9;
-    let mut cage = generate_cage(true, size);
-    airlocks_and_creatures(
-        &mut cage,
-        size,
-        &[OrdDir::Up, OrdDir::Left, OrdDir::Right, OrdDir::Down],
-        4,
-    );
-
-    for (idx, tile_char) in cage.iter().enumerate() {
-        let position = Position::new(
-            idx as i32 % size as i32,
-            size as i32 - 1 - idx as i32 / size as i32,
+    for tower_floor in 0..15 {
+        let mut cage = generate_cage(
+            if tower_floor == 0 { true } else { false },
+            size,
+            match tower_floor {
+                0 => &[OrdDir::Up],
+                14 => &[OrdDir::Down],
+                _ => &[OrdDir::Up, OrdDir::Down],
+            },
         );
-        let species = match tile_char {
-            '#' => Species::Wall,
-            'H' => Species::Hunter,
-            'S' => Species::Spawner,
-            'T' => Species::Tinker,
-            '@' => Species::Player,
-            'W' => Species::WeakWall,
-            '2' => Species::Second,
-            'A' => Species::Apiarist,
-            'F' => Species::Shrike,
-            '^' | '>' | '<' | 'V' => Species::Airlock,
-            _ => continue,
-        };
-        let momentum = match tile_char {
-            '^' => OrdDir::Up,
-            '>' => OrdDir::Right,
-            '<' => OrdDir::Left,
-            'V' | _ => OrdDir::Down,
-        };
-        summon.send(SummonCreature {
-            species,
-            position,
-            momentum,
-            summoner_tile: Position::new(0, 0),
-            summoner: None,
-            spell: None,
-        });
+        add_creatures(&mut cage, 2 + tower_floor);
+
+        for (idx, tile_char) in cage.iter().enumerate() {
+            let position = Position::new(
+                idx as i32 % size as i32,
+                size as i32 - 1 - idx as i32 / size as i32 + (tower_floor * size) as i32,
+            );
+            let species = match tile_char {
+                '#' => Species::Wall,
+                'H' => Species::Hunter,
+                'S' => Species::Spawner,
+                'T' => Species::Tinker,
+                '@' => Species::Player,
+                'W' => Species::WeakWall,
+                '2' => Species::Second,
+                'A' => Species::Apiarist,
+                'F' => Species::Shrike,
+                'O' => Species::Oracle,
+                '^' | '>' | '<' | 'V' => Species::Airlock,
+                _ => continue,
+            };
+            let momentum = match tile_char {
+                '^' => OrdDir::Up,
+                '>' => OrdDir::Right,
+                '<' => OrdDir::Left,
+                'V' | _ => OrdDir::Down,
+            };
+            summon.send(SummonCreature {
+                species,
+                position,
+                momentum,
+                summoner_tile: Position::new(0, 0),
+                summoner: None,
+                spell: None,
+            });
+        }
     }
 }
 
-fn airlocks_and_creatures(
-    cage: &mut Vec<char>,
-    size: usize,
-    connections: &[OrdDir],
-    creatures_amount: usize,
-) {
-    for airlock in connections {
-        match airlock {
-            OrdDir::Up => {
-                cage[size / 2] = '^';
-            }
-            OrdDir::Left => {
-                cage[size * (size / 2)] = '<';
-            }
-            OrdDir::Right => {
-                cage[size * (size / 2 + 1) - 1] = '>';
-            }
-            OrdDir::Down => {
-                cage[size * size - size / 2 - 1] = 'V';
-            }
-        }
-    }
-
-    let creature_chars = ['A', 'T', 'F', '2', 'H'];
+fn add_creatures(cage: &mut Vec<char>, creatures_amount: usize) {
+    let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
 
     let floor_positions: Vec<usize> = cage
         .iter()
@@ -274,8 +258,9 @@ fn airlocks_and_creatures(
     }
 }
 
-pub fn generate_cage(spawn_player: bool, size: usize) -> Vec<char> {
-    let mut tiles = Vec::new();
+pub fn generate_cage(spawn_player: bool, size: usize, connections: &[OrdDir]) -> Vec<char> {
+    let mut cage = Vec::new();
+
     for _i in 0..100 {
         let mut passable_tiles = 0;
         let mut idx_start = 0;
@@ -283,23 +268,40 @@ pub fn generate_cage(spawn_player: bool, size: usize) -> Vec<char> {
         for i in 0..size.pow(2) {
             // If the player is here, it spawns in the middle.
             if spawn_player && xy_idx(i, size) == ((size - 1) / 2, (size - 1) / 2) {
-                tiles.push('@');
+                cage.push('@');
                 passable_tiles += 1;
             // Edges get walls 100% of the time, other tiles, 30% of the time.
             } else if is_edge(i, size) || rng.gen::<f32>() < 0.3 {
-                tiles.push('#');
+                cage.push('#');
             // Everything else is a floor.
             } else {
-                tiles.push('.');
+                cage.push('.');
                 passable_tiles += 1;
                 idx_start = i;
             }
         }
+        for airlock in connections {
+            match airlock {
+                OrdDir::Up => {
+                    cage[size / 2] = '^';
+                }
+                OrdDir::Left => {
+                    cage[size * (size / 2)] = '<';
+                }
+                OrdDir::Right => {
+                    cage[size * (size / 2 + 1) - 1] = '>';
+                }
+                OrdDir::Down => {
+                    cage[size * size - size / 2 - 1] = 'V';
+                }
+            }
+            passable_tiles += 1;
+        }
         // Every passable tile must be connected to all other passable tiles, no "islands".
-        if passable_tiles == get_connected_tiles(idx_start, size, &tiles) {
-            return tiles;
+        if passable_tiles == get_connected_tiles(idx_start, size, &cage) {
+            return cage;
         } else {
-            tiles.clear();
+            cage.clear();
         }
     }
     panic!("Cage generation timeout achieved.");
@@ -328,7 +330,10 @@ fn get_connected_tiles(idx_start: usize, size: usize, cage: &Vec<char>) -> usize
         for neighbour in [frontier + 1, frontier - 1, frontier + size, frontier - size] {
             // Add all floors that are not already known.
             if cage[neighbour] != '#' && !connected_indices.contains(&neighbour) {
-                frontier_indices.push(neighbour);
+                // Airlocks are on the edge, and not worth expanding from.
+                if !['V', '^', '<', '>'].contains(&cage[neighbour]) {
+                    frontier_indices.push(neighbour);
+                }
                 connected_indices.insert(neighbour);
             }
         }

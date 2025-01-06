@@ -382,7 +382,7 @@ fn axiom_form_plus(
     magic_vfx.send(PlaceMagicVfx {
         targets: output.clone(),
         sequence: EffectSequence::Sequential { duration: 0.04 },
-        effect: EffectType::RedBlast,
+        effect: EffectType::GreenBlast,
         decay: 0.5,
         appear: 0.,
     });

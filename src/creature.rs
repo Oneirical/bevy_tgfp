@@ -144,6 +144,7 @@ pub enum Species {
     Spawner,
     Airlock,
     Trap,
+    Oracle,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -160,6 +161,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Second => 7,
         Species::Tinker => 8,
         Species::Trap => 12,
+        Species::Oracle => 40,
     }
 }
 

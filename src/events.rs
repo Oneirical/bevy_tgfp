@@ -296,7 +296,8 @@ pub fn summon_creature(
             Species::Apiarist => 3,
             Species::Shrike => 1,
             Species::Second => 1,
-            Species::Tinker => 2,
+            Species::Tinker => 1,
+            Species::Oracle => 2,
             // Wall-type creatures just get full HP to avoid displaying
             // their healthbar.
             _ => max_hp,
@@ -333,6 +334,7 @@ pub fn summon_creature(
                     Species::Apiarist => Soul::Ordered,
                     Species::Tinker => Soul::Artistic,
                     Species::Second => Soul::Vile,
+                    Species::Oracle => Soul::Unhinged,
                     _ => Soul::Unhinged,
                 },
                 spellbook: {

@@ -36,12 +36,12 @@ pub fn keyboard_input(
             }
         }
     }
-    if input.just_pressed(KeyCode::KeyQ) {
+    if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::KeyQ) {
         draw_soul.send(DrawSoul { amount: 1 });
         turn_manager.action_this_turn = PlayerAction::Draw;
         turn_end.send(EndTurn);
     }
-    if input.just_pressed(KeyCode::KeyW) {
+    if input.just_pressed(KeyCode::ArrowUp) || input.just_pressed(KeyCode::KeyW) {
         events.send(CreatureStep {
             direction: OrdDir::Up,
             entity: player.get_single().unwrap(),
@@ -49,7 +49,7 @@ pub fn keyboard_input(
         turn_manager.action_this_turn = PlayerAction::Step;
         turn_end.send(EndTurn);
     }
-    if input.just_pressed(KeyCode::KeyD) {
+    if input.just_pressed(KeyCode::ArrowRight) || input.just_pressed(KeyCode::KeyD) {
         events.send(CreatureStep {
             direction: OrdDir::Right,
             entity: player.get_single().unwrap(),
@@ -57,7 +57,7 @@ pub fn keyboard_input(
         turn_manager.action_this_turn = PlayerAction::Step;
         turn_end.send(EndTurn);
     }
-    if input.just_pressed(KeyCode::KeyA) {
+    if input.just_pressed(KeyCode::ArrowLeft) || input.just_pressed(KeyCode::KeyA) {
         events.send(CreatureStep {
             direction: OrdDir::Left,
             entity: player.get_single().unwrap(),
@@ -65,7 +65,7 @@ pub fn keyboard_input(
         turn_manager.action_this_turn = PlayerAction::Step;
         turn_end.send(EndTurn);
     }
-    if input.just_pressed(KeyCode::KeyS) {
+    if input.just_pressed(KeyCode::ArrowDown) || input.just_pressed(KeyCode::KeyS) {
         events.send(CreatureStep {
             direction: OrdDir::Down,
             entity: player.get_single().unwrap(),

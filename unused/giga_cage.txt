@@ -44,3 +44,23 @@
 ##########......###.....###......##########
 ############################################",
     );
+
+
+
+                    for i in 0..6 {
+                        parent.spawn((
+                            ImageNode {
+                                image: asset_server.load("spritesheet.png"),
+                                texture_atlas: Some(TextureAtlas {
+                                    layout: atlas_layout.handle.clone(),
+                                    index: 160 + i,
+                                }),
+                                ..Default::default()
+                            },
+                            Node {
+                                width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                ..default()
+                            },
+                        ));
+                    }
