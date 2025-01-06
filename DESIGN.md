@@ -68,6 +68,8 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 - Spawn all new room tiles "moving from" a main "reality generator" room.
 - "When a soul is drawn, draw a soul, give status effect that makes you lose 1 soul from the wheel next turn". A way to peek at the future at the cost of faster churn.
 
+- Instead of "UntargetCaster", make a mutator that makes every form untarget tiles instead of targeting them - "untarget" + "ego" instead of "untargetcaster".
+
 # Coding
 
 - For NPC AI, enter a game state where events get routed to systems that don't actually affect the game state but calculate heuristics.
