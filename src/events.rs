@@ -180,6 +180,7 @@ pub fn use_wheel_soul(
                 caster: player_entity,
                 spell: spellbook.spells.get(soul).unwrap().clone(),
                 starting_step: 0,
+                soul_caste: *soul,
             });
             // Discard the soul into the discard pile.
             newly_discarded = Some(*soul);
@@ -413,7 +414,7 @@ pub fn assign_species_components(
             Species::Airlock => {
                 new_creature.insert((Meleeproof, Spellproof, Door, Invincible));
             }
-            Species::Hunter | Species::Spawner | Species::Second => {
+            Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
                 new_creature.insert(Hunt);
             }
             Species::Tinker => {
@@ -870,6 +871,8 @@ pub fn remove_creature(
 
 /// This is done separately, and ONLY once the spell stack is empty, to avoid crashes
 /// where the game tries to fetch a spellcaster's position that stopped existing.
+// NOTE: If dead entities start having their sprite lingering during spell animations,
+// set their visibility to hidden in remove_creature.
 pub fn remove_designated_creatures(
     remove: Query<Entity, With<DesignatedForRemoval>>,
     mut commands: Commands,
@@ -902,6 +905,8 @@ pub fn end_turn(
             for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
                 potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
                 if potency_and_stacks.stacks == 0 {
+                    // Disable this effect.
+                    potency_and_stacks.potency = 0;
                     match effect {
                         StatusEffect::Invincible => {
                             commands.entity(entity).remove::<Invincible>();
@@ -983,6 +988,7 @@ pub fn distribute_npc_actions(
                                 axioms: vec![Axiom::Plus, Axiom::DevourWall],
                             },
                             starting_step: 0,
+                            soul_caste: Soul::Vile,
                         });
                     }
                     _ => (),

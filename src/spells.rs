@@ -10,7 +10,10 @@ use bevy::{
 };
 
 use crate::{
-    creature::{Player, Species, Spellbook, Spellproof, StatusEffect, Summoned, Wall},
+    creature::{
+        Player, Soul, Species, Spellbook, Spellproof, StatusEffect, StatusEffectsList, Summoned,
+        Wall,
+    },
     events::{
         AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
     },
@@ -110,6 +113,21 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_function_status_effect),
         );
         axioms.library.insert(
+            discriminant(&Axiom::UpgradeStatusEffect {
+                effect: StatusEffect::Invincible,
+                potency: 0,
+                stacks: 0,
+            }),
+            world.register_system(axiom_function_upgrade_status_effect),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::IncrementCounter {
+                amount: 0,
+                count: 0,
+            }),
+            world.register_system(axiom_function_increment_counter),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Trace),
             world.register_system(axiom_mutator_trace),
         );
@@ -128,6 +146,13 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::PurgeTargets),
             world.register_system(axiom_mutator_purge_targets),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::TerminateIfCounter {
+                condition: CounterCondition::LessThan,
+                threshold: 0,
+            }),
+            world.register_system(axiom_mutator_terminate_if_counter),
         );
         axioms
     }
@@ -165,7 +190,7 @@ pub fn trigger_contingency(
 ) {
     for event in events.read() {
         let spellbook = spellbook.get(event.caster).unwrap();
-        for (_soul, spell) in spellbook.spells.iter() {
+        for (soul, spell) in spellbook.spells.iter() {
             if let Some(contingency_index) = spell
                 .axioms
                 .iter()
@@ -175,6 +200,7 @@ pub fn trigger_contingency(
                     caster: event.caster,
                     spell: spell.clone(),
                     starting_step: contingency_index,
+                    soul_caste: *soul,
                 });
             }
         }
@@ -187,6 +213,7 @@ pub struct CastSpell {
     pub caster: Entity,
     pub spell: Spell,
     pub starting_step: usize,
+    pub soul_caste: Soul,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -256,6 +283,17 @@ pub enum Axiom {
         potency: usize,
         stacks: usize,
     },
+    /// Upgrade an already present status effect with new potency and stacks.
+    UpgradeStatusEffect {
+        effect: StatusEffect,
+        potency: usize,
+        stacks: usize,
+    },
+    /// Add a certain amount to the counter, for use with "TerminateIfCounter"
+    IncrementCounter {
+        amount: i32,
+        count: i32,
+    },
 
     // MUTATORS
     /// Any Teleport event will target all tiles between its start and destination tiles.
@@ -268,6 +306,19 @@ pub enum Axiom {
     PiercingBeams,
     /// Remove all targets.
     PurgeTargets,
+    /// If the synapse's counter is [condition] than the value, terminate.
+    // NOTE: Instead of a SynapseFlag, it may be more interesting to simply fetch
+    // the previous axiom and see if it is a counter.
+    TerminateIfCounter {
+        condition: CounterCondition,
+        threshold: i32,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CounterCondition {
+    LessThan,
+    NotModuloOf { modulo: i32 },
 }
 
 /// The tracker of everything which determines how a certain spell will act.
@@ -282,17 +333,19 @@ pub struct SynapseData {
     pub caster: Entity,
     /// Flags that alter the behaviour of an active synapse.
     synapse_flags: HashSet<SynapseFlag>,
+    soul_caste: Soul,
 }
 
 impl SynapseData {
     /// Create a blank SynapseData.
-    fn new(caster: Entity, axioms: Vec<Axiom>, step: usize) -> Self {
+    fn new(caster: Entity, axioms: Vec<Axiom>, step: usize, soul_caste: Soul) -> Self {
         SynapseData {
             targets: HashSet::new(),
             axioms,
             step,
             caster,
             synapse_flags: HashSet::new(),
+            soul_caste,
         }
     }
 
@@ -328,6 +381,8 @@ pub enum SynapseFlag {
     Trace,
     /// All Beam-type Forms will pierce non-Wall creatures.
     PiercingBeams,
+    /// A Counter, to go in tandem with TerminateIfCounter
+    Counter { count: i32 },
 }
 
 pub fn cast_new_spell(
@@ -339,7 +394,12 @@ pub fn cast_new_spell(
         let axioms = cast_spell.spell.axioms.clone();
         // Create a new synapse to start "rolling down the hill" accumulating targets and
         // dispatching events.
-        let synapse_data = SynapseData::new(cast_spell.caster, axioms, cast_spell.starting_step);
+        let synapse_data = SynapseData::new(
+            cast_spell.caster,
+            axioms,
+            cast_spell.starting_step,
+            cast_spell.soul_caste,
+        );
         // Send it off for processing - right away, for the spell stack is "last in, first out."
         spell_stack.spells.push(synapse_data);
     }
@@ -725,6 +785,32 @@ fn axiom_function_place_step_trap(
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
 }
 
+/// If the synapse's counter is [condition] than the value, terminate.
+fn axiom_mutator_terminate_if_counter(mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+
+    if let Axiom::TerminateIfCounter {
+        condition,
+        threshold,
+    } = synapse_data.axioms[synapse_data.step]
+    {
+        if let Some(SynapseFlag::Counter { count }) = synapse_data
+            .synapse_flags
+            .iter()
+            .find(|s| matches!(&s, SynapseFlag::Counter { .. }))
+        {
+            if match condition {
+                CounterCondition::LessThan => count < &threshold,
+                CounterCondition::NotModuloOf { modulo } => count % modulo != threshold,
+            } {
+                synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+            }
+        }
+    } else {
+        panic!()
+    }
+}
+
 /// Any targeted creature with the Wall component is removed.
 /// Each removed wall heals the caster +1.
 fn axiom_function_devour_wall(
@@ -789,8 +875,7 @@ fn axiom_function_status_effect(
     } = synapse_data.axioms[synapse_data.step]
     {
         for entity in synapse_data.get_all_targeted_entities(&map) {
-            let is_spellproof = is_spellproof.get(entity).unwrap();
-            if !is_spellproof {
+            if !is_spellproof.get(entity).unwrap() {
                 status_effect.send(AddStatusEffect {
                     entity,
                     effect,
@@ -798,6 +883,77 @@ fn axiom_function_status_effect(
                     stacks,
                 });
             }
+        }
+    } else {
+        panic!();
+    }
+}
+
+/// Upgrade an already present status effect with new potency and stacks.
+fn axiom_function_upgrade_status_effect(
+    mut status_effect: EventWriter<AddStatusEffect>,
+    creature_status_effect: Query<&mut StatusEffectsList>,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    is_spellproof: Query<Has<Spellproof>>,
+) {
+    let synapse_data = spell_stack.spells.last().unwrap();
+    if let Axiom::UpgradeStatusEffect {
+        effect,
+        potency,
+        stacks,
+    } = synapse_data.axioms[synapse_data.step]
+    {
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            if !is_spellproof.get(entity).unwrap() {
+                let status_list = creature_status_effect.get(entity).unwrap();
+                if let Some(upgrade_effect) = status_list.effects.get(&effect) {
+                    status_effect.send(AddStatusEffect {
+                        entity,
+                        effect,
+                        potency: upgrade_effect.potency + potency,
+                        stacks: upgrade_effect.stacks + stacks,
+                    });
+                }
+            }
+        }
+    } else {
+        panic!();
+    }
+}
+
+fn axiom_function_increment_counter(
+    mut spellbook: Query<&mut Spellbook>,
+    mut spell_stack: ResMut<SpellStack>,
+    is_spellproof: Query<Has<Spellproof>>,
+) {
+    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    if let Axiom::IncrementCounter { amount, count } = synapse_data.axioms[synapse_data.step] {
+        if !is_spellproof.get(synapse_data.caster).unwrap() {
+            let mut book = spellbook.get_mut(synapse_data.caster).unwrap();
+            // Access itself, deep inside the creature's spellbook
+            let counter_axiom = book
+                .spells
+                .get_mut(&synapse_data.soul_caste)
+                .unwrap()
+                .axioms
+                .get_mut(synapse_data.step)
+                .unwrap();
+            // It modifies itself, how cool is that
+            let current_count = if let Axiom::IncrementCounter {
+                amount: _amount_in_book,
+                count: count_in_book,
+            } = counter_axiom
+            {
+                *count_in_book = count.saturating_add(amount);
+                count_in_book
+            } else {
+                panic!()
+            };
+            // Also add the flag for the if conditions.
+            synapse_data.synapse_flags.insert(SynapseFlag::Counter {
+                count: *current_count,
+            });
         }
     } else {
         panic!();

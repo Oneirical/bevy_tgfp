@@ -26,7 +26,8 @@ fn main() {
     let app_window = Some(Window {
         title: "The Games Foxes Play".into(),
         resolution: WindowResolution::new(5120., 2880.).with_scale_factor_override(16.),
-        mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+        // mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+        mode: bevy::window::WindowMode::Windowed,
         ..default()
     });
     App::new()

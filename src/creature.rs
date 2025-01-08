@@ -2,7 +2,7 @@ use bevy::{prelude::*, utils::HashMap};
 
 use crate::{
     map::Position,
-    spells::{Axiom, Spell},
+    spells::{Axiom, CounterCondition, Spell},
     OrdDir,
 };
 
@@ -88,12 +88,13 @@ pub enum StatusEffect {
     Dizzy,
 }
 
+#[derive(Debug)]
 pub struct PotencyAndStacks {
     pub potency: usize,
     pub stacks: usize,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct StatusEffectsList {
     pub effects: HashMap<StatusEffect, PotencyAndStacks>,
 }
@@ -198,6 +199,37 @@ pub fn get_species_sprite(species: &Species) -> usize {
 
 pub fn get_species_spellbook(species: &Species) -> Spellbook {
     match species {
+        Species::Oracle => Spellbook::new([
+            None,
+            None,
+            None,
+            Some(Spell {
+                axioms: vec![
+                    Axiom::WhenMoved,
+                    Axiom::IncrementCounter {
+                        amount: 1,
+                        count: 0,
+                    },
+                    Axiom::TerminateIfCounter {
+                        condition: CounterCondition::NotModuloOf { modulo: 5 },
+                        threshold: 0,
+                    },
+                    Axiom::Ego,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Stab,
+                        potency: 0,
+                        stacks: 20,
+                    },
+                    Axiom::UpgradeStatusEffect {
+                        effect: StatusEffect::Stab,
+                        potency: 1,
+                        stacks: 5,
+                    },
+                ],
+            }),
+            None,
+            None,
+        ]),
         Species::Player => Spellbook::new([
             Some(Spell {
                 axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
