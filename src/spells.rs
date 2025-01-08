@@ -36,8 +36,8 @@ impl Plugin for SpellPlugin {
 #[derive(Resource)]
 /// All available Axioms and their corresponding systems.
 pub struct AxiomLibrary {
-    pub library: HashMap<Discriminant<Axiom>, SystemId>,
-    pub teleport: SystemId<In<TeleportEntity>>,
+    pub library: HashMap<Discriminant<Axiom>, SystemId<In<usize>>>,
+    pub teleport: SystemId<In<(TeleportEntity, usize)>>,
 }
 
 impl FromWorld for AxiomLibrary {
@@ -322,6 +322,7 @@ pub enum CounterCondition {
 }
 
 /// The tracker of everything which determines how a certain spell will act.
+#[derive(Debug)]
 pub struct SynapseData {
     /// Where a spell will act.
     targets: HashSet<Position>,
@@ -405,37 +406,15 @@ pub fn cast_new_spell(
     }
 }
 
-/// Get the most recently added spell (re-adding it at the end if it's not complete yet).
-/// Get the next axiom, and runs its effects.
-pub fn process_axiom(
-    mut commands: Commands,
-    axioms: Res<AxiomLibrary>,
-    spell_stack: Res<SpellStack>,
-) {
-    // Get the most recently added spell, if it exists.
-    if let Some(synapse_data) = spell_stack.spells.last() {
-        // Get its first axiom.
-        let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
-        // Launch the axiom, which will send out some Events (if it's a Function,
-        // which affect the game world) or add some target tiles (if it's a Form, which
-        // decides where the Functions will take place.)
-        // Axioms not in the library are discarded: they are Contingencies.
-        if let Some(one_shot_system) = axioms.library.get(&discriminant(axiom)) {
-            commands.run_system(*one_shot_system);
-        }
-        // Clean up afterwards, continuing the spell execution.
-        commands.run_system(spell_stack.cleanup_id);
-    }
-}
-
 /// Target the caster's tile.
 fn axiom_form_ego(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
 ) {
     // Get the currently executed spell.
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     // Get the caster's position.
     let caster_position = *position.get(synapse_data.caster).unwrap();
     // Place the visual effect.
@@ -452,12 +431,13 @@ fn axiom_form_ego(
 
 /// Target the player's tile.
 fn axiom_form_player(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position, With<Player>>,
 ) {
     // Get the currently executed spell.
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     // Get the caster's position.
     let player_position = *position.get_single().unwrap();
     // Place the visual effect.
@@ -474,11 +454,12 @@ fn axiom_form_player(
 
 /// Target all orthogonally adjacent tiles to the caster.
 fn axiom_form_plus(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
     let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
     let mut output = Vec::new();
@@ -500,6 +481,7 @@ fn axiom_form_plus(
 
 /// The targeted creatures dash in the direction of the caster's last move.
 fn axiom_function_dash(
+    In(spell_idx): In<usize>,
     library: Res<AxiomLibrary>,
     mut commands: Commands,
     map: Res<Map>,
@@ -507,7 +489,7 @@ fn axiom_function_dash(
     momentum: Query<&OrdDir>,
     is_spellproof: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
     if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
         // For each (Entity, Position) on a targeted tile with a creature on it...
@@ -538,10 +520,13 @@ fn axiom_function_dash(
             // Once finished, release the Teleport event.
             commands.run_system_with_input(
                 library.teleport,
-                TeleportEntity {
-                    destination: final_dash_destination,
-                    entity: dasher,
-                },
+                (
+                    TeleportEntity {
+                        destination: final_dash_destination,
+                        entity: dasher,
+                    },
+                    spell_idx,
+                ),
             );
         }
     } else {
@@ -554,13 +539,14 @@ fn axiom_function_dash(
 /// Fire a beam from the caster, towards the caster's last move. Target all travelled tiles,
 /// including the first solid tile encountered, which stops the beam.
 fn axiom_form_momentum_beam(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position_and_momentum: Query<(&Position, &OrdDir)>,
     spellproof_query: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let (caster_position, caster_momentum) =
         position_and_momentum.get(synapse_data.caster).unwrap();
     // Start the beam where the caster is standing.
@@ -595,13 +581,14 @@ fn axiom_form_momentum_beam(
 /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
 /// including the first solid tile encountered, which stops the beam.
 fn axiom_form_xbeam(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
     spellproof_query: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
     let diagonals = [(1, 1), (-1, 1), (1, -1), (-1, -1)];
     for (dx, dy) in diagonals {
@@ -634,13 +621,15 @@ fn axiom_form_xbeam(
 /// Fire 4 beams from the caster, towards the cardinal directions. Target all travelled tiles,
 /// including the first solid tile encountered, which stops the beam.
 fn axiom_form_plus_beam(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
     spellproof_query: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    dbg!(&synapse_data);
     let caster_position = *position.get(synapse_data.caster).unwrap();
     let cardinals = [OrdDir::Up, OrdDir::Down, OrdDir::Left, OrdDir::Right];
     for cardinal in cardinals {
@@ -676,11 +665,12 @@ fn axiom_form_plus_beam(
 
 /// Target the tile adjacent to the caster, towards the caster's last move.
 fn axiom_form_touch(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     position_and_momentum: Query<(&Position, &OrdDir)>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let (caster_position, caster_momentum) =
         position_and_momentum.get(synapse_data.caster).unwrap();
     let (off_x, off_y) = caster_momentum.as_offset();
@@ -697,11 +687,12 @@ fn axiom_form_touch(
 
 /// Target a ring of `radius` around the caster.
 fn axiom_form_halo(
+    In(spell_idx): In<usize>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = position.get(synapse_data.caster).unwrap();
     if let Axiom::Halo { radius } = synapse_data.axioms[synapse_data.step] {
         let mut circle = circle_around(caster_position, radius);
@@ -728,11 +719,12 @@ fn axiom_form_halo(
 
 /// The targeted passable tiles summon a new instance of species.
 fn axiom_function_summon_creature(
+    In(spell_idx): In<usize>,
     mut summon: EventWriter<SummonCreature>,
     spell_stack: Res<SpellStack>,
     position: Query<&Position>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     let caster_position = position.get(synapse_data.caster).unwrap();
     if let Axiom::SummonCreature { species } = synapse_data.axioms[synapse_data.step] {
         for position in &synapse_data.targets {
@@ -753,11 +745,12 @@ fn axiom_function_summon_creature(
 /// The targeted tiles summon a step-triggered trap with following axioms as the payload.
 /// This terminates the spell.
 fn axiom_function_place_step_trap(
+    In(spell_idx): In<usize>,
     mut summon: EventWriter<SummonCreature>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = position.get(synapse_data.caster).unwrap();
     for position in &synapse_data.targets {
         summon.send(SummonCreature {
@@ -786,8 +779,11 @@ fn axiom_function_place_step_trap(
 }
 
 /// If the synapse's counter is [condition] than the value, terminate.
-fn axiom_mutator_terminate_if_counter(mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+fn axiom_mutator_terminate_if_counter(
+    In(spell_idx): In<usize>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
 
     if let Axiom::TerminateIfCounter {
         condition,
@@ -814,13 +810,14 @@ fn axiom_mutator_terminate_if_counter(mut spell_stack: ResMut<SpellStack>) {
 /// Any targeted creature with the Wall component is removed.
 /// Each removed wall heals the caster +1.
 fn axiom_function_devour_wall(
+    In(spell_idx): In<usize>,
     mut remove: EventWriter<RemoveCreature>,
     mut heal: EventWriter<DamageOrHealCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
     wall_check: Query<(Has<Wall>, Has<Spellproof>)>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     let mut total_heal: isize = 0;
     for entity in synapse_data.get_all_targeted_entities(&map) {
         let (is_wall, is_spellproof) = wall_check.get(entity).unwrap();
@@ -838,12 +835,13 @@ fn axiom_function_devour_wall(
 
 /// All targeted creatures heal or are harmed by this amount.
 fn axiom_function_heal_or_harm(
+    In(spell_idx): In<usize>,
     mut heal: EventWriter<DamageOrHealCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
     is_spellproof: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::HealOrHarm { amount } = synapse_data.axioms[synapse_data.step] {
         for entity in synapse_data.get_all_targeted_entities(&map) {
             let is_spellproof = is_spellproof.get(entity).unwrap();
@@ -862,12 +860,13 @@ fn axiom_function_heal_or_harm(
 
 /// Give a status effect to all targeted creatures.
 fn axiom_function_status_effect(
+    In(spell_idx): In<usize>,
     mut status_effect: EventWriter<AddStatusEffect>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
     is_spellproof: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::StatusEffect {
         effect,
         potency,
@@ -891,13 +890,14 @@ fn axiom_function_status_effect(
 
 /// Upgrade an already present status effect with new potency and stacks.
 fn axiom_function_upgrade_status_effect(
+    In(spell_idx): In<usize>,
     mut status_effect: EventWriter<AddStatusEffect>,
     creature_status_effect: Query<&mut StatusEffectsList>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
     is_spellproof: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::UpgradeStatusEffect {
         effect,
         potency,
@@ -923,11 +923,12 @@ fn axiom_function_upgrade_status_effect(
 }
 
 fn axiom_function_increment_counter(
+    In(spell_idx): In<usize>,
     mut spellbook: Query<&mut Spellbook>,
     mut spell_stack: ResMut<SpellStack>,
     is_spellproof: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     if let Axiom::IncrementCounter { amount, count } = synapse_data.axioms[synapse_data.step] {
         if !is_spellproof.get(synapse_data.caster).unwrap() {
             let mut book = spellbook.get_mut(synapse_data.caster).unwrap();
@@ -962,13 +963,14 @@ fn axiom_function_increment_counter(
 
 /// All creatures summoned by targeted creatures are removed.
 fn axiom_function_abjuration(
+    In(spell_idx): In<usize>,
     mut remove: EventWriter<RemoveCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
     summons: Query<(Entity, &Summoned)>,
     is_spellproof: Query<Has<Spellproof>>,
 ) {
-    let synapse_data = spell_stack.spells.last().unwrap();
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     for entity in synapse_data.get_all_targeted_entities(&map) {
         // Spellproof entities cannot be affected.
         if is_spellproof.get(entity).unwrap() {
@@ -985,14 +987,14 @@ fn axiom_function_abjuration(
 }
 
 /// Any Teleport event will target all tiles between its start and destination tiles.
-fn axiom_mutator_trace(mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+fn axiom_mutator_trace(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     synapse_data.synapse_flags.insert(SynapseFlag::Trace);
 }
 
 /// All Beam-type Forms will pierce through non-Spellproof creatures.
-fn axiom_mutator_piercing_beams(mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+fn axiom_mutator_piercing_beams(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     synapse_data
         .synapse_flags
         .insert(SynapseFlag::PiercingBeams);
@@ -1000,10 +1002,11 @@ fn axiom_mutator_piercing_beams(mut spell_stack: ResMut<SpellStack>) {
 
 /// All targeted tiles expand to also target their orthogonally adjacent tiles.
 fn axiom_mutator_spread(
+    In(spell_idx): In<usize>,
     mut spell_stack: ResMut<SpellStack>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let mut output = [Vec::new(), Vec::new(), Vec::new(), Vec::new()];
     for target in &synapse_data.targets {
         let adjacent = [OrdDir::Up, OrdDir::Right, OrdDir::Down, OrdDir::Left];
@@ -1028,26 +1031,30 @@ fn axiom_mutator_spread(
 }
 
 /// Remove the Caster's tile from targets.
-fn axiom_mutator_untarget_caster(mut spell_stack: ResMut<SpellStack>, position: Query<&Position>) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+fn axiom_mutator_untarget_caster(
+    In(spell_idx): In<usize>,
+    mut spell_stack: ResMut<SpellStack>,
+    position: Query<&Position>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = position.get(synapse_data.caster).unwrap();
     synapse_data.targets.remove(caster_position);
 }
 
 /// Delete all targets.
-fn axiom_mutator_purge_targets(mut spell_stack: ResMut<SpellStack>) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+fn axiom_mutator_purge_targets(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     synapse_data.targets.clear();
 }
 
 fn teleport_transmission(
-    In(teleport_event): In<TeleportEntity>,
+    In((teleport_event, spell_idx)): In<(TeleportEntity, usize)>,
     position: Query<&Position>,
     mut teleport_writer: EventWriter<TeleportEntity>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut spell_stack: ResMut<SpellStack>,
 ) {
-    let synapse_data = spell_stack.spells.last_mut().unwrap();
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     if synapse_data.synapse_flags.contains(&SynapseFlag::Trace) {
         let start = position.get(teleport_event.entity).unwrap();
         let mut output = walk_grid(*start, teleport_event.destination);
@@ -1132,18 +1139,46 @@ fn angle_from_center(center: &Position, point: &Position) -> f64 {
     (delta_y as f64).atan2(delta_x as f64)
 }
 
-fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
-    // Get the currently executed spell, removing it temporarily.
-    let mut synapse_data = spell_stack.spells.pop().unwrap();
-    // Step forwards in the axiom queue.
-    synapse_data.step += 1;
-    // If the spell is finished, do not push it back.
-    // The Terminate flag also prevents further execution.
-    if synapse_data.axioms.get(synapse_data.step).is_some()
-        && !synapse_data.synapse_flags.contains(&SynapseFlag::Terminate)
-    {
-        spell_stack.spells.push(synapse_data);
+/// Get the spells active this turn.
+/// Get the next axiom, and runs its effects.
+pub fn process_axiom(
+    mut commands: Commands,
+    axioms: Res<AxiomLibrary>,
+    spell_stack: Res<SpellStack>,
+) {
+    // Get the spells active this turn.
+    for (i, synapse_data) in spell_stack.spells.iter().enumerate() {
+        // Get this spell's first axiom.
+        let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
+        // Launch the axiom, which will send out some Events (if it's a Function,
+        // which affect the game world) or add some target tiles (if it's a Form, which
+        // decides where the Functions will take place.)
+        // Axioms not in the library are discarded: they are Contingencies.
+        if let Some(one_shot_system) = axioms.library.get(&discriminant(axiom)) {
+            commands.run_system_with_input(*one_shot_system, i);
+        }
+        // Clean up afterwards, continuing the spell execution.
+        commands.run_system(spell_stack.cleanup_id);
     }
+}
+
+/// Remove all terminated spells.
+fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
+    let mut renewed_spells = Vec::new();
+    let len = spell_stack.spells.len();
+    for mut synapse_data in spell_stack.spells.drain(0..len) {
+        // Get the currently executed spell, removing it temporarily.
+        // Step forwards in the axiom queue.
+        synapse_data.step += 1;
+        // If the spell is finished, do not push it back.
+        // The Terminate flag also prevents further execution.
+        if synapse_data.axioms.get(synapse_data.step).is_some()
+            && !synapse_data.synapse_flags.contains(&SynapseFlag::Terminate)
+        {
+            renewed_spells.push(synapse_data);
+        }
+    }
+    spell_stack.spells.append(&mut renewed_spells);
 }
 
 pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {

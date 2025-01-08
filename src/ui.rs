@@ -726,7 +726,7 @@ fn setup(
                                         6 => " - Its melee attacks cause it to heal itself for 1 HP.",
                                         7 => " - Resilient, yet slow, acting once every two turns.",
                                         8 => " - It moves erratically, and sculpts sentries from walls. These crumble into dust once their creator is slain.",
-                                        9 => " - It charges up as it moves, empowering its next melee attack with 1 bonus damage every 3 steps.",
+                                        9 => " - It charges up as it moves, empowering its next melee attack with 1 bonus damage every 5 steps.",
                                         10 => " - Frail, but fast, acting twice every turn.",
                                         _ => " - It hungers, devouring nearby walls to regenerate.",
                                     }),
