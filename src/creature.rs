@@ -147,6 +147,9 @@ pub struct Meleeproof;
 pub struct Intangible;
 
 #[derive(Component)]
+pub struct DesignatedForRemoval;
+
+#[derive(Component)]
 pub struct WhenSteppedOn;
 
 // Breaks when stepped on.

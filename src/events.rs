@@ -9,9 +9,10 @@ use rand::{seq::IteratorRandom, thread_rng};
 use crate::{
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible,
-        Creature, Dizzy, Door, Fragile, Health, HealthIndicator, Hunt, Intangible, Invincible,
-        Meleeproof, Player, PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof,
-        Stab, StatusEffect, StatusEffectsList, Summoned, Wall, WhenSteppedOn,
+        Creature, DesignatedForRemoval, Dizzy, Door, Fragile, Health, HealthIndicator, Hunt,
+        Intangible, Invincible, Meleeproof, Player, PotencyAndStacks, Random, Soul, Species, Speed,
+        Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        WhenSteppedOn,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -73,7 +74,7 @@ impl FromWorld for SoulWheel {
         };
         soul_wheel.draw_pile.insert(Soul::Saintly, 0);
         soul_wheel.draw_pile.insert(Soul::Ordered, 0);
-        soul_wheel.draw_pile.insert(Soul::Artistic, 0);
+        soul_wheel.draw_pile.insert(Soul::Artistic, 5);
         soul_wheel.draw_pile.insert(Soul::Unhinged, 0);
         soul_wheel.draw_pile.insert(Soul::Feral, 0);
         soul_wheel.draw_pile.insert(Soul::Vile, 0);
@@ -570,18 +571,22 @@ pub fn stepped_on_tile(
     mut events: EventReader<SteppedOnTile>,
     mut contingency: EventWriter<TriggerContingency>,
     mut remove: EventWriter<RemoveCreature>,
-    fragile: Query<(Entity, &Position), With<Fragile>>,
+    stepped_on_creatures: Query<(Entity, &Position, Has<Fragile>), With<Fragile>>,
 ) {
     for event in events.read() {
-        // Traps trigger their spell effect when stepped on.
-        contingency.send(TriggerContingency {
-            caster: event.entity,
-            contingency: Axiom::WhenSteppedOn,
-        });
-        // Fragile floor entities are destroyed when stepped on.
-        for (entity, position) in fragile.iter() {
-            if event.position == *position {
-                remove.send(RemoveCreature { entity });
+        for (entity, position, is_fragile) in stepped_on_creatures.iter() {
+            // If an entity is at the Position that was stepped on and isn't the creature
+            // responsible for stepping...
+            if event.position == *position && entity != event.entity {
+                // Traps trigger their spell effect when stepped on.
+                contingency.send(TriggerContingency {
+                    caster: entity,
+                    contingency: Axiom::WhenSteppedOn,
+                });
+                // Fragile floor entities are destroyed when stepped on.
+                if is_fragile {
+                    remove.send(RemoveCreature { entity });
+                }
             }
         }
     }
@@ -814,7 +819,7 @@ pub fn remove_creature(
     mut commands: Commands,
     mut map: ResMut<Map>,
     creature: Query<(&Position, &Soul, Has<Player>)>,
-    mut spell_stack: ResMut<SpellStack>,
+    // mut spell_stack: ResMut<SpellStack>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
 ) {
@@ -841,20 +846,36 @@ pub fn remove_creature(
                 }
             }
             // Remove the creature AND its children (health bar)
-            commands.entity(event.entity).despawn_recursive();
+            commands.entity(event.entity).insert((
+                Intangible,
+                Spellproof,
+                Dizzy,
+                DesignatedForRemoval,
+            ));
             // Add this entity's soul to the soul wheel
             soul_wheel
                 .draw_pile
                 .entry(*soul)
                 .and_modify(|amount| *amount += 1);
-            // Remove all spells cast by this creature
-            // (this entity doesn't exist anymore, casting its spells would crash the game)
-            spell_stack
-                .spells
-                .retain(|spell| spell.caster != event.entity);
+            // // Remove all spells cast by this creature
+            // // (this entity doesn't exist anymore, casting its spells would crash the game)
+            // spell_stack
+            //     .spells
+            //     .retain(|spell| spell.caster != event.entity);
         } else {
             panic!("You have been slain");
         }
+    }
+}
+
+/// This is done separately, and ONLY once the spell stack is empty, to avoid crashes
+/// where the game tries to fetch a spellcaster's position that stopped existing.
+pub fn remove_designated_creatures(
+    remove: Query<Entity, With<DesignatedForRemoval>>,
+    mut commands: Commands,
+) {
+    for designated in remove.iter() {
+        commands.entity(designated).despawn_recursive();
     }
 }
 
@@ -924,21 +945,15 @@ pub fn distribute_npc_actions(
             Option<&Speed>,
             Has<Hunt>,
             Has<Random>,
-            Has<Dizzy>,
         ),
-        Without<Player>,
+        (Without<Player>, Without<Dizzy>),
     >,
     map: Res<Map>,
 ) {
     for event in events.read() {
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
-        for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random, is_too_dizzy_to_act) in
-            npcs.iter()
-        {
-            if is_too_dizzy_to_act {
-                continue;
-            }
+        for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {
             if let Some(speed) = speed {
                 match speed {
                     Speed::Slow { wait_turns } => {

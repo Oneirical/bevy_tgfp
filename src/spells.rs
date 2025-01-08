@@ -189,7 +189,7 @@ pub struct CastSpell {
     pub starting_step: usize,
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug)]
 /// A spell is composed of a list of "Axioms", which will select tiles or execute an effect onto
 /// those tiles, in the order they are listed.
 pub struct Spell {
@@ -711,9 +711,8 @@ fn axiom_function_place_step_trap(
                 None,
                 Some(Spell {
                     axioms: {
-                        let step_trigger = vec![Axiom::WhenSteppedOn];
-                        vec![Axiom::WhenSteppedOn]
-                            .extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
+                        let mut step_trigger = vec![Axiom::WhenSteppedOn];
+                        step_trigger.extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
                         step_trigger
                     },
                 }),
