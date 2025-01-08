@@ -192,7 +192,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
     let size = 9;
     for tower_floor in 0..15 {
         let mut cage = generate_cage(
-            if tower_floor == 0 { true } else { false },
+            tower_floor == 0,
             size,
             match tower_floor {
                 0 => &[OrdDir::Up],
@@ -233,13 +233,13 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 momentum,
                 summoner_tile: Position::new(0, 0),
                 summoner: None,
-                spell: None,
+                spellbook: None,
             });
         }
     }
 }
 
-fn add_creatures(cage: &mut Vec<char>, creatures_amount: usize) {
+fn add_creatures(cage: &mut [char], creatures_amount: usize) {
     let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
 
     let floor_positions: Vec<usize> = cage
@@ -312,14 +312,10 @@ fn xy_idx(idx: usize, size: usize) -> (usize, usize) {
 }
 
 fn is_edge(idx: usize, size: usize) -> bool {
-    if idx % size == 0 || idx % size == size - 1 || idx / size == 0 || idx / size == size - 1 {
-        true
-    } else {
-        false
-    }
+    idx % size == 0 || idx % size == size - 1 || idx / size == 0 || idx / size == size - 1
 }
 
-fn get_connected_tiles(idx_start: usize, size: usize, cage: &Vec<char>) -> usize {
+fn get_connected_tiles(idx_start: usize, size: usize, cage: &[char]) -> usize {
     // All previously found floor tiles.
     let mut connected_indices = HashSet::new();
     connected_indices.insert(idx_start);

@@ -10,7 +10,7 @@ use crate::{
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
     map::register_creatures,
-    spells::{cast_new_spell, process_axiom, spell_stack_is_empty},
+    spells::{cast_new_spell, process_axiom, spell_stack_is_empty, trigger_contingency},
 };
 
 pub struct SetsPlugin;
@@ -29,6 +29,7 @@ impl Plugin for SetsPlugin {
                 keyboard_input.run_if(spell_stack_is_empty),
                 creature_step,
                 use_wheel_soul,
+                trigger_contingency,
                 cast_new_spell,
                 process_axiom,
                 draw_soul,

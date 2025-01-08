@@ -8,17 +8,17 @@ use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
     creature::{
-        get_soul_sprite, get_species_sprite, is_naturally_intangible, Creature, Dizzy, Door,
-        Fragile, Health, HealthIndicator, Hunt, Intangible, Invincible, Meleeproof, Player,
-        PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
-        StatusEffectsList, Summoned, Wall, WhenSteppedOn,
+        get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible,
+        Creature, Dizzy, Door, Fragile, Health, HealthIndicator, Hunt, Intangible, Invincible,
+        Meleeproof, Player, PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof,
+        Stab, StatusEffect, StatusEffectsList, Summoned, Wall, WhenSteppedOn,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
     map::{Map, Position},
-    spells::{Axiom, CastSpell, Spell, SpellStack},
+    spells::{Axiom, CastSpell, Spell, SpellStack, TriggerContingency},
     ui::SoulSlot,
     OrdDir, TILE_SIZE,
 };
@@ -178,6 +178,7 @@ pub fn use_wheel_soul(
             spell.send(CastSpell {
                 caster: player_entity,
                 spell: spellbook.spells.get(soul).unwrap().clone(),
+                starting_step: 0,
             });
             // Discard the soul into the discard pile.
             newly_discarded = Some(*soul);
@@ -269,7 +270,7 @@ pub struct SummonCreature {
     pub momentum: OrdDir,
     pub summoner_tile: Position,
     pub summoner: Option<Entity>,
-    pub spell: Option<Spell>,
+    pub spellbook: Option<Spellbook>,
 }
 
 /// Place a new Creature on the map of Species and at Position.
@@ -320,11 +321,6 @@ pub fn summon_creature(
                 effects: StatusEffectsList {
                     effects: HashMap::new(),
                 },
-                spell: if let Some(spell) = event.spell.clone() {
-                    spell
-                } else {
-                    Spell { axioms: Vec::new() }
-                },
                 soul: match &event.species {
                     Species::Player => Soul::Saintly,
                     Species::Wall => Soul::Ordered,
@@ -337,82 +333,10 @@ pub fn summon_creature(
                     Species::Oracle => Soul::Unhinged,
                     _ => Soul::Unhinged,
                 },
-                spellbook: {
-                    let mut book = HashMap::new();
-                    book.insert(
-                        Soul::Saintly,
-                        Spell {
-                            axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
-                        },
-                    );
-                    book.insert(
-                        Soul::Ordered,
-                        Spell {
-                            axioms: vec![
-                                Axiom::Ego,
-                                Axiom::StatusEffect {
-                                    effect: StatusEffect::Invincible,
-                                    potency: 1,
-                                    stacks: 2,
-                                },
-                            ],
-                        },
-                    );
-                    book.insert(
-                        Soul::Artistic,
-                        Spell {
-                            axioms: vec![
-                                Axiom::Ego,
-                                Axiom::PlaceStepTrap,
-                                Axiom::PiercingBeams,
-                                Axiom::PlusBeam,
-                                Axiom::Ego,
-                                Axiom::HealOrHarm { amount: -2 },
-                            ],
-                        },
-                    );
-                    book.insert(
-                        Soul::Unhinged,
-                        Spell {
-                            axioms: vec![Axiom::XBeam, Axiom::HealOrHarm { amount: -2 }],
-                        },
-                    );
-                    book.insert(
-                        Soul::Feral,
-                        Spell {
-                            axioms: vec![
-                                Axiom::Ego,
-                                Axiom::Trace,
-                                Axiom::Dash { max_distance: 5 },
-                                Axiom::Spread,
-                                Axiom::UntargetCaster,
-                                Axiom::HealOrHarm { amount: -1 },
-                                Axiom::PurgeTargets,
-                                Axiom::Touch,
-                                Axiom::StatusEffect {
-                                    effect: StatusEffect::Dizzy,
-                                    potency: 1,
-                                    stacks: 2,
-                                },
-                                Axiom::Dash { max_distance: 1 },
-                            ],
-                        },
-                    );
-                    book.insert(
-                        Soul::Vile,
-                        Spell {
-                            axioms: vec![
-                                Axiom::Ego,
-                                Axiom::StatusEffect {
-                                    effect: StatusEffect::Stab,
-                                    potency: 5,
-                                    stacks: 20,
-                                },
-                            ],
-                        },
-                    );
-                    Spellbook { spells: book }
-                },
+                spellbook: event
+                    .spellbook
+                    .clone()
+                    .unwrap_or(get_species_spellbook(&event.species)),
             },
             Transform {
                 translation: Vec3 {
@@ -587,6 +511,7 @@ pub fn teleport_entity(
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
     mut stepped: EventWriter<SteppedOnTile>,
+    mut contingency: EventWriter<TriggerContingency>,
     is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
@@ -608,6 +533,11 @@ pub fn teleport_entity(
             stepped.send(SteppedOnTile {
                 entity: event.entity,
                 position: event.destination,
+            });
+            // This triggers the "when moved" contingency.
+            contingency.send(TriggerContingency {
+                caster: event.entity,
+                contingency: Axiom::WhenMoved,
             });
         } else {
             // A creature collides with another entity.
@@ -638,21 +568,16 @@ pub struct SteppedOnTile {
 
 pub fn stepped_on_tile(
     mut events: EventReader<SteppedOnTile>,
-    mut spell: EventWriter<CastSpell>,
+    mut contingency: EventWriter<TriggerContingency>,
     mut remove: EventWriter<RemoveCreature>,
-    traps: Query<(&Position, &Spell), With<WhenSteppedOn>>,
     fragile: Query<(Entity, &Position), With<Fragile>>,
 ) {
     for event in events.read() {
         // Traps trigger their spell effect when stepped on.
-        for (position, axiom_sequence) in traps.iter() {
-            if event.position == *position {
-                spell.send(CastSpell {
-                    caster: event.entity,
-                    spell: axiom_sequence.clone(),
-                });
-            }
-        }
+        contingency.send(TriggerContingency {
+            caster: event.entity,
+            contingency: Axiom::WhenSteppedOn,
+        });
         // Fragile floor entities are destroyed when stepped on.
         for (entity, position) in fragile.iter() {
             if event.position == *position {
@@ -787,7 +712,7 @@ pub fn harm_creature(
                 if is_invincible {
                     continue;
                 }
-                health.hp = health.hp.saturating_sub((event.hp_mod * -1) as usize)
+                health.hp = health.hp.saturating_sub((-event.hp_mod) as usize)
             } // Damage
             1 => health.hp = health.hp.saturating_add(event.hp_mod as usize), // Healing
             _ => (),                                                          // 0 values do nothing
@@ -1042,6 +967,7 @@ pub fn distribute_npc_actions(
                             spell: Spell {
                                 axioms: vec![Axiom::Plus, Axiom::DevourWall],
                             },
+                            starting_step: 0,
                         });
                     }
                     _ => (),

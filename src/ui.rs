@@ -582,7 +582,7 @@ fn setup(
                                     ..Default::default()
                                 },
                                 Node {
-                                    bottom: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 1.85),
+                                    bottom: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 1.8),
                                     left: Val::Px(-0.5 + i as f32 * 2.),
                                     width: Val::Px(2.),
                                     height: Val::Px(2.),

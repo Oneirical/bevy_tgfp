@@ -10,7 +10,7 @@ use bevy::{
 };
 
 use crate::{
-    creature::{Player, Species, Spellproof, StatusEffect, Summoned, Wall},
+    creature::{Player, Species, Spellbook, Spellproof, StatusEffect, Summoned, Wall},
     events::{
         AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
     },
@@ -26,6 +26,7 @@ impl Plugin for SpellPlugin {
         app.init_resource::<Events<CastSpell>>();
         app.init_resource::<SpellStack>();
         app.init_resource::<AxiomLibrary>();
+        app.add_event::<TriggerContingency>();
     }
 }
 
@@ -151,10 +152,41 @@ impl FromWorld for SpellStack {
 }
 
 #[derive(Event)]
+/// Triggered when a creature performs an action corresponding to a certain Contingency.
+pub struct TriggerContingency {
+    pub caster: Entity,
+    pub contingency: Axiom,
+}
+
+pub fn trigger_contingency(
+    mut events: EventReader<TriggerContingency>,
+    spellbook: Query<&Spellbook>,
+    mut cast_spell: EventWriter<CastSpell>,
+) {
+    for event in events.read() {
+        let spellbook = spellbook.get(event.caster).unwrap();
+        for (_soul, spell) in spellbook.spells.iter() {
+            if let Some(contingency_index) = spell
+                .axioms
+                .iter()
+                .position(|axiom| axiom == &event.contingency)
+            {
+                cast_spell.send(CastSpell {
+                    caster: event.caster,
+                    spell: spell.clone(),
+                    starting_step: contingency_index,
+                });
+            }
+        }
+    }
+}
+
+#[derive(Event)]
 /// Triggered when a creature (the `caster`) casts a `spell`.
 pub struct CastSpell {
     pub caster: Entity,
     pub spell: Spell,
+    pub starting_step: usize,
 }
 
 #[derive(Component, Clone)]
@@ -164,10 +196,16 @@ pub struct Spell {
     pub axioms: Vec<Axiom>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 /// There are Form axioms, which target certain tiles, and Function axioms, which execute an effect
 /// onto those tiles.
 pub enum Axiom {
+    // CONTINGENCIES
+    // Triggers when the caster teleports.
+    WhenMoved,
+    // Triggers when a creature teleports onto the same tile as the caster.
+    WhenSteppedOn,
+
     // FORMS
     /// Target the caster's tile.
     Ego,
@@ -187,13 +225,19 @@ pub enum Axiom {
     /// Target the tile adjacent to the caster, towards the caster's last move.
     Touch,
     /// Target a ring of `radius` around the caster.
-    Halo { radius: i32 },
+    Halo {
+        radius: i32,
+    },
 
     // FUNCTIONS
     /// The targeted creatures dash in the direction of the caster's last move.
-    Dash { max_distance: i32 },
+    Dash {
+        max_distance: i32,
+    },
     /// The targeted passable tiles summon a new instance of species.
-    SummonCreature { species: Species },
+    SummonCreature {
+        species: Species,
+    },
     /// The targeted tiles summon a step-triggered trap with following axioms as the payload.
     /// This terminates the spell.
     PlaceStepTrap,
@@ -203,7 +247,9 @@ pub enum Axiom {
     /// All creatures summoned by targeted creatures are removed.
     Abjuration,
     /// All targeted creatures heal or are harmed by this amount.
-    HealOrHarm { amount: isize },
+    HealOrHarm {
+        amount: isize,
+    },
     /// Give a status effect to all targeted creatures.
     StatusEffect {
         effect: StatusEffect,
@@ -240,11 +286,11 @@ pub struct SynapseData {
 
 impl SynapseData {
     /// Create a blank SynapseData.
-    fn new(caster: Entity, axioms: Vec<Axiom>) -> Self {
+    fn new(caster: Entity, axioms: Vec<Axiom>, step: usize) -> Self {
         SynapseData {
             targets: HashSet::new(),
             axioms,
-            step: 0,
+            step,
             caster,
             synapse_flags: HashSet::new(),
         }
@@ -293,7 +339,7 @@ pub fn cast_new_spell(
         let axioms = cast_spell.spell.axioms.clone();
         // Create a new synapse to start "rolling down the hill" accumulating targets and
         // dispatching events.
-        let synapse_data = SynapseData::new(cast_spell.caster, axioms);
+        let synapse_data = SynapseData::new(cast_spell.caster, axioms, cast_spell.starting_step);
         // Send it off for processing - right away, for the spell stack is "last in, first out."
         spell_stack.spells.push(synapse_data);
     }
@@ -313,7 +359,10 @@ pub fn process_axiom(
         // Launch the axiom, which will send out some Events (if it's a Function,
         // which affect the game world) or add some target tiles (if it's a Form, which
         // decides where the Functions will take place.)
-        commands.run_system(*axioms.library.get(&discriminant(axiom)).unwrap());
+        // Axioms not in the library are discarded: they are Contingencies.
+        if let Some(one_shot_system) = axioms.library.get(&discriminant(axiom)) {
+            commands.run_system(*one_shot_system);
+        }
         // Clean up afterwards, continuing the spell execution.
         commands.run_system(spell_stack.cleanup_id);
     }
@@ -633,7 +682,7 @@ fn axiom_function_summon_creature(
                 momentum: OrdDir::Down,
                 summoner_tile: *caster_position,
                 summoner: Some(synapse_data.caster),
-                spell: None,
+                spellbook: None,
             });
         }
     } else {
@@ -657,9 +706,21 @@ fn axiom_function_place_step_trap(
             momentum: OrdDir::Down,
             summoner_tile: *caster_position,
             summoner: Some(synapse_data.caster),
-            spell: Some(Spell {
-                axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
-            }),
+            spellbook: Some(Spellbook::new([
+                None,
+                None,
+                Some(Spell {
+                    axioms: {
+                        let step_trigger = vec![Axiom::WhenSteppedOn];
+                        vec![Axiom::WhenSteppedOn]
+                            .extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
+                        step_trigger
+                    },
+                }),
+                None,
+                None,
+                None,
+            ])),
         });
     }
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);

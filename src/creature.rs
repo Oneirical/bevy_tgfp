@@ -1,6 +1,10 @@
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::{map::Position, spells::Spell, OrdDir};
+use crate::{
+    map::Position,
+    spells::{Axiom, Spell},
+    OrdDir,
+};
 
 #[derive(Bundle)]
 pub struct Creature {
@@ -10,7 +14,6 @@ pub struct Creature {
     pub species: Species,
     pub health: Health,
     pub effects: StatusEffectsList,
-    pub spell: Spell,
     pub spellbook: Spellbook,
     pub soul: Soul,
 }
@@ -37,9 +40,34 @@ pub fn get_soul_sprite(soul: &Soul) -> usize {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct Spellbook {
     pub spells: HashMap<Soul, Spell>,
+}
+
+impl Spellbook {
+    pub fn new(slots: [Option<Spell>; 6]) -> Self {
+        let mut book = HashMap::new();
+        let souls = [
+            Soul::Saintly,
+            Soul::Ordered,
+            Soul::Artistic,
+            Soul::Unhinged,
+            Soul::Feral,
+            Soul::Vile,
+        ];
+        for (i, soul) in souls.iter().enumerate() {
+            if let Some(spell) = &slots[i] {
+                book.insert(*soul, spell.clone());
+            }
+        }
+        Spellbook { spells: book }
+    }
+    pub fn empty() -> Self {
+        Spellbook {
+            spells: HashMap::new(),
+        }
+    }
 }
 
 // The graphical representation of Health: a health bar.
@@ -131,7 +159,7 @@ pub struct Health {
     pub max_hp: usize,
 }
 
-#[derive(Debug, Component, Clone, Copy)]
+#[derive(Debug, Component, Clone, Copy, PartialEq)]
 pub enum Species {
     Player,
     Wall,
@@ -162,6 +190,68 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Tinker => 8,
         Species::Trap => 12,
         Species::Oracle => 40,
+    }
+}
+
+pub fn get_species_spellbook(species: &Species) -> Spellbook {
+    match species {
+        Species::Player => Spellbook::new([
+            Some(Spell {
+                axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
+            }),
+            Some(Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Invincible,
+                        potency: 1,
+                        stacks: 2,
+                    },
+                ],
+            }),
+            Some(Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::PlaceStepTrap,
+                    Axiom::PiercingBeams,
+                    Axiom::PlusBeam,
+                    Axiom::Ego,
+                    Axiom::HealOrHarm { amount: -2 },
+                ],
+            }),
+            Some(Spell {
+                axioms: vec![Axiom::XBeam, Axiom::HealOrHarm { amount: -2 }],
+            }),
+            Some(Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::Trace,
+                    Axiom::Dash { max_distance: 5 },
+                    Axiom::Spread,
+                    Axiom::UntargetCaster,
+                    Axiom::HealOrHarm { amount: -1 },
+                    Axiom::PurgeTargets,
+                    Axiom::Touch,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Dizzy,
+                        potency: 1,
+                        stacks: 2,
+                    },
+                    Axiom::Dash { max_distance: 1 },
+                ],
+            }),
+            Some(Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Stab,
+                        potency: 5,
+                        stacks: 20,
+                    },
+                ],
+            }),
+        ]),
+        _ => Spellbook::empty(),
     }
 }
 
