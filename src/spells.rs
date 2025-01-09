@@ -27,7 +27,7 @@ pub struct SpellPlugin;
 impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Events<CastSpell>>();
-        app.init_resource::<SpellStack>();
+        app.insert_resource(SpellStack { spells: Vec::new() });
         app.init_resource::<AxiomLibrary>();
         app.add_event::<TriggerContingency>();
     }
@@ -163,17 +163,6 @@ impl FromWorld for AxiomLibrary {
 pub struct SpellStack {
     /// The stack of spells, last in, first out.
     pub spells: Vec<SynapseData>,
-    /// A system used to clean up the last spells after each Axiom is processed.
-    cleanup_id: SystemId,
-}
-
-impl FromWorld for SpellStack {
-    fn from_world(world: &mut World) -> Self {
-        SpellStack {
-            spells: Vec::new(),
-            cleanup_id: world.register_system(cleanup_last_axiom),
-        }
-    }
 }
 
 #[derive(Event)]
@@ -629,7 +618,6 @@ fn axiom_form_plus_beam(
     spellproof_query: Query<Has<Spellproof>>,
 ) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
-    dbg!(&synapse_data);
     let caster_position = *position.get(synapse_data.caster).unwrap();
     let cardinals = [OrdDir::Up, OrdDir::Down, OrdDir::Left, OrdDir::Right];
     for cardinal in cardinals {
@@ -1157,13 +1145,11 @@ pub fn process_axiom(
         if let Some(one_shot_system) = axioms.library.get(&discriminant(axiom)) {
             commands.run_system_with_input(*one_shot_system, i);
         }
-        // Clean up afterwards, continuing the spell execution.
-        commands.run_system(spell_stack.cleanup_id);
     }
 }
 
 /// Remove all terminated spells.
-fn cleanup_last_axiom(mut spell_stack: ResMut<SpellStack>) {
+pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>) {
     let mut renewed_spells = Vec::new();
     let len = spell_stack.spells.len();
     for mut synapse_data in spell_stack.spells.drain(0..len) {

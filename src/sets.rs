@@ -10,7 +10,9 @@ use crate::{
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
     map::register_creatures,
-    spells::{cast_new_spell, process_axiom, spell_stack_is_empty, trigger_contingency},
+    spells::{
+        cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
+    },
 };
 
 pub struct SetsPlugin;
@@ -32,6 +34,7 @@ impl Plugin for SetsPlugin {
                 trigger_contingency,
                 cast_new_spell,
                 process_axiom,
+                cleanup_synapses,
                 draw_soul,
             )
                 .chain())
