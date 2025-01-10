@@ -182,7 +182,7 @@ pub struct SpellStack {
     pub spells: Vec<SynapseData>,
 }
 
-#[derive(Event)]
+#[derive(Event, Debug)]
 /// Triggered when a creature performs an action corresponding to a certain Contingency.
 pub struct TriggerContingency {
     pub caster: Entity,
@@ -1015,32 +1015,19 @@ fn axiom_function_transform(
     In(spell_idx): In<usize>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    // TODO: edit this
-    is_spellproof: Query<(Has<Spellproof>, &Species)>,
+    creature_query: Query<(Has<Spellproof>, &Species)>,
     mut transform: EventWriter<TransformCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::Transform { species } = synapse_data.axioms[synapse_data.step] {
         for entity in synapse_data.get_all_targeted_entities(&map) {
-            if !is_spellproof.get(entity).unwrap() {
+            let (is_spellproof, old_species) = creature_query.get(entity).unwrap();
+            if !is_spellproof {
                 transform.send(TransformCreature {
                     entity,
-                    old_species: (),
-                    new_species: (),
-                })
-                // Remove all components except for the basics of a Creature.
-                // The appropriate ones will be readded by assign_species_components.
-                // Refresh all status effects (without changing them), as to re-apply all
-                // pertinent components.
-                // for (effect, potency_and_stacks) in effects_list.effects.iter() {
-                //     status_effect.send(AddStatusEffect {
-                //         entity,
-                //         effect: *effect,
-                //         potency: potency_and_stacks.potency,
-                //         stacks: potency_and_stacks.stacks,
-                //         culprit: synapse_data.caster,
-                //     });
-                // }
+                    old_species: *old_species,
+                    new_species: species,
+                });
             }
         }
     }

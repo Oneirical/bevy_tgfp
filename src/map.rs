@@ -241,7 +241,7 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize) {
     // let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
-    let creature_chars = ['T'];
+    let creature_chars = ['H'];
 
     let floor_positions: Vec<usize> = cage
         .iter()

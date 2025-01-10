@@ -96,6 +96,16 @@ pub struct PotencyAndStacks {
     pub stacks: EffectDuration,
 }
 
+impl PotencyAndStacks {
+    pub fn is_active(&self) -> bool {
+        self.potency > 0
+            && match self.stacks {
+                EffectDuration::Finite { stacks } => stacks > 0,
+                EffectDuration::Infinite => true,
+            }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EffectDuration {
     Finite { stacks: usize },
@@ -168,6 +178,9 @@ pub struct Meleeproof;
 
 #[derive(Component)]
 pub struct Immobile;
+
+#[derive(Component)]
+pub struct NoDropSoul;
 
 #[derive(Component)]
 pub struct Intangible;

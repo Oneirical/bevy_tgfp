@@ -1,7 +1,6 @@
 use std::f32::consts::PI;
 
 use bevy::{
-    ecs::reflect::ReflectCommandExt,
     prelude::*,
     utils::{HashMap, HashSet},
 };
@@ -11,7 +10,7 @@ use crate::{
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible,
         Creature, DesignatedForRemoval, Dizzy, Door, EffectDuration, Fragile, Health,
-        HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, Player,
+        HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, NoDropSoul, Player,
         PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
         StatusEffectsList, Summoned, Wall,
     },
@@ -20,7 +19,7 @@ use crate::{
         SlideAnimation, SpriteSheetAtlas,
     },
     map::{Map, Position},
-    spells::{Axiom, CastSpell, Spell, SpellStack, TriggerContingency},
+    spells::{Axiom, CastSpell, Spell, TriggerContingency},
     ui::SoulSlot,
     OrdDir, TILE_SIZE,
 };
@@ -32,6 +31,7 @@ impl Plugin for EventPlugin {
         app.add_event::<SummonCreature>();
         app.init_resource::<Events<EndTurn>>();
         app.add_event::<TeleportEntity>();
+        app.add_event::<TransformCreature>();
         app.add_event::<SteppedOnTile>();
         app.add_event::<CreatureCollision>();
         app.add_event::<AlterMomentum>();
@@ -398,39 +398,116 @@ pub struct TransformCreature {
     pub new_species: Species,
 }
 
-/// Add any species-specific components.
-pub fn assign_species_components(
-    changed_species: Query<(Entity, &Species), Changed<Species>>,
-    mut commands: Commands,
+pub fn transform_creature(
     mut transform: EventReader<TransformCreature>,
     mut creature_query: Query<(&mut Species, &mut Sprite, &StatusEffectsList)>,
+    mut commands: Commands,
 ) {
-    let mut transformed_creatures = HashMap::new();
     for event in transform.read() {
-        transformed_creatures.insert(event.entity, event.old_species);
-        let (mut species_of_creature, mut sprite, effects_list) =
+        let (mut species_of_creature, mut sprite, status_effects_list) =
             creature_query.get_mut(event.entity).unwrap();
         // Change the species.
         *species_of_creature = event.new_species;
         sprite.texture_atlas.as_mut().unwrap().index = get_species_sprite(&event.new_species);
+        // Remove all components except for the basics of a Creature.
+        // The appropriate ones will be readded by assign_species_components.
+        // Refresh all status effects (without changing them), as to re-apply all
+        // pertinent components.
+        // HACK: This hardcoding (alongside assign_species_components) is very bad, but
+        // I am not sure how to make it better.
+        match event.old_species {
+            Species::Player => {
+                commands.entity(event.entity).remove::<Player>();
+            }
+            Species::Trap => {
+                commands.entity(event.entity).remove::<(
+                    Meleeproof,
+                    Spellproof,
+                    Intangible,
+                    Fragile,
+                    Invincible,
+                    NoDropSoul,
+                )>();
+            }
+            Species::Wall => {
+                commands.entity(event.entity).remove::<(
+                    Meleeproof,
+                    Spellproof,
+                    Wall,
+                    Invincible,
+                    Dizzy,
+                    NoDropSoul,
+                )>();
+            }
+            Species::WeakWall => {
+                commands
+                    .entity(event.entity)
+                    .remove::<(Meleeproof, Wall, Invincible, Dizzy, NoDropSoul)>();
+            }
+            Species::Airlock => {
+                commands.entity(event.entity).remove::<(
+                    Meleeproof,
+                    Spellproof,
+                    Door,
+                    Invincible,
+                    Dizzy,
+                    NoDropSoul,
+                )>();
+            }
+            Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
+                commands.entity(event.entity).remove::<Hunt>();
+            }
+            Species::Tinker => {
+                commands.entity(event.entity).remove::<Random>();
+            }
+            Species::Abazon => {
+                commands.entity(event.entity).remove::<(Immobile, Hunt)>();
+            }
+            Species::Apiarist => {
+                commands.entity(event.entity).remove::<(Speed, Hunt)>();
+            }
+            Species::Shrike => {
+                commands.entity(event.entity).remove::<(Speed, Hunt)>();
+            }
+        }
+        if let Some(potency_and_stacks) = status_effects_list.effects.get(&StatusEffect::Invincible)
+        {
+            if potency_and_stacks.is_active() {
+                commands.entity(event.entity).insert(Invincible);
+            }
+        }
+        if let Some(potency_and_stacks) = status_effects_list.effects.get(&StatusEffect::Dizzy) {
+            if potency_and_stacks.is_active() {
+                commands.entity(event.entity).insert(Dizzy);
+            }
+        }
     }
+}
+
+/// Add any species-specific components.
+pub fn assign_species_components(
+    changed_species: Query<(Entity, &Species), Changed<Species>>,
+    mut commands: Commands,
+) {
     for (entity, species) in changed_species.iter() {
         let mut new_creature = commands.entity(entity);
         match species {
             Species::Player => {
                 new_creature.insert(Player);
             }
-            Species::Wall => {
-                new_creature.insert((Meleeproof, Spellproof, Wall, Invincible, Dizzy));
-            }
             Species::Trap => {
-                new_creature.insert((Meleeproof, Spellproof, Intangible, Fragile, Invincible));
+                new_creature.insert((
+                    Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
+                ));
+            }
+            Species::Wall => {
+                new_creature.insert((Meleeproof, Spellproof, Wall, Invincible, Dizzy, NoDropSoul));
             }
             Species::WeakWall => {
-                new_creature.insert((Meleeproof, Wall, Invincible, Dizzy));
+                new_creature.insert((Meleeproof, Wall, Invincible, Dizzy, NoDropSoul));
             }
             Species::Airlock => {
-                new_creature.insert((Meleeproof, Spellproof, Door, Invincible, Dizzy));
+                new_creature.insert((Meleeproof, Spellproof, Door, Invincible, Dizzy, NoDropSoul));
             }
             Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
                 new_creature.insert(Hunt);
@@ -452,7 +529,6 @@ pub fn assign_species_components(
                     Hunt,
                 ));
             }
-            _ => (),
         }
     }
 }
@@ -840,14 +916,14 @@ pub struct RemoveCreature {
 pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
-    creature: Query<(&Position, &Soul, Has<Player>)>,
+    creature: Query<(&Position, &Soul, Has<Player>, Has<NoDropSoul>)>,
     // mut spell_stack: ResMut<SpellStack>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut contingency: EventWriter<TriggerContingency>,
 ) {
     for event in events.read() {
-        let (position, soul, is_player) = creature.get(event.entity).unwrap();
+        let (position, soul, is_player, cannot_drop_soul) = creature.get(event.entity).unwrap();
         // Visually flash an X where the creature was removed.
         magic_vfx.send(PlaceMagicVfx {
             targets: vec![*position],
@@ -865,16 +941,13 @@ pub fn remove_creature(
                 caster: event.entity,
                 contingency: Axiom::WhenRemoved,
             });
-            // Add this entity's soul to the soul wheel
-            soul_wheel
-                .draw_pile
-                .entry(*soul)
-                .and_modify(|amount| *amount += 1);
-            // // Remove all spells cast by this creature
-            // // (this entity doesn't exist anymore, casting its spells would crash the game)
-            // spell_stack
-            //     .spells
-            //     .retain(|spell| spell.caster != event.entity);
+            if !cannot_drop_soul {
+                // Add this entity's soul to the soul wheel
+                soul_wheel
+                    .draw_pile
+                    .entry(*soul)
+                    .and_modify(|amount| *amount += 1);
+            }
         } else {
             panic!("You have been slain");
         }

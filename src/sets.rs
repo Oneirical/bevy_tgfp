@@ -5,7 +5,7 @@ use crate::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
         open_door, remove_creature, remove_designated_creatures, stepped_on_tile, summon_creature,
-        teleport_entity, use_wheel_soul,
+        teleport_entity, transform_creature, use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -44,6 +44,7 @@ impl Plugin for SetsPlugin {
             Update,
             ((
                 summon_creature,
+                transform_creature,
                 assign_species_components,
                 register_creatures,
                 add_status_effects,
