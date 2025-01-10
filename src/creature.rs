@@ -86,12 +86,34 @@ pub enum StatusEffect {
     Stab,
     // Stun, no action.
     Dizzy,
+    // The creature acts as if it was summoned by whoever cursed it.
+    DimensionBond,
 }
 
 #[derive(Debug)]
 pub struct PotencyAndStacks {
     pub potency: usize,
-    pub stacks: usize,
+    pub stacks: EffectDuration,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectDuration {
+    Finite { stacks: usize },
+    Infinite,
+}
+
+impl EffectDuration {
+    pub fn add(&self, amount: Self) -> Self {
+        match self {
+            EffectDuration::Finite { stacks } => match amount {
+                EffectDuration::Infinite => EffectDuration::Infinite,
+                EffectDuration::Finite { stacks: add_stacks } => EffectDuration::Finite {
+                    stacks: stacks + add_stacks,
+                },
+            },
+            EffectDuration::Infinite => EffectDuration::Infinite,
+        }
+    }
 }
 
 #[derive(Component, Debug)]
@@ -145,13 +167,13 @@ pub struct Spellproof;
 pub struct Meleeproof;
 
 #[derive(Component)]
+pub struct Immobile;
+
+#[derive(Component)]
 pub struct Intangible;
 
 #[derive(Component)]
 pub struct DesignatedForRemoval;
-
-#[derive(Component)]
-pub struct WhenSteppedOn;
 
 // Breaks when stepped on.
 #[derive(Component)]
@@ -177,6 +199,7 @@ pub enum Species {
     Airlock,
     Trap,
     Oracle,
+    Abazon,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -194,6 +217,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Tinker => 8,
         Species::Trap => 12,
         Species::Oracle => 40,
+        Species::Abazon => 28,
     }
 }
 
@@ -218,15 +242,51 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                     Axiom::StatusEffect {
                         effect: StatusEffect::Stab,
                         potency: 0,
-                        stacks: 20,
+                        stacks: EffectDuration::Infinite,
                     },
                     Axiom::UpgradeStatusEffect {
                         effect: StatusEffect::Stab,
                         potency: 1,
-                        stacks: 5,
+                        stacks: EffectDuration::Infinite,
                     },
                 ],
             }),
+            None,
+            None,
+        ]),
+        Species::Tinker => Spellbook::new([
+            None,
+            None,
+            Some(Spell {
+                axioms: vec![
+                    Axiom::WhenMoved,
+                    Axiom::IncrementCounter {
+                        amount: 1,
+                        count: 0,
+                    },
+                    Axiom::TerminateIfCounter {
+                        condition: CounterCondition::NotModuloOf { modulo: 5 },
+                        threshold: 0,
+                    },
+                    Axiom::Plus,
+                    Axiom::FilterBySpecies {
+                        species: Species::WeakWall,
+                    },
+                    Axiom::Transform {
+                        species: Species::Abazon,
+                    },
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::DimensionBond,
+                        potency: 1,
+                        stacks: EffectDuration::Infinite,
+                    },
+                    Axiom::Terminate,
+                    Axiom::WhenRemoved,
+                    Axiom::Ego,
+                    Axiom::Abjuration,
+                ],
+            }),
+            None,
             None,
             None,
         ]),
@@ -240,7 +300,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                     Axiom::StatusEffect {
                         effect: StatusEffect::Invincible,
                         potency: 1,
-                        stacks: 2,
+                        stacks: EffectDuration::Finite { stacks: 2 },
                     },
                 ],
             }),
@@ -270,7 +330,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                     Axiom::StatusEffect {
                         effect: StatusEffect::Dizzy,
                         potency: 1,
-                        stacks: 2,
+                        stacks: EffectDuration::Finite { stacks: 2 },
                     },
                     Axiom::Dash { max_distance: 1 },
                 ],
@@ -281,7 +341,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                     Axiom::StatusEffect {
                         effect: StatusEffect::Stab,
                         potency: 5,
-                        stacks: 20,
+                        stacks: EffectDuration::Infinite,
                     },
                 ],
             }),

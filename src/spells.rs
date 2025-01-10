@@ -11,13 +11,14 @@ use bevy::{
 
 use crate::{
     creature::{
-        Player, Soul, Species, Spellbook, Spellproof, StatusEffect, StatusEffectsList, Summoned,
-        Wall,
+        get_species_sprite, EffectDuration, Health, Player, Soul, Species, Spellbook, Spellproof,
+        StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     events::{
         AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
+        TransformCreature,
     },
-    graphics::{EffectSequence, EffectType, PlaceMagicVfx},
+    graphics::{EffectSequence, EffectType, PlaceMagicVfx, SlideAnimation},
     map::{Map, Position},
     OrdDir,
 };
@@ -108,7 +109,7 @@ impl FromWorld for AxiomLibrary {
             discriminant(&Axiom::StatusEffect {
                 effect: StatusEffect::Invincible,
                 potency: 0,
-                stacks: 0,
+                stacks: EffectDuration::Infinite,
             }),
             world.register_system(axiom_function_status_effect),
         );
@@ -116,7 +117,7 @@ impl FromWorld for AxiomLibrary {
             discriminant(&Axiom::UpgradeStatusEffect {
                 effect: StatusEffect::Invincible,
                 potency: 0,
-                stacks: 0,
+                stacks: EffectDuration::Infinite,
             }),
             world.register_system(axiom_function_upgrade_status_effect),
         );
@@ -126,6 +127,12 @@ impl FromWorld for AxiomLibrary {
                 count: 0,
             }),
             world.register_system(axiom_function_increment_counter),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::Transform {
+                species: Species::Player,
+            }),
+            world.register_system(axiom_function_transform),
         );
         axioms.library.insert(
             discriminant(&Axiom::Trace),
@@ -148,11 +155,21 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_mutator_purge_targets),
         );
         axioms.library.insert(
+            discriminant(&Axiom::Terminate),
+            world.register_system(axiom_mutator_terminate),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::TerminateIfCounter {
                 condition: CounterCondition::LessThan,
                 threshold: 0,
             }),
             world.register_system(axiom_mutator_terminate_if_counter),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::FilterBySpecies {
+                species: Species::Player,
+            }),
+            world.register_system(axiom_mutator_filter_by_species),
         );
         axioms
     }
@@ -221,6 +238,8 @@ pub enum Axiom {
     WhenMoved,
     // Triggers when a creature teleports onto the same tile as the caster.
     WhenSteppedOn,
+    // Triggers when this creature is removed.
+    WhenRemoved,
 
     // FORMS
     /// Target the caster's tile.
@@ -270,18 +289,22 @@ pub enum Axiom {
     StatusEffect {
         effect: StatusEffect,
         potency: usize,
-        stacks: usize,
+        stacks: EffectDuration,
     },
     /// Upgrade an already present status effect with new potency and stacks.
     UpgradeStatusEffect {
         effect: StatusEffect,
         potency: usize,
-        stacks: usize,
+        stacks: EffectDuration,
     },
     /// Add a certain amount to the counter, for use with "TerminateIfCounter"
     IncrementCounter {
         amount: i32,
         count: i32,
+    },
+    /// Transform a creature into another species.
+    Transform {
+        species: Species,
     },
 
     // MUTATORS
@@ -302,6 +325,12 @@ pub enum Axiom {
         condition: CounterCondition,
         threshold: i32,
     },
+    /// Remove all targets not targeting a creature of this species.
+    FilterBySpecies {
+        species: Species,
+    },
+    // End this spell.
+    Terminate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -795,6 +824,12 @@ fn axiom_mutator_terminate_if_counter(
     }
 }
 
+/// End this spell.
+fn axiom_mutator_terminate(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+}
+
 /// Any targeted creature with the Wall component is removed.
 /// Each removed wall heals the caster +1.
 fn axiom_function_devour_wall(
@@ -868,6 +903,7 @@ fn axiom_function_status_effect(
                     effect,
                     potency,
                     stacks,
+                    culprit: synapse_data.caster,
                 });
             }
         }
@@ -900,7 +936,8 @@ fn axiom_function_upgrade_status_effect(
                         entity,
                         effect,
                         potency: upgrade_effect.potency + potency,
-                        stacks: upgrade_effect.stacks + stacks,
+                        stacks: upgrade_effect.stacks.add(stacks),
+                        culprit: synapse_data.caster,
                     });
                 }
             }
@@ -974,6 +1011,41 @@ fn axiom_function_abjuration(
     }
 }
 
+fn axiom_function_transform(
+    In(spell_idx): In<usize>,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    // TODO: edit this
+    is_spellproof: Query<(Has<Spellproof>, &Species)>,
+    mut transform: EventWriter<TransformCreature>,
+) {
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
+    if let Axiom::Transform { species } = synapse_data.axioms[synapse_data.step] {
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            if !is_spellproof.get(entity).unwrap() {
+                transform.send(TransformCreature {
+                    entity,
+                    old_species: (),
+                    new_species: (),
+                })
+                // Remove all components except for the basics of a Creature.
+                // The appropriate ones will be readded by assign_species_components.
+                // Refresh all status effects (without changing them), as to re-apply all
+                // pertinent components.
+                // for (effect, potency_and_stacks) in effects_list.effects.iter() {
+                //     status_effect.send(AddStatusEffect {
+                //         entity,
+                //         effect: *effect,
+                //         potency: potency_and_stacks.potency,
+                //         stacks: potency_and_stacks.stacks,
+                //         culprit: synapse_data.caster,
+                //     });
+                // }
+            }
+        }
+    }
+}
+
 /// Any Teleport event will target all tiles between its start and destination tiles.
 fn axiom_mutator_trace(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
@@ -1033,6 +1105,25 @@ fn axiom_mutator_untarget_caster(
 fn axiom_mutator_purge_targets(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     synapse_data.targets.clear();
+}
+
+/// Remove all targets not targeting a creature of this species.
+fn axiom_mutator_filter_by_species(
+    In(spell_idx): In<usize>,
+    mut spell_stack: ResMut<SpellStack>,
+    species_query: Query<&Species>,
+    map: Res<Map>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    if let Axiom::FilterBySpecies { species } = synapse_data.axioms[synapse_data.step] {
+        let mut retained_creatures = HashSet::new();
+        for (entity, position) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
+            if species == *species_query.get(entity).unwrap() {
+                retained_creatures.insert(position);
+            }
+        }
+        synapse_data.targets = retained_creatures;
+    }
 }
 
 fn teleport_transmission(

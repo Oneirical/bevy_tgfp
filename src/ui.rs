@@ -722,7 +722,7 @@ fn setup(
                                         2 => " - Places a trap at your feet. The next creature to step on it will cause it to fire 2 damage beams in all 4 cardinal directions.",
                                         3 => " - Fires 4 beams in all diagonal directions, dealing 2 damage.",
                                         4 => " - Dashes 5 tiles in the direction you are facing, attacking all creatures adjacent to your path with 1 damage. Creatures struck at the end are knocked backwards.",
-                                        5 => " - The next melee attack you launch will deal 6 damage. Expires after 20 turns without attacking.",
+                                        5 => " - The next time you strike with a melee attack, deal 6 damage.",
                                         6 => " - Its melee attacks cause it to heal itself for 1 HP.",
                                         7 => " - Resilient, yet slow, acting once every two turns.",
                                         8 => " - It moves erratically, and sculpts sentries from walls. These crumble into dust once their creator is slain.",

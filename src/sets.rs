@@ -55,6 +55,8 @@ impl Plugin for SetsPlugin {
                 open_door,
                 remove_designated_creatures.run_if(spell_stack_is_empty),
                 remove_creature,
+                // Last chance to add spells to the spell stack before the end-of-turn check.
+                trigger_contingency,
                 end_turn.run_if(spell_stack_is_empty),
                 distribute_npc_actions,
                 echo_speed,

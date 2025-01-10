@@ -1,6 +1,7 @@
 use std::f32::consts::PI;
 
 use bevy::{
+    ecs::reflect::ReflectCommandExt,
     prelude::*,
     utils::{HashMap, HashSet},
 };
@@ -9,10 +10,10 @@ use rand::{seq::IteratorRandom, thread_rng};
 use crate::{
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible,
-        Creature, DesignatedForRemoval, Dizzy, Door, Fragile, Health, HealthIndicator, Hunt,
-        Intangible, Invincible, Meleeproof, Player, PotencyAndStacks, Random, Soul, Species, Speed,
-        Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
-        WhenSteppedOn,
+        Creature, DesignatedForRemoval, Dizzy, Door, EffectDuration, Fragile, Health,
+        HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, Player,
+        PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
+        StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -223,7 +224,8 @@ pub struct AddStatusEffect {
     pub entity: Entity,
     pub effect: StatusEffect,
     pub potency: usize,
-    pub stacks: usize,
+    pub stacks: EffectDuration,
+    pub culprit: Entity,
 }
 
 pub fn add_status_effects(
@@ -260,6 +262,11 @@ pub fn add_status_effects(
             }
             StatusEffect::Dizzy => {
                 commands.entity(event.entity).insert(Dizzy);
+            }
+            StatusEffect::DimensionBond => {
+                commands.entity(event.entity).insert(Summoned {
+                    summoner: event.culprit,
+                });
             }
         }
     }
@@ -384,11 +391,29 @@ pub fn summon_creature(
     }
 }
 
+#[derive(Event)]
+pub struct TransformCreature {
+    pub entity: Entity,
+    pub old_species: Species,
+    pub new_species: Species,
+}
+
 /// Add any species-specific components.
 pub fn assign_species_components(
     changed_species: Query<(Entity, &Species), Changed<Species>>,
     mut commands: Commands,
+    mut transform: EventReader<TransformCreature>,
+    mut creature_query: Query<(&mut Species, &mut Sprite, &StatusEffectsList)>,
 ) {
+    let mut transformed_creatures = HashMap::new();
+    for event in transform.read() {
+        transformed_creatures.insert(event.entity, event.old_species);
+        let (mut species_of_creature, mut sprite, effects_list) =
+            creature_query.get_mut(event.entity).unwrap();
+        // Change the species.
+        *species_of_creature = event.new_species;
+        sprite.texture_atlas.as_mut().unwrap().index = get_species_sprite(&event.new_species);
+    }
     for (entity, species) in changed_species.iter() {
         let mut new_creature = commands.entity(entity);
         match species {
@@ -396,29 +421,25 @@ pub fn assign_species_components(
                 new_creature.insert(Player);
             }
             Species::Wall => {
-                new_creature.insert((Meleeproof, Spellproof, Wall, Invincible));
+                new_creature.insert((Meleeproof, Spellproof, Wall, Invincible, Dizzy));
             }
             Species::Trap => {
-                new_creature.insert((
-                    Meleeproof,
-                    Spellproof,
-                    Intangible,
-                    WhenSteppedOn,
-                    Fragile,
-                    Invincible,
-                ));
+                new_creature.insert((Meleeproof, Spellproof, Intangible, Fragile, Invincible));
             }
             Species::WeakWall => {
-                new_creature.insert((Meleeproof, Wall, Invincible));
+                new_creature.insert((Meleeproof, Wall, Invincible, Dizzy));
             }
             Species::Airlock => {
-                new_creature.insert((Meleeproof, Spellproof, Door, Invincible));
+                new_creature.insert((Meleeproof, Spellproof, Door, Invincible, Dizzy));
             }
             Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
                 new_creature.insert(Hunt);
             }
             Species::Tinker => {
                 new_creature.insert(Random);
+            }
+            Species::Abazon => {
+                new_creature.insert((Immobile, Hunt));
             }
             Species::Apiarist => {
                 new_creature.insert((Speed::Slow { wait_turns: 1 }, Hunt));
@@ -508,7 +529,7 @@ impl TeleportEntity {
 
 pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut creature: Query<(&mut Position, Has<Intangible>)>,
+    mut creature: Query<(&mut Position, Has<Intangible>, Has<Immobile>)>,
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
@@ -517,12 +538,14 @@ pub fn teleport_entity(
     is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
-        let (mut creature_position, is_intangible) = creature
+        let (mut creature_position, is_intangible, is_immobile) = creature
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
         // If motion is possible...
-        if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
+        if !is_immobile
+            && (map.is_passable(event.destination.x, event.destination.y) || is_intangible)
+        {
             if !is_intangible {
                 // ...update the Map to reflect this...
                 map.move_creature(*creature_position, event.destination);
@@ -541,11 +564,10 @@ pub fn teleport_entity(
                 caster: event.entity,
                 contingency: Axiom::WhenMoved,
             });
-        } else {
+        } else if let Some(collided_with) =
+            map.get_entity_at(event.destination.x, event.destination.y)
+        {
             // A creature collides with another entity.
-            let collided_with = map
-                .get_entity_at(event.destination.x, event.destination.y)
-                .unwrap();
             let (culprit_is_player, collided_is_player) = (
                 is_player.get(event.entity).unwrap(),
                 is_player.get(*collided_with).unwrap(),
@@ -631,7 +653,7 @@ pub fn creature_collision(
                     .effects
                     .get_mut(&StatusEffect::Stab)
                     .unwrap()
-                    .stacks = 0;
+                    .stacks = EffectDuration::Finite { stacks: 0 };
                 -1 - stab.bonus_damage
             } else {
                 -1
@@ -818,11 +840,11 @@ pub struct RemoveCreature {
 pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
-    mut map: ResMut<Map>,
     creature: Query<(&Position, &Soul, Has<Player>)>,
     // mut spell_stack: ResMut<SpellStack>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
+    mut contingency: EventWriter<TriggerContingency>,
 ) {
     for event in events.read() {
         let (position, soul, is_player) = creature.get(event.entity).unwrap();
@@ -836,23 +858,13 @@ pub fn remove_creature(
         });
         // For now, avoid removing the player - the game panics without a player.
         if !is_player {
-            // Remove the creature from Map
-            if let Some(preexisting_entity) = map.creatures.get(position) {
-                // Check that the entity being removed is actually the dead entity.
-                // REASON: Dying intangible creatures which are on top of a tangible
-                // creature will remove the tangible creature from the map instead
-                // of themselves.
-                if *preexisting_entity == event.entity {
-                    map.creatures.remove(position);
-                }
-            }
             // Remove the creature AND its children (health bar)
-            commands.entity(event.entity).insert((
-                Intangible,
-                Spellproof,
-                Dizzy,
-                DesignatedForRemoval,
-            ));
+            commands.entity(event.entity).insert(DesignatedForRemoval);
+            // This triggers the "when removed" contingency.
+            contingency.send(TriggerContingency {
+                caster: event.entity,
+                contingency: Axiom::WhenRemoved,
+            });
             // Add this entity's soul to the soul wheel
             soul_wheel
                 .draw_pile
@@ -876,8 +888,21 @@ pub fn remove_creature(
 pub fn remove_designated_creatures(
     remove: Query<Entity, With<DesignatedForRemoval>>,
     mut commands: Commands,
+    mut map: ResMut<Map>,
+    position: Query<&Position>,
 ) {
     for designated in remove.iter() {
+        // Remove the creature from Map
+        let position = position.get(designated).unwrap();
+        if let Some(preexisting_entity) = map.creatures.get(position) {
+            // Check that the entity being removed is actually the dead entity.
+            // REASON: Dying intangible creatures which are on top of a tangible
+            // creature will remove the tangible creature from the map instead
+            // of themselves.
+            if *preexisting_entity == designated {
+                map.creatures.remove(position);
+            }
+        }
         commands.entity(designated).despawn_recursive();
     }
 }
@@ -903,26 +928,31 @@ pub fn end_turn(
         // Tick down status effects.
         for (entity, mut effect_list, species) in effects.iter_mut() {
             for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
-                potency_and_stacks.stacks = potency_and_stacks.stacks.saturating_sub(1);
-                if potency_and_stacks.stacks == 0 {
-                    // Disable this effect.
-                    potency_and_stacks.potency = 0;
-                    match effect {
-                        StatusEffect::Invincible => {
-                            commands.entity(entity).remove::<Invincible>();
+                if let EffectDuration::Finite { mut stacks } = potency_and_stacks.stacks {
+                    stacks = stacks.saturating_sub(1);
+                    if stacks == 0 {
+                        // Disable this effect.
+                        potency_and_stacks.potency = 0;
+                        match effect {
+                            StatusEffect::Invincible => {
+                                commands.entity(entity).remove::<Invincible>();
+                            }
+                            StatusEffect::Stab => {
+                                commands.entity(entity).remove::<Stab>();
+                            }
+                            StatusEffect::Dizzy => {
+                                commands.entity(entity).remove::<Dizzy>();
+                            }
+                            StatusEffect::DimensionBond => {
+                                commands.entity(entity).remove::<Summoned>();
+                            }
                         }
-                        StatusEffect::Stab => {
-                            commands.entity(entity).remove::<Stab>();
-                        }
-                        StatusEffect::Dizzy => {
-                            commands.entity(entity).remove::<Dizzy>();
-                        }
+                        // HACK: Transforming the entity into its own species has no effect on
+                        // the creature, but it does trigger assign_species_components's change
+                        // detection, which will prevent walls from losing Invincible due to
+                        // running out of the Invincible status effect, for example.
+                        commands.entity(entity).insert(*species);
                     }
-                    // HACK: Transforming the entity into its own species has no effect on
-                    // the creature, but it does trigger assign_species_components's change
-                    // detection, which will prevent walls from losing Invincible due to
-                    // running out of the Invincible status effect, for example.
-                    commands.entity(entity).insert(*species);
                 }
             }
         }

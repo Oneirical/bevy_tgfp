@@ -240,7 +240,8 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
 }
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize) {
-    let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
+    // let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
+    let creature_chars = ['T'];
 
     let floor_positions: Vec<usize> = cage
         .iter()
@@ -271,8 +272,10 @@ pub fn generate_cage(spawn_player: bool, size: usize, connections: &[OrdDir]) ->
                 cage.push('@');
                 passable_tiles += 1;
             // Edges get walls 100% of the time, other tiles, 30% of the time.
-            } else if is_edge(i, size) || rng.gen::<f32>() < 0.3 {
+            } else if is_edge(i, size) {
                 cage.push('#');
+            } else if rng.gen::<f32>() < 0.3 {
+                cage.push('W');
             // Everything else is a floor.
             } else {
                 cage.push('.');
@@ -325,7 +328,7 @@ fn get_connected_tiles(idx_start: usize, size: usize, cage: &[char]) -> usize {
         // Get each frontier's 4 adjacent neighbours.
         for neighbour in [frontier + 1, frontier - 1, frontier + size, frontier - size] {
             // Add all floors that are not already known.
-            if cage[neighbour] != '#' && !connected_indices.contains(&neighbour) {
+            if !['W', '#'].contains(&cage[neighbour]) && !connected_indices.contains(&neighbour) {
                 // Airlocks are on the edge, and not worth expanding from.
                 if !['V', '^', '<', '>'].contains(&cage[neighbour]) {
                     frontier_indices.push(neighbour);
