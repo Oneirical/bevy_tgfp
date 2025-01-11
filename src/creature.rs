@@ -328,7 +328,11 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                 ],
             }),
             Some(Spell {
-                axioms: vec![Axiom::XBeam, Axiom::HealOrHarm { amount: -2 }],
+                axioms: vec![
+                    Axiom::PiercingBeams,
+                    Axiom::XBeam,
+                    Axiom::HealOrHarm { amount: -2 },
+                ],
             }),
             Some(Spell {
                 axioms: vec![

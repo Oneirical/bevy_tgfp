@@ -75,7 +75,7 @@ impl FromWorld for SoulWheel {
         };
         soul_wheel.draw_pile.insert(Soul::Saintly, 0);
         soul_wheel.draw_pile.insert(Soul::Ordered, 0);
-        soul_wheel.draw_pile.insert(Soul::Artistic, 5);
+        soul_wheel.draw_pile.insert(Soul::Artistic, 0);
         soul_wheel.draw_pile.insert(Soul::Unhinged, 0);
         soul_wheel.draw_pile.insert(Soul::Feral, 0);
         soul_wheel.draw_pile.insert(Soul::Vile, 0);
@@ -934,8 +934,10 @@ pub fn remove_creature(
         });
         // For now, avoid removing the player - the game panics without a player.
         if !is_player {
-            // Remove the creature AND its children (health bar)
-            commands.entity(event.entity).insert(DesignatedForRemoval);
+            // Add Dizzy to prevent this creature from taking any further actions.
+            commands
+                .entity(event.entity)
+                .insert((DesignatedForRemoval, Dizzy));
             // This triggers the "when removed" contingency.
             contingency.send(TriggerContingency {
                 caster: event.entity,
@@ -976,6 +978,7 @@ pub fn remove_designated_creatures(
                 map.creatures.remove(position);
             }
         }
+        // Remove the creature AND its children (health bar)
         commands.entity(designated).despawn_recursive();
     }
 }
@@ -1001,9 +1004,9 @@ pub fn end_turn(
         // Tick down status effects.
         for (entity, mut effect_list, species) in effects.iter_mut() {
             for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
-                if let EffectDuration::Finite { mut stacks } = potency_and_stacks.stacks {
-                    stacks = stacks.saturating_sub(1);
-                    if stacks == 0 {
+                if let EffectDuration::Finite { stacks } = &mut potency_and_stacks.stacks {
+                    *stacks = stacks.saturating_sub(1);
+                    if *stacks == 0 {
                         // Disable this effect.
                         potency_and_stacks.potency = 0;
                         match effect {
