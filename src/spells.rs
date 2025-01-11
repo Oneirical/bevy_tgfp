@@ -11,14 +11,14 @@ use bevy::{
 
 use crate::{
     creature::{
-        get_species_sprite, EffectDuration, Health, Player, Soul, Species, Spellbook, Spellproof,
-        StatusEffect, StatusEffectsList, Summoned, Wall,
+        EffectDuration, Player, Soul, Species, Spellbook, Spellproof, StatusEffect,
+        StatusEffectsList, Summoned, Wall,
     },
     events::{
         AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
         TransformCreature,
     },
-    graphics::{EffectSequence, EffectType, PlaceMagicVfx, SlideAnimation},
+    graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
     OrdDir,
 };

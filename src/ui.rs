@@ -67,7 +67,7 @@ fn setup(
                         Label,
                         Node {
                             left: Val::Px(0.5),
-                            top: Val::Px(0.5),
+                            top: Val::Px(1.5),
                             width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE / 1.2),
                             position_type: PositionType::Absolute,
                             ..default()

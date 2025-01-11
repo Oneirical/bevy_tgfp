@@ -31,8 +31,6 @@ impl Plugin for SetsPlugin {
                 keyboard_input.run_if(spell_stack_is_empty),
                 creature_step,
                 use_wheel_soul,
-                trigger_contingency,
-                cast_new_spell,
                 process_axiom,
                 cleanup_synapses,
                 draw_soul,
@@ -58,6 +56,7 @@ impl Plugin for SetsPlugin {
                 remove_creature,
                 // Last chance to add spells to the spell stack before the end-of-turn check.
                 trigger_contingency,
+                cast_new_spell,
                 end_turn.run_if(spell_stack_is_empty),
                 distribute_npc_actions,
                 echo_speed,
