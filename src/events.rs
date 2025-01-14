@@ -302,7 +302,7 @@ pub fn summon_creature(
         let max_hp = 6;
         let hp = match &event.species {
             Species::Player => 6,
-            Species::Hunter => 2,
+            Species::Hunter => 1,
             Species::Spawner => 3,
             Species::Apiarist => 3,
             Species::Shrike => 1,
@@ -375,7 +375,32 @@ pub fn summon_creature(
             .get(&event.position)
             .copied()
         {
-            new_creature.insert(Sleeping { cage_idx });
+            // HACK: Walls being marked as Awake prevents the cage clear check,
+            // as they must be cleared as well.
+            if cage_idx != 0
+                && [
+                    Species::Shrike,
+                    Species::Tinker,
+                    Species::Oracle,
+                    Species::Second,
+                    Species::Hunter,
+                    Species::Apiarist,
+                ]
+                .contains(&event.species)
+            {
+                new_creature.insert(Sleeping { cage_idx });
+            } else if [
+                Species::Shrike,
+                Species::Tinker,
+                Species::Oracle,
+                Species::Second,
+                Species::Hunter,
+                Species::Apiarist,
+            ]
+            .contains(&event.species)
+            {
+                new_creature.insert(Awake);
+            }
         }
 
         // Creatures which start out damaged show their HP bar in advance.
@@ -1014,7 +1039,7 @@ pub fn end_turn(
     mut effects: Query<(Entity, &mut StatusEffectsList, &Species)>,
     mut commands: Commands,
     awake_creatures: Query<&Awake>,
-    sleeping_creatures: Query<(Entity, &Sleeping)>,
+    sleeping_creatures: Query<(Entity, &Sleeping), (Without<Wall>, Without<Door>)>,
     mut faiths_end: ResMut<FaithsEnd>,
     player_position: Query<&Position, With<Player>>,
 ) {

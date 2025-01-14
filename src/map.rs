@@ -200,7 +200,7 @@ pub fn register_creatures(
     }
 }
 
-#[derive(Resource)]
+#[derive(Resource, Debug)]
 pub struct FaithsEnd {
     pub cage_address_position: HashMap<Position, usize>,
     pub cage_dimensions: HashMap<usize, (Position, Position)>,
