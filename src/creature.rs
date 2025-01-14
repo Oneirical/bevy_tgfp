@@ -155,6 +155,14 @@ pub struct Invincible;
 #[derive(Component)]
 pub struct Dizzy;
 
+#[derive(Component)]
+pub struct Sleeping {
+    pub cage_idx: usize,
+}
+
+#[derive(Component)]
+pub struct Awake;
+
 // Performs random actions on its turn.
 #[derive(Component)]
 pub struct Random;

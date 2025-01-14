@@ -20,6 +20,11 @@ impl Plugin for MapPlugin {
         app.insert_resource(Map {
             creatures: HashMap::new(),
         });
+        app.insert_resource(FaithsEnd {
+            cage_address_position: HashMap::new(),
+            cage_dimensions: HashMap::new(),
+            current_cage: 0,
+        });
         app.add_systems(Startup, spawn_cage);
     }
 }
@@ -45,6 +50,15 @@ impl Position {
     /// Shift the position by a delta.
     pub fn shift(&mut self, dx: i32, dy: i32) {
         (self.x, self.y) = (self.x + dx, self.y + dy);
+    }
+
+    pub fn is_within_range(&self, a: &Position, b: &Position) -> bool {
+        let min_x = a.x.min(b.x);
+        let max_x = a.x.max(b.x);
+        let min_y = a.y.min(b.y);
+        let max_y = a.y.max(b.y);
+
+        self.x >= min_x && self.x <= max_x && self.y >= min_y && self.y <= max_y
     }
 }
 
@@ -186,7 +200,14 @@ pub fn register_creatures(
     }
 }
 
-fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
+#[derive(Resource)]
+pub struct FaithsEnd {
+    pub cage_address_position: HashMap<Position, usize>,
+    pub cage_dimensions: HashMap<usize, (Position, Position)>,
+    pub current_cage: usize,
+}
+
+fn spawn_cage(mut summon: EventWriter<SummonCreature>, mut faiths_end: ResMut<FaithsEnd>) {
     let size = 9;
     for tower_floor in 0..15 {
         let mut cage = generate_cage(
@@ -201,9 +222,10 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
         add_creatures(&mut cage, 2 + tower_floor);
 
         for (idx, tile_char) in cage.iter().enumerate() {
+            let cage_corner = Position::new(0, (tower_floor * size) as i32);
             let position = Position::new(
-                idx as i32 % size as i32,
-                size as i32 - 1 - idx as i32 / size as i32 + (tower_floor * size) as i32,
+                cage_corner.x + idx as i32 % size as i32,
+                cage_corner.y + size as i32 - 1 - idx as i32 / size as i32,
             );
             let species = match tile_char {
                 '#' => Species::Wall,
@@ -233,6 +255,19 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>) {
                 summoner: None,
                 spellbook: None,
             });
+            faiths_end
+                .cage_address_position
+                .insert(position, tower_floor);
+            faiths_end.cage_dimensions.insert(
+                tower_floor,
+                (
+                    cage_corner,
+                    Position::new(
+                        cage_corner.x + size as i32 - 1,
+                        cage_corner.y + size as i32 - 1,
+                    ),
+                ),
+            );
         }
     }
 }

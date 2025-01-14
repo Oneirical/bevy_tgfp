@@ -8,17 +8,17 @@ use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
     creature::{
-        get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible,
+        get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         Creature, DesignatedForRemoval, Dizzy, Door, EffectDuration, Fragile, Health,
         HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, NoDropSoul, Player,
-        PotencyAndStacks, Random, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
-        StatusEffectsList, Summoned, Wall,
+        PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, Spellbook, Spellproof, Stab,
+        StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{Map, Position},
+    map::{FaithsEnd, Map, Position},
     spells::{Axiom, CastSpell, TriggerContingency},
     ui::SoulSlot,
     OrdDir, TILE_SIZE,
@@ -289,6 +289,7 @@ pub fn summon_creature(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
     map: Res<Map>,
+    faiths_end: Res<FaithsEnd>,
 ) {
     for event in events.read() {
         // Avoid summoning if the tile is already occupied.
@@ -367,11 +368,22 @@ pub fn summon_creature(
         if let Some(summoner) = event.summoner {
             new_creature.insert(Summoned { summoner });
         }
+
+        // If the map is "faith's end", log the cage address # of this creature.
+        if let Some(cage_idx) = faiths_end
+            .cage_address_position
+            .get(&event.position)
+            .copied()
+        {
+            new_creature.insert(Sleeping { cage_idx });
+        }
+
         // Creatures which start out damaged show their HP bar in advance.
         let (visibility, index) = hp_bar_visibility_and_index(hp, max_hp);
 
         // Free the borrow on Commands.
         let new_creature_entity = new_creature.id();
+
         let hp_bar = commands
             .spawn(HealthIndicator {
                 sprite: Sprite {
@@ -1001,11 +1013,37 @@ pub fn end_turn(
     mut turn_manager: ResMut<TurnManager>,
     mut effects: Query<(Entity, &mut StatusEffectsList, &Species)>,
     mut commands: Commands,
+    awake_creatures: Query<&Awake>,
+    sleeping_creatures: Query<(Entity, &Sleeping)>,
+    mut faiths_end: ResMut<FaithsEnd>,
+    player_position: Query<&Position, With<Player>>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
         if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
             return;
+        }
+
+        // If the player has cleared a cage inside of faith's end, awaken all the
+        // creatures in the next cage.
+        if let Some((boundary_a, boundary_b)) = faiths_end
+            .cage_dimensions
+            .get(&(faiths_end.current_cage + 1))
+        {
+            if awake_creatures.is_empty()
+                && player_position
+                    .get_single()
+                    .unwrap()
+                    .is_within_range(boundary_a, boundary_b)
+            {
+                faiths_end.current_cage += 1;
+                for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
+                    if sleeping_component.cage_idx == faiths_end.current_cage {
+                        commands.entity(sleeping_entity).insert(Awake);
+                        commands.entity(sleeping_entity).remove::<Sleeping>();
+                    }
+                }
+            }
         }
 
         // The turncount increases.
@@ -1067,7 +1105,7 @@ pub fn distribute_npc_actions(
             Has<Hunt>,
             Has<Random>,
         ),
-        (Without<Player>, Without<Dizzy>),
+        (Without<Player>, Without<Dizzy>, Without<Sleeping>),
     >,
     species: Query<&Species>,
     map: Res<Map>,
