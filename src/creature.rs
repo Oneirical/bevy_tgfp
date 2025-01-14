@@ -267,6 +267,30 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             None,
         ]),
+        Species::Second => Spellbook::new([
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(Spell {
+                axioms: vec![Axiom::Plus, Axiom::DevourWall],
+            }),
+        ]),
+        Species::Hunter => Spellbook::new([
+            Some(Spell {
+                axioms: vec![
+                    Axiom::WhenDealingDamage,
+                    Axiom::Ego,
+                    Axiom::HealOrHarm { amount: 1 },
+                ],
+            }),
+            None,
+            None,
+            None,
+            None,
+            None,
+        ]),
         Species::Tinker => Spellbook::new([
             None,
             None,

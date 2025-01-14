@@ -19,7 +19,7 @@ use crate::{
         SlideAnimation, SpriteSheetAtlas,
     },
     map::{Map, Position},
-    spells::{Axiom, CastSpell, Spell, TriggerContingency},
+    spells::{Axiom, CastSpell, TriggerContingency},
     ui::SoulSlot,
     OrdDir, TILE_SIZE,
 };
@@ -806,6 +806,7 @@ pub fn harm_creature(
     mut creature: Query<(&mut Health, &Children)>,
     mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
     defender_flags: Query<Has<Invincible>>,
+    mut contingency: EventWriter<TriggerContingency>,
 ) {
     for event in events.read() {
         let (mut health, children) = creature.get_mut(event.entity).unwrap();
@@ -816,7 +817,15 @@ pub fn harm_creature(
                 if is_invincible {
                     continue;
                 }
-                health.hp = health.hp.saturating_sub((-event.hp_mod) as usize)
+                health.hp = health.hp.saturating_sub((-event.hp_mod) as usize);
+                contingency.send(TriggerContingency {
+                    caster: event.culprit,
+                    contingency: Axiom::WhenDealingDamage,
+                });
+                contingency.send(TriggerContingency {
+                    caster: event.entity,
+                    contingency: Axiom::WhenTakingDamage,
+                });
             } // Damage
             1 => health.hp = health.hp.saturating_add(event.hp_mod as usize), // Healing
             _ => (),                                                          // 0 values do nothing
@@ -1053,18 +1062,22 @@ pub fn distribute_npc_actions(
             Entity,
             &Position,
             &Species,
+            &Spellbook,
             Option<&Speed>,
             Has<Hunt>,
             Has<Random>,
         ),
         (Without<Player>, Without<Dizzy>),
     >,
+    species: Query<&Species>,
     map: Res<Map>,
 ) {
     for event in events.read() {
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
-        for (npc_entity, npc_pos, npc_species, speed, is_hunter, is_random) in npcs.iter() {
+        for (npc_entity, npc_pos, npc_species, npc_spellbook, speed, is_hunter, is_random) in
+            npcs.iter()
+        {
             if let Some(speed) = speed {
                 match speed {
                     Speed::Slow { wait_turns } => {
@@ -1084,22 +1097,7 @@ pub fn distribute_npc_actions(
             } else if event.speed_level > 1 {
                 continue;
             }
-            // Occasionally cast a spell.
-            if turn_manager.turn_count % 500 == 0 {
-                match npc_species {
-                    Species::Second => {
-                        spell.send(CastSpell {
-                            caster: npc_entity,
-                            spell: Spell {
-                                axioms: vec![Axiom::Plus, Axiom::DevourWall],
-                            },
-                            starting_step: 0,
-                            soul_caste: Soul::Vile,
-                        });
-                    }
-                    _ => (),
-                }
-            } else if is_random {
+            if is_random {
                 if let Some(move_direction) = map.random_adjacent_passable_direction(*npc_pos) {
                     // If it is found, cause a CreatureStep event.
                     step.send(CreatureStep {
@@ -1108,6 +1106,22 @@ pub fn distribute_npc_actions(
                     });
                 }
             } else if is_hunter {
+                // Occasionally cast a spell.
+                if *npc_species == Species::Second {
+                    for adj_pos in map.get_adjacent_tiles(*npc_pos) {
+                        if let Some(adjacent_npc) = map.creatures.get(&adj_pos) {
+                            if *species.get(*adjacent_npc).unwrap() == Species::WeakWall {
+                                spell.send(CastSpell {
+                                    caster: npc_entity,
+                                    spell: npc_spellbook.spells.get(&Soul::Vile).unwrap().clone(),
+                                    starting_step: 0,
+                                    soul_caste: Soul::Vile,
+                                });
+                                continue;
+                            }
+                        }
+                    }
+                }
                 // Try to find a tile that gets the hunter closer to the player.
                 if let Some(move_direction) = map.best_manhattan_move(*npc_pos, *player_pos) {
                     // If it is found, cause a CreatureStep event.

@@ -171,6 +171,14 @@ impl FromWorld for AxiomLibrary {
             }),
             world.register_system(axiom_mutator_filter_by_species),
         );
+        axioms.library.insert(
+            discriminant(&Axiom::LoopBack { steps: 1 }),
+            world.register_system(axiom_mutator_loop_back),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::ForceCast),
+            world.register_system(axiom_function_force_cast),
+        );
         axioms
     }
 }
@@ -240,6 +248,10 @@ pub enum Axiom {
     WhenSteppedOn,
     // Triggers when this creature is removed.
     WhenRemoved,
+    // Triggers when this creature deals damage.
+    WhenDealingDamage,
+    // Triggers when this creature takes damage.
+    WhenTakingDamage,
 
     // FORMS
     /// Target the caster's tile.
@@ -306,6 +318,9 @@ pub enum Axiom {
     Transform {
         species: Species,
     },
+    /// Force all creatures on targeted tiles to cast the remainder of the spell.
+    /// This terminates execution of the spell.
+    ForceCast,
 
     // MUTATORS
     /// Any Teleport event will target all tiles between its start and destination tiles.
@@ -331,6 +346,10 @@ pub enum Axiom {
     },
     // End this spell.
     Terminate,
+    /// Only once, loop backwards `steps` in the axiom queue.
+    LoopBack {
+        steps: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1113,6 +1132,46 @@ fn axiom_mutator_filter_by_species(
     }
 }
 
+/// Only once, loop backwards `steps` in the axiom queue.
+fn axiom_mutator_loop_back(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    if let Axiom::LoopBack { steps } = synapse_data.axioms[synapse_data.step] {
+        // Remove the LoopBack.
+        synapse_data.axioms.remove(synapse_data.step);
+        // Rewind back n steps. Prevent the cleanup from adding one step by default.
+        synapse_data.step = synapse_data.step.saturating_sub(steps);
+        synapse_data.synapse_flags.insert(SynapseFlag::NoStep);
+    } else {
+        panic!()
+    }
+}
+
+/// Force all creatures on targeted tiles to cast the remainder of the spell.
+/// This terminates execution of the spell.
+fn axiom_function_force_cast(
+    In(spell_idx): In<usize>,
+    mut cast_spell: EventWriter<CastSpell>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+    is_spellproof: Query<Has<Spellproof>>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    for entity in synapse_data.get_all_targeted_entities(&map) {
+        if is_spellproof.get(entity).unwrap() {
+            continue;
+        }
+        cast_spell.send(CastSpell {
+            caster: entity,
+            spell: Spell {
+                axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
+            },
+            soul_caste: synapse_data.soul_caste,
+            starting_step: 0,
+        });
+    }
+    synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+}
+
 fn teleport_transmission(
     In((teleport_event, spell_idx)): In<(TeleportEntity, usize)>,
     position: Query<&Position>,
@@ -1232,8 +1291,12 @@ pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>) {
     let len = spell_stack.spells.len();
     for mut synapse_data in spell_stack.spells.drain(0..len) {
         // Get the currently executed spell, removing it temporarily.
-        // Step forwards in the axiom queue.
-        synapse_data.step += 1;
+        // Step forwards in the axiom queue, if it is allowed.
+        if synapse_data.synapse_flags.contains(&SynapseFlag::NoStep) {
+            synapse_data.synapse_flags.remove(&SynapseFlag::NoStep);
+        } else {
+            synapse_data.step += 1;
+        }
         // If the spell is finished, do not push it back.
         // The Terminate flag also prevents further execution.
         if synapse_data.axioms.get(synapse_data.step).is_some()

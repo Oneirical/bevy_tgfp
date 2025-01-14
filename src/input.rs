@@ -1,9 +1,8 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{Player, StatusEffect},
+    creature::Player,
     events::{CreatureStep, DrawSoul, EndTurn, PlayerAction, TurnManager, UseWheelSoul},
-    spells::{Axiom, CastSpell, Spell},
     OrdDir,
 };
 

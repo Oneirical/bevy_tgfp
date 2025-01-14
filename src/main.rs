@@ -9,7 +9,6 @@ mod ui;
 
 use bevy::{
     ecs::schedule::{LogLevel, ScheduleBuildSettings},
-    image::{ImageFilterMode, ImageSamplerDescriptor},
     prelude::*,
     window::WindowResolution,
 };
