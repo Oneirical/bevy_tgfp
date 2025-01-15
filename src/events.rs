@@ -376,7 +376,7 @@ pub fn summon_creature(
             .copied()
         {
             // HACK: Walls being marked as Awake prevents the cage clear check,
-            // as they must be cleared as well.
+            // as they must then be cleared as well to open the doors (this is impossible).
             if cage_idx != 0
                 && [
                     Species::Shrike,
@@ -737,9 +737,8 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
-    mut open: EventWriter<OpenCloseDoor>,
     attacker_flags: Query<&Stab>,
-    defender_flags: Query<(Has<Door>, Has<Meleeproof>)>,
+    defender_flags: Query<Has<Meleeproof>>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&mut Transform, Has<Player>)>,
     mut commands: Commands,
@@ -751,15 +750,18 @@ pub fn creature_collision(
             // No colliding with yourself.
             continue;
         }
-        let (is_door, cannot_be_melee_attacked) = defender_flags.get(event.collided_with).unwrap();
+        let cannot_be_melee_attacked = defender_flags.get(event.collided_with).unwrap();
         let (mut attacker_transform, is_player) = creature.get_mut(event.culprit).unwrap();
-        if is_door {
-            // Open doors.
-            open.send(OpenCloseDoor {
-                entity: event.collided_with,
-                open: true,
-            });
-        } else if !cannot_be_melee_attacked {
+        // if is_door {
+        // Open doors.
+        // NOTE: Disabled as doors are currently automatic.
+        // open.send(OpenCloseDoor {
+        //     entity: event.collided_with,
+        //     open: true,
+        // });
+        // }
+        // else
+        if !cannot_be_melee_attacked {
             let damage = if let Ok(stab) = attacker_flags.get(event.culprit) {
                 // Attacking something with Stab active resets the Stab bonus.
                 let mut status_effects = effects.get_mut(event.culprit).unwrap();
@@ -1058,6 +1060,10 @@ pub fn remove_designated_creatures(
     mut commands: Commands,
     mut map: ResMut<Map>,
     position: Query<&Position>,
+
+    awake: Query<&Awake>,
+    doors: Query<Entity, (With<Door>, Without<Intangible>)>,
+    mut open: EventWriter<OpenCloseDoor>,
 ) {
     for designated in remove.iter() {
         // Remove the creature from Map
@@ -1073,6 +1079,15 @@ pub fn remove_designated_creatures(
         }
         // Remove the creature AND its children (health bar)
         commands.entity(designated).despawn_recursive();
+    }
+
+    if awake.is_empty() {
+        for door in doors.iter() {
+            open.send(OpenCloseDoor {
+                entity: door,
+                open: true,
+            });
+        }
     }
 }
 
@@ -1228,6 +1243,7 @@ pub fn distribute_npc_actions(
             } else if is_hunter {
                 // Occasionally cast a spell.
                 if *npc_species == Species::Second {
+                    let mut found_wall = false;
                     for adj_pos in map.get_adjacent_tiles(*npc_pos) {
                         if let Some(adjacent_npc) = map.creatures.get(&adj_pos) {
                             if *species.get(*adjacent_npc).unwrap() == Species::WeakWall {
@@ -1237,9 +1253,13 @@ pub fn distribute_npc_actions(
                                     starting_step: 0,
                                     soul_caste: Soul::Vile,
                                 });
-                                continue;
+                                found_wall = true;
+                                break;
                             }
                         }
+                    }
+                    if found_wall {
+                        continue;
                     }
                 }
                 // Try to find a tile that gets the hunter closer to the player.
