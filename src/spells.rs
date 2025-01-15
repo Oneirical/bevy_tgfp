@@ -203,19 +203,20 @@ pub fn trigger_contingency(
     mut cast_spell: EventWriter<CastSpell>,
 ) {
     for event in events.read() {
-        let spellbook = spellbook.get(event.caster).unwrap();
-        for (soul, spell) in spellbook.spells.iter() {
-            if let Some(contingency_index) = spell
-                .axioms
-                .iter()
-                .position(|axiom| axiom == &event.contingency)
-            {
-                cast_spell.send(CastSpell {
-                    caster: event.caster,
-                    spell: spell.clone(),
-                    starting_step: contingency_index,
-                    soul_caste: *soul,
-                });
+        if let Ok(spellbook) = spellbook.get(event.caster) {
+            for (soul, spell) in spellbook.spells.iter() {
+                if let Some(contingency_index) = spell
+                    .axioms
+                    .iter()
+                    .position(|axiom| axiom == &event.contingency)
+                {
+                    cast_spell.send(CastSpell {
+                        caster: event.caster,
+                        spell: spell.clone(),
+                        starting_step: contingency_index,
+                        soul_caste: *soul,
+                    });
+                }
             }
         }
     }

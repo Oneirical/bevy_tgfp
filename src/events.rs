@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{cmp::min, f32::consts::PI};
 
 use bevy::{
     prelude::*,
@@ -36,7 +36,7 @@ impl Plugin for EventPlugin {
         app.add_event::<CreatureCollision>();
         app.add_event::<AlterMomentum>();
         app.add_event::<DamageOrHealCreature>();
-        app.add_event::<OpenDoor>();
+        app.add_event::<OpenCloseDoor>();
         app.add_event::<RemoveCreature>();
         app.add_event::<EchoSpeed>();
         app.add_event::<DistributeNpcActions>();
@@ -737,7 +737,7 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
-    mut open: EventWriter<OpenDoor>,
+    mut open: EventWriter<OpenCloseDoor>,
     attacker_flags: Query<&Stab>,
     defender_flags: Query<(Has<Door>, Has<Meleeproof>)>,
     mut turn_manager: ResMut<TurnManager>,
@@ -755,8 +755,9 @@ pub fn creature_collision(
         let (mut attacker_transform, is_player) = creature.get_mut(event.culprit).unwrap();
         if is_door {
             // Open doors.
-            open.send(OpenDoor {
+            open.send(OpenCloseDoor {
                 entity: event.collided_with,
+                open: true,
             });
         } else if !cannot_be_melee_attacked {
             let damage = if let Ok(stab) = attacker_flags.get(event.culprit) {
@@ -864,8 +865,14 @@ pub fn harm_creature(
                     contingency: Axiom::WhenTakingDamage,
                 });
             } // Damage
-            1 => health.hp = health.hp.saturating_add(event.hp_mod as usize), // Healing
-            _ => (),                                                          // 0 values do nothing
+            1 => {
+                // Do not heal above max HP.
+                health.hp = min(
+                    health.hp.saturating_add(event.hp_mod as usize),
+                    health.max_hp,
+                )
+            } // Healing
+            _ => (), // 0 values do nothing
         }
         // Update the healthbar.
         for child in children.iter() {
@@ -884,12 +891,18 @@ pub fn harm_creature(
 }
 
 #[derive(Event)]
-pub struct OpenDoor {
+pub struct OpenCloseDoor {
     entity: Entity,
+    open: bool,
 }
 
-pub fn open_door(
-    mut events: EventReader<OpenDoor>,
+#[derive(Component)]
+pub struct BecomingVisible {
+    timer: Timer,
+}
+
+pub fn open_close_door(
+    mut events: EventReader<OpenCloseDoor>,
     mut commands: Commands,
     mut door: Query<(&mut Visibility, &Position, &OrdDir)>,
     asset_server: Res<AssetServer>,
@@ -898,10 +911,17 @@ pub fn open_door(
     for event in events.read() {
         // Gather component values of the door.
         let (mut visibility, position, orientation) = door.get_mut(event.entity).unwrap();
-        // The door becomes intangible, and can be walked through.
-        commands.entity(event.entity).insert(Intangible);
-        // The door is no longer visible, as it is open.
-        *visibility = Visibility::Hidden;
+        if event.open {
+            // The door becomes intangible, and can be walked through.
+            commands.entity(event.entity).insert(Intangible);
+            // The door is no longer visible, as it is open.
+            *visibility = Visibility::Hidden;
+        } else {
+            commands.entity(event.entity).remove::<Intangible>();
+            commands.entity(event.entity).insert(BecomingVisible {
+                timer: Timer::from_seconds(0.4, TimerMode::Once),
+            });
+        }
         // Find the direction in which the door was facing to play its animation correctly.
         let (offset_1, offset_2) = match orientation {
             OrdDir::Up | OrdDir::Down => (OrdDir::Left.as_offset(), OrdDir::Right.as_offset()),
@@ -913,7 +933,11 @@ pub fn open_door(
                 // The sliding panes are represented as a MagicEffect with a very slow decay.
                 MagicEffect {
                     // The panes slide into the adjacent walls to the door, hence the offset.
-                    position: Position::new(position.x + offset.0, position.y + offset.1),
+                    position: if event.open {
+                        Position::new(position.x + offset.0, position.y + offset.1)
+                    } else {
+                        *position
+                    },
                     sprite: Sprite {
                         image: asset_server.load("spritesheet.png"),
                         custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
@@ -928,17 +952,26 @@ pub fn open_door(
                         appear: Timer::from_seconds(0., TimerMode::Once),
                         // Very slow decay - the alpha shouldn't be reduced too much
                         // while the panes are still visible.
-                        decay: Timer::from_seconds(3., TimerMode::Once),
+                        decay: Timer::from_seconds(5.0, TimerMode::Once),
                     },
                 },
                 // Ensure the panes are sliding.
                 SlideAnimation,
                 Transform {
-                    translation: Vec3 {
-                        x: position.x as f32 * TILE_SIZE,
-                        y: position.y as f32 * TILE_SIZE,
-                        // The pane needs to hide under actual tiles, such as walls.
-                        z: -1.,
+                    translation: if event.open {
+                        Vec3 {
+                            x: position.x as f32 * TILE_SIZE,
+                            y: position.y as f32 * TILE_SIZE,
+                            // The pane needs to hide under actual tiles, such as walls.
+                            z: -1.,
+                        }
+                    } else {
+                        Vec3 {
+                            x: (position.x + offset.0) as f32 * TILE_SIZE,
+                            y: (position.y + offset.1) as f32 * TILE_SIZE,
+                            // The pane needs to hide under actual tiles, such as walls.
+                            z: -1.,
+                        }
                     },
                     // Adjust the pane's rotation with its door.
                     rotation: Quat::from_rotation_z(match orientation {
@@ -950,6 +983,20 @@ pub fn open_door(
                     scale: Vec3::new(1., 1., 1.),
                 },
             ));
+        }
+    }
+}
+
+pub fn render_closing_doors(
+    mut commands: Commands,
+    mut becoming_visible: Query<(Entity, &mut BecomingVisible, &mut Visibility)>,
+    time: Res<Time>,
+) {
+    for (entity, mut door_timer, mut door_vis) in becoming_visible.iter_mut() {
+        door_timer.timer.tick(time.delta());
+        if door_timer.timer.finished() {
+            *door_vis = Visibility::Inherited;
+            commands.entity(entity).remove::<BecomingVisible>();
         }
     }
 }
@@ -1042,6 +1089,8 @@ pub fn end_turn(
     sleeping_creatures: Query<(Entity, &Sleeping), (Without<Wall>, Without<Door>)>,
     mut faiths_end: ResMut<FaithsEnd>,
     player_position: Query<&Position, With<Player>>,
+    doors: Query<Entity, With<Door>>,
+    mut open: EventWriter<OpenCloseDoor>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
@@ -1051,17 +1100,25 @@ pub fn end_turn(
 
         // If the player has cleared a cage inside of faith's end, awaken all the
         // creatures in the next cage.
-        if let Some((boundary_a, boundary_b)) = faiths_end
+        if let Some((mut boundary_a, mut boundary_b)) = faiths_end
             .cage_dimensions
             .get(&(faiths_end.current_cage + 1))
         {
+            boundary_a.shift(1, 1);
+            boundary_b.shift(-1, -1);
             if awake_creatures.is_empty()
                 && player_position
                     .get_single()
                     .unwrap()
-                    .is_within_range(boundary_a, boundary_b)
+                    .is_within_range(&boundary_a, &boundary_b)
             {
                 faiths_end.current_cage += 1;
+                for airlock in doors.iter() {
+                    open.send(OpenCloseDoor {
+                        entity: airlock,
+                        open: false,
+                    });
+                }
                 for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
                     if sleeping_component.cage_idx == faiths_end.current_cage {
                         commands.entity(sleeping_entity).insert(Awake);
