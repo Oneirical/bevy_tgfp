@@ -40,6 +40,7 @@ impl Plugin for EventPlugin {
         app.add_event::<RemoveCreature>();
         app.add_event::<EchoSpeed>();
         app.add_event::<DistributeNpcActions>();
+        app.add_event::<RespawnPlayer>();
         app.add_event::<AddStatusEffect>();
         app.add_event::<DrawSoul>();
         app.add_event::<UseWheelSoul>();
@@ -73,12 +74,12 @@ impl FromWorld for SoulWheel {
             draw_pile: HashMap::new(),
             discard_pile: HashMap::new(),
         };
-        soul_wheel.draw_pile.insert(Soul::Saintly, 0);
-        soul_wheel.draw_pile.insert(Soul::Ordered, 0);
-        soul_wheel.draw_pile.insert(Soul::Artistic, 0);
-        soul_wheel.draw_pile.insert(Soul::Unhinged, 0);
-        soul_wheel.draw_pile.insert(Soul::Feral, 0);
-        soul_wheel.draw_pile.insert(Soul::Vile, 0);
+        soul_wheel.draw_pile.insert(Soul::Saintly, 1);
+        soul_wheel.draw_pile.insert(Soul::Ordered, 1);
+        soul_wheel.draw_pile.insert(Soul::Artistic, 1);
+        soul_wheel.draw_pile.insert(Soul::Unhinged, 1);
+        soul_wheel.draw_pile.insert(Soul::Feral, 1);
+        soul_wheel.draw_pile.insert(Soul::Vile, 1);
         soul_wheel.discard_pile.insert(Soul::Saintly, 0);
         soul_wheel.discard_pile.insert(Soul::Ordered, 0);
         soul_wheel.discard_pile.insert(Soul::Artistic, 0);
@@ -1016,6 +1017,7 @@ pub fn remove_creature(
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut contingency: EventWriter<TriggerContingency>,
+    mut respawn: EventWriter<RespawnPlayer>,
 ) {
     for event in events.read() {
         let (position, soul, is_player, cannot_drop_soul) = creature.get(event.entity).unwrap();
@@ -1046,10 +1048,15 @@ pub fn remove_creature(
                     .and_modify(|amount| *amount += 1);
             }
         } else {
-            panic!("You have been slain");
+            respawn.send(RespawnPlayer);
         }
     }
 }
+
+#[derive(Event)]
+pub struct RespawnPlayer;
+
+pub fn respawn_player(mut events: EventReader<RespawnPlayer>) {}
 
 /// This is done separately, and ONLY once the spell stack is empty, to avoid crashes
 /// where the game tries to fetch a spellcaster's position that stopped existing.

@@ -5,7 +5,8 @@ use crate::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
         open_close_door, remove_creature, remove_designated_creatures, render_closing_doors,
-        stepped_on_tile, summon_creature, teleport_entity, transform_creature, use_wheel_soul,
+        respawn_player, stepped_on_tile, summon_creature, teleport_entity, transform_creature,
+        use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -52,7 +53,7 @@ impl Plugin for SetsPlugin {
                 alter_momentum,
                 harm_creature,
                 open_close_door,
-                render_closing_doors,
+                respawn_player,
                 remove_designated_creatures.run_if(spell_stack_is_empty),
                 remove_creature,
                 // Last chance to add spells to the spell stack before the end-of-turn check.
@@ -67,8 +68,14 @@ impl Plugin for SetsPlugin {
         );
         app.add_systems(
             Update,
-            ((place_magic_effects, adjust_transforms, decay_magic_effects).chain())
-                .in_set(AnimationPhase),
+            ((
+                render_closing_doors,
+                place_magic_effects,
+                adjust_transforms,
+                decay_magic_effects,
+            )
+                .chain())
+            .in_set(AnimationPhase),
         );
         app.configure_sets(
             Update,
