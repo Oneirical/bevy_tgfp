@@ -5,8 +5,8 @@ use crate::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
         open_close_door, remove_creature, remove_designated_creatures, render_closing_doors,
-        respawn_player, stepped_on_tile, summon_creature, teleport_entity, transform_creature,
-        use_wheel_soul,
+        respawn_cage, respawn_player, stepped_on_tile, summon_creature, teleport_entity,
+        transform_creature, use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -54,14 +54,15 @@ impl Plugin for SetsPlugin {
                 harm_creature,
                 open_close_door,
                 respawn_player,
-                remove_designated_creatures.run_if(spell_stack_is_empty),
                 remove_creature,
                 // Last chance to add spells to the spell stack before the end-of-turn check.
                 trigger_contingency,
                 cast_new_spell,
+                remove_designated_creatures.run_if(spell_stack_is_empty),
                 end_turn.run_if(spell_stack_is_empty),
                 distribute_npc_actions,
                 echo_speed,
+                respawn_cage.run_if(spell_stack_is_empty),
             )
                 .chain())
             .in_set(ResolutionPhase),

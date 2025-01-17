@@ -8,7 +8,7 @@ use rand::{
 };
 
 use crate::{
-    creature::{Intangible, Species},
+    creature::{Intangible, Player, Species},
     events::SummonCreature,
     OrdDir,
 };
@@ -193,6 +193,7 @@ pub fn register_creatures(
     for entity in tangible_entities.read() {
         if let Ok(tangible_position) = tangible_creatures.get(entity) {
             if map.creatures.get(tangible_position).is_some() {
+                dbg!(tangible_position);
                 panic!("A creature recovered its tangibility while on top of another creature!");
             }
             map.creatures.insert(*tangible_position, entity);
@@ -207,11 +208,17 @@ pub struct FaithsEnd {
     pub current_cage: usize,
 }
 
-fn spawn_cage(mut summon: EventWriter<SummonCreature>, mut faiths_end: ResMut<FaithsEnd>) {
+pub fn spawn_cage(
+    mut summon: EventWriter<SummonCreature>,
+    mut faiths_end: ResMut<FaithsEnd>,
+    player: Query<&Player>,
+) {
     let size = 9;
     for tower_floor in 0..15 {
         let mut cage = generate_cage(
-            tower_floor == 0,
+            // Spawn the player in the first room
+            // (the player must not already exist).
+            tower_floor == 0 && player.is_empty(),
             size,
             match tower_floor {
                 0 => &[OrdDir::Up],
@@ -258,16 +265,20 @@ fn spawn_cage(mut summon: EventWriter<SummonCreature>, mut faiths_end: ResMut<Fa
             faiths_end
                 .cage_address_position
                 .insert(position, tower_floor);
-            faiths_end.cage_dimensions.insert(
-                tower_floor,
-                (
-                    cage_corner,
-                    Position::new(
-                        cage_corner.x + size as i32 - 1,
-                        cage_corner.y + size as i32 - 1,
+            // If there is no player yet (first run),
+            // set the boundaries.
+            if player.is_empty() {
+                faiths_end.cage_dimensions.insert(
+                    tower_floor,
+                    (
+                        cage_corner,
+                        Position::new(
+                            cage_corner.x + size as i32 - 1,
+                            cage_corner.y + size as i32 - 1,
+                        ),
                     ),
-                ),
-            );
+                );
+            }
         }
     }
 }

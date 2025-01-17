@@ -18,7 +18,7 @@ use crate::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{FaithsEnd, Map, Position},
+    map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{Axiom, CastSpell, TriggerContingency},
     ui::SoulSlot,
     OrdDir, TILE_SIZE,
@@ -45,6 +45,7 @@ impl Plugin for EventPlugin {
         app.add_event::<DrawSoul>();
         app.add_event::<UseWheelSoul>();
         app.init_resource::<Events<CreatureStep>>();
+        app.init_resource::<Events<RespawnCage>>();
         app.insert_resource(TurnManager {
             turn_count: 0,
             action_this_turn: PlayerAction::Invalid,
@@ -453,6 +454,8 @@ pub fn transform_creature(
         // pertinent components.
         // HACK: This hardcoding (alongside assign_species_components) is very bad, but
         // I am not sure how to make it better.
+        // NOTE: Maybe 2 Child entities, one with the species flag and the other with the
+        // effect flags.
         match event.old_species {
             Species::Player => {
                 commands.entity(event.entity).remove::<Player>();
@@ -1056,7 +1059,48 @@ pub fn remove_creature(
 #[derive(Event)]
 pub struct RespawnPlayer;
 
-pub fn respawn_player(mut events: EventReader<RespawnPlayer>) {}
+pub fn respawn_player(
+    mut events: EventReader<RespawnPlayer>,
+    npcs: Query<
+        Entity,
+        (
+            With<Species>,
+            Without<Player>,
+            Without<DesignatedForRemoval>,
+        ),
+    >,
+    player: Query<Entity, With<Player>>,
+    mut remove: EventWriter<RemoveCreature>,
+    mut heal: EventWriter<DamageOrHealCreature>,
+    mut teleport: EventWriter<TeleportEntity>,
+    mut cage: EventWriter<RespawnCage>,
+    mut soul_wheel: ResMut<SoulWheel>,
+    mut faiths_end: ResMut<FaithsEnd>,
+) {
+    for _event in events.read() {
+        for npc in npcs.iter() {
+            remove.send(RemoveCreature { entity: npc });
+        }
+        let player = player.get_single().unwrap();
+        heal.send(DamageOrHealCreature {
+            entity: player,
+            culprit: player,
+            hp_mod: 6,
+        });
+        teleport.send(TeleportEntity {
+            destination: Position::new(4, 4),
+            entity: player,
+        });
+        soul_wheel.draw_pile.insert(Soul::Saintly, 1);
+        soul_wheel.draw_pile.insert(Soul::Ordered, 1);
+        soul_wheel.draw_pile.insert(Soul::Artistic, 1);
+        soul_wheel.draw_pile.insert(Soul::Unhinged, 1);
+        soul_wheel.draw_pile.insert(Soul::Feral, 1);
+        soul_wheel.draw_pile.insert(Soul::Vile, 1);
+        faiths_end.cage_address_position.clear();
+        cage.send(RespawnCage);
+    }
+}
 
 /// This is done separately, and ONLY once the spell stack is empty, to avoid crashes
 /// where the game tries to fetch a spellcaster's position that stopped existing.
@@ -1300,5 +1344,14 @@ pub fn echo_speed(
         end_turn.send(DistributeNpcActions {
             speed_level: event.speed_level,
         });
+    }
+}
+
+#[derive(Event)]
+pub struct RespawnCage;
+
+pub fn respawn_cage(mut events: EventReader<RespawnCage>, mut commands: Commands) {
+    for _event in events.read() {
+        commands.run_system_cached(spawn_cage);
     }
 }
