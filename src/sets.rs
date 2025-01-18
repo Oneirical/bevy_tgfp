@@ -14,6 +14,7 @@ use crate::{
     spells::{
         cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
     },
+    ui::{decay_fading_title, despawn_fading_title, spawn_fading_title},
 };
 
 pub struct SetsPlugin;
@@ -74,6 +75,9 @@ impl Plugin for SetsPlugin {
                 place_magic_effects,
                 adjust_transforms,
                 decay_magic_effects,
+                spawn_fading_title,
+                decay_fading_title,
+                despawn_fading_title,
             )
                 .chain())
             .in_set(AnimationPhase),

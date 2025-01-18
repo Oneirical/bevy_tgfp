@@ -20,7 +20,7 @@ use crate::{
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{Axiom, CastSpell, TriggerContingency},
-    ui::SoulSlot,
+    ui::{AnnounceGameOver, SoulSlot},
     OrdDir, TILE_SIZE,
 };
 
@@ -1074,6 +1074,7 @@ pub fn respawn_player(
     mut heal: EventWriter<DamageOrHealCreature>,
     mut teleport: EventWriter<TeleportEntity>,
     mut cage: EventWriter<RespawnCage>,
+    mut title: EventWriter<AnnounceGameOver>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut faiths_end: ResMut<FaithsEnd>,
 ) {
@@ -1098,7 +1099,9 @@ pub fn respawn_player(
         soul_wheel.draw_pile.insert(Soul::Feral, 1);
         soul_wheel.draw_pile.insert(Soul::Vile, 1);
         faiths_end.cage_address_position.clear();
+        faiths_end.current_cage = 0;
         cage.send(RespawnCage);
+        title.send(AnnounceGameOver { victorious: false });
     }
 }
 

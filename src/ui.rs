@@ -12,16 +12,242 @@ pub struct UIPlugin;
 impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
+        app.add_event::<AnnounceGameOver>();
     }
 }
 
 const SOUL_WHEEL_CONTAINER_SIZE: f32 = 33.;
 const SOUL_WHEEL_RADIUS: f32 = 8.;
 const SOUL_WHEEL_SLOT_SPRITE_SIZE: f32 = 4.;
+const TITLE_FADE_TIME: f32 = 3.;
 
 #[derive(Component)]
 pub struct SoulSlot {
     pub index: usize,
+}
+
+#[derive(Component)]
+pub struct FadingTitle {
+    timer: Timer,
+}
+
+#[derive(Event)]
+pub struct AnnounceGameOver {
+    pub victorious: bool,
+}
+
+impl FadingTitle {
+    pub fn new(delay: f32) -> Self {
+        Self {
+            timer: Timer::from_seconds(delay, TimerMode::Once),
+        }
+    }
+}
+
+pub fn despawn_fading_title(fading: Query<(Entity, &FadingTitle)>, mut commands: Commands) {
+    for (entity, title) in fading.iter() {
+        if title.timer.finished() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+pub fn decay_fading_title(
+    mut set: ParamSet<(
+        Query<(&mut ImageNode, &mut FadingTitle)>,
+        Query<(&mut TextColor, &mut FadingTitle)>,
+        Query<(&mut BackgroundColor, &mut FadingTitle)>,
+    )>,
+    time: Res<Time>,
+) {
+    for (mut chain, mut fade) in set.p0().iter_mut() {
+        fade.timer.tick(time.delta());
+        chain.color.set_alpha(fade.timer.fraction_remaining());
+    }
+    for (mut text, mut fade) in set.p1().iter_mut() {
+        fade.timer.tick(time.delta());
+        text.0.set_alpha(fade.timer.fraction_remaining());
+    }
+    for (mut text_box, mut fade) in set.p2().iter_mut() {
+        fade.timer.tick(time.delta());
+        text_box.0.set_alpha(fade.timer.fraction_remaining());
+    }
+}
+
+pub fn spawn_fading_title(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    mut events: EventReader<AnnounceGameOver>,
+) {
+    for event in events.read() {
+        // root node
+        commands
+            .spawn(Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .insert(PickingBehavior::IGNORE)
+            .with_children(|parent| {
+                parent
+                    .spawn((
+                        Node {
+                            width: Val::Px(47.),
+                            height: Val::Px(10.),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0., 0., 0.)),
+                        FadingTitle::new(TITLE_FADE_TIME / 2.),
+                    ))
+                    .with_children(|parent| {
+                        let chains = 6;
+                        for i in 0..chains {
+                            // right chains
+                            if i != chains - 1 {
+                                parent.spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: if i == 0 || i == chains - 1 {
+                                                140
+                                            } else {
+                                                139
+                                            },
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    FadingTitle::new(TITLE_FADE_TIME),
+                                    Node {
+                                        bottom: Val::Px(-0.5 + i as f32 * 2.),
+                                        right: Val::Px(-0.5),
+                                        width: Val::Px(2.),
+                                        height: Val::Px(2.),
+                                        position_type: PositionType::Absolute,
+                                        ..default()
+                                    },
+                                    Transform::from_rotation(if i == chains - 1 {
+                                        Quat::from_rotation_z(3. * PI / 2.)
+                                    } else {
+                                        Quat::from_rotation_z(PI)
+                                    }),
+                                ));
+                            }
+                            // left chains
+                            if i != chains - 1 {
+                                parent.spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: if i == 0 || i == chains - 1 {
+                                                140
+                                            } else {
+                                                139
+                                            },
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    FadingTitle::new(TITLE_FADE_TIME),
+                                    Node {
+                                        bottom: Val::Px(-0.5 + i as f32 * 2.),
+                                        left: Val::Px(-0.5),
+                                        width: Val::Px(2.),
+                                        height: Val::Px(2.),
+                                        position_type: PositionType::Absolute,
+                                        ..default()
+                                    },
+                                    Transform::from_rotation(if i == 0 {
+                                        Quat::from_rotation_z(3. * PI / 2.)
+                                    } else {
+                                        Quat::from_rotation_z(0.)
+                                    }),
+                                ));
+                            }
+                        }
+                        let chains = 24;
+                        for i in 0..chains {
+                            // top chains
+                            parent.spawn((
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: if i == 0 || i == chains - 1 { 140 } else { 139 },
+                                    }),
+                                    ..Default::default()
+                                },
+                                FadingTitle::new(TITLE_FADE_TIME),
+                                Node {
+                                    top: Val::Px(-0.5),
+                                    left: Val::Px(-0.5 + i as f32 * 2.),
+                                    width: Val::Px(2.),
+                                    height: Val::Px(2.),
+                                    position_type: PositionType::Absolute,
+                                    ..default()
+                                },
+                                Transform::from_rotation(if i != 0 {
+                                    Quat::from_rotation_z(PI / 2.)
+                                } else {
+                                    Quat::from_rotation_z(0.)
+                                }),
+                            ));
+                            // bottom chains
+                            if i != chains - 1 && i != 0 {
+                                parent.spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: 139,
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    FadingTitle::new(TITLE_FADE_TIME),
+                                    Node {
+                                        bottom: Val::Px(-0.5),
+                                        left: Val::Px(-0.5 + i as f32 * 2.),
+                                        width: Val::Px(2.),
+                                        height: Val::Px(2.),
+                                        position_type: PositionType::Absolute,
+                                        ..default()
+                                    },
+                                    Transform::from_rotation(Quat::from_rotation_z(3. * PI / 2.)),
+                                ));
+                            }
+                        }
+                        parent.spawn((
+                            Text::new(if event.victorious {
+                                "VICTORIOUS"
+                            } else {
+                                "DEFEATED"
+                            }),
+                            TextLayout {
+                                justify: JustifyText::Center,
+                                linebreak: LineBreak::WordBoundary,
+                            },
+                            FadingTitle::new(TITLE_FADE_TIME),
+                            TextFont {
+                                font: asset_server.load("fonts/Play-Regular.ttf"),
+                                font_size: 8.,
+                                ..default()
+                            },
+                            TextColor(if event.victorious {
+                                Color::srgb(0.31, 0.99, 0.25)
+                            } else {
+                                Color::srgb(0.97, 0.28, 0.25)
+                            }),
+                            Label,
+                            Node { ..default() },
+                        ));
+                    });
+            });
+    }
 }
 
 fn setup(
