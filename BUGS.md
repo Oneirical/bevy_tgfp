@@ -6,6 +6,7 @@
 # Minor
 
 - The "defeated/victorious" title flickers for a brief moment when spawned.
+- Doors keep their fading out effect if opened too fast.
 
 # Bad code
 

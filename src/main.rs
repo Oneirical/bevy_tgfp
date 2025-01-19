@@ -8,6 +8,7 @@ mod spells;
 mod ui;
 
 use bevy::{
+    asset::AssetMetaCheck,
     ecs::schedule::{LogLevel, ScheduleBuildSettings},
     prelude::*,
     window::WindowResolution,
@@ -25,13 +26,17 @@ fn main() {
     let app_window = Some(Window {
         title: "The Games Foxes Play".into(),
         resolution: WindowResolution::new(5120., 2880.).with_scale_factor_override(16.),
-        mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Current),
+        mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
         // mode: bevy::window::WindowMode::Windowed,
         ..default()
     });
     App::new()
         .add_plugins(
             DefaultPlugins
+                .set(AssetPlugin {
+                    meta_check: AssetMetaCheck::Never,
+                    ..Default::default()
+                })
                 .set(ImagePlugin::default_nearest())
                 .set(WindowPlugin {
                     primary_window: app_window,
