@@ -16,6 +16,13 @@ pub struct Creature {
     pub effects: StatusEffectsList,
     pub spellbook: Spellbook,
     pub soul: Soul,
+    pub flags: CreatureFlags,
+}
+
+#[derive(Component, Clone)]
+pub struct CreatureFlags {
+    pub effects_flags: Entity,
+    pub species_flags: Entity,
 }
 
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -221,7 +221,7 @@ pub fn spawn_cage(
     player: Query<&Player>,
 ) {
     let size = 9;
-    for tower_floor in 0..2 {
+    for tower_floor in 0..15 {
         let mut cage = generate_cage(
             tower_floor,
             // Spawn the player in the first room

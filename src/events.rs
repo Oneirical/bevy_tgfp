@@ -9,10 +9,10 @@ use rand::{seq::IteratorRandom, thread_rng};
 use crate::{
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Creature, DesignatedForRemoval, Dizzy, Door, EffectDuration, Fragile, Health,
-        HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, NoDropSoul, Player,
-        PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, Spellbook, Spellproof, Stab,
-        StatusEffect, StatusEffectsList, Summoned, Wall,
+        Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration, Fragile,
+        Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, NoDropSoul,
+        Player, PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, Spellbook, Spellproof,
+        Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -232,11 +232,11 @@ pub struct AddStatusEffect {
 
 pub fn add_status_effects(
     mut events: EventReader<AddStatusEffect>,
-    mut effects: Query<&mut StatusEffectsList>,
+    mut effects: Query<(&mut StatusEffectsList, &CreatureFlags)>,
     mut commands: Commands,
 ) {
     for event in events.read() {
-        let mut effects_list = effects.get_mut(event.entity).unwrap();
+        let (mut effects_list, flags) = effects.get_mut(event.entity).unwrap();
         if let Some(effect) = effects_list.effects.get(&event.effect) {
             // Re-applying a status effect which is already possessed does not work
             // if the new effect has a lesser potency.
@@ -252,21 +252,22 @@ pub fn add_status_effects(
                 stacks: event.stacks,
             },
         );
+        let effects_flags = flags.effects_flags;
         // Insert the components corresponding to the new status effect.
         match event.effect {
             StatusEffect::Invincible => {
-                commands.entity(event.entity).insert(Invincible);
+                commands.entity(effects_flags).insert(Invincible);
             }
             StatusEffect::Stab => {
-                commands.entity(event.entity).insert(Stab {
+                commands.entity(effects_flags).insert(Stab {
                     bonus_damage: event.potency as isize,
                 });
             }
             StatusEffect::Dizzy => {
-                commands.entity(event.entity).insert(Dizzy);
+                commands.entity(effects_flags).insert(Dizzy);
             }
             StatusEffect::DimensionBond => {
-                commands.entity(event.entity).insert(Summoned {
+                commands.entity(effects_flags).insert(Summoned {
                     summoner: event.culprit,
                 });
             }
@@ -315,6 +316,15 @@ pub fn summon_creature(
             // their healthbar.
             _ => max_hp,
         };
+
+        let (effects_flags, species_flags) =
+            (commands.spawn_empty().id(), commands.spawn_empty().id());
+
+        // Summoned creatures are marked with their summoner.
+        if let Some(summoner) = event.summoner {
+            commands.entity(effects_flags).insert(Summoned { summoner });
+        }
+
         let mut new_creature = commands.spawn((
             Creature {
                 position: event.position,
@@ -349,6 +359,10 @@ pub fn summon_creature(
                     .spellbook
                     .clone()
                     .unwrap_or(get_species_spellbook(&event.species)),
+                flags: CreatureFlags {
+                    effects_flags,
+                    species_flags,
+                },
             },
             Transform {
                 translation: Vec3 {
@@ -366,10 +380,6 @@ pub fn summon_creature(
             },
             SlideAnimation,
         ));
-
-        if let Some(summoner) = event.summoner {
-            new_creature.insert(Summoned { summoner });
-        }
 
         // If the map is "faith's end", log the cage address # of this creature.
         if let Some(cage_idx) = faiths_end
@@ -405,6 +415,12 @@ pub fn summon_creature(
             }
         }
 
+        // NOTE: This will have to be removed when creating player clones
+        // becomes possible.
+        if event.species == Species::Player {
+            new_creature.insert(Player);
+        }
+
         // Creatures which start out damaged show their HP bar in advance.
         let (visibility, index) = hp_bar_visibility_and_index(hp, max_hp);
 
@@ -433,106 +449,34 @@ pub fn summon_creature(
 #[derive(Event)]
 pub struct TransformCreature {
     pub entity: Entity,
-    pub old_species: Species,
     pub new_species: Species,
 }
 
 pub fn transform_creature(
     mut transform: EventReader<TransformCreature>,
-    mut creature_query: Query<(&mut Species, &mut Sprite, &StatusEffectsList)>,
+    mut creature_query: Query<(&mut Species, &mut Sprite, &CreatureFlags)>,
     mut commands: Commands,
 ) {
     for event in transform.read() {
-        let (mut species_of_creature, mut sprite, status_effects_list) =
+        let (mut species_of_creature, mut sprite, flags) =
             creature_query.get_mut(event.entity).unwrap();
         // Change the species.
         *species_of_creature = event.new_species;
         sprite.texture_atlas.as_mut().unwrap().index = get_species_sprite(&event.new_species);
         // Remove all components except for the basics of a Creature.
         // The appropriate ones will be readded by assign_species_components.
-        // Refresh all status effects (without changing them), as to re-apply all
-        // pertinent components.
-        // HACK: This hardcoding (alongside assign_species_components) is very bad, but
-        // I am not sure how to make it better.
-        // NOTE: Maybe 2 Child entities, one with the species flag and the other with the
-        // effect flags.
-        match event.old_species {
-            Species::Player => {
-                commands.entity(event.entity).remove::<Player>();
-            }
-            Species::Trap => {
-                commands.entity(event.entity).remove::<(
-                    Meleeproof,
-                    Spellproof,
-                    Intangible,
-                    Fragile,
-                    Invincible,
-                    NoDropSoul,
-                )>();
-            }
-            Species::Wall => {
-                commands.entity(event.entity).remove::<(
-                    Meleeproof,
-                    Spellproof,
-                    Wall,
-                    Invincible,
-                    Dizzy,
-                    NoDropSoul,
-                )>();
-            }
-            Species::WeakWall => {
-                commands
-                    .entity(event.entity)
-                    .remove::<(Meleeproof, Wall, Invincible, Dizzy, NoDropSoul)>();
-            }
-            Species::Airlock => {
-                commands.entity(event.entity).remove::<(
-                    Meleeproof,
-                    Spellproof,
-                    Door,
-                    Invincible,
-                    Dizzy,
-                    NoDropSoul,
-                )>();
-            }
-            Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
-                commands.entity(event.entity).remove::<Hunt>();
-            }
-            Species::Tinker => {
-                commands.entity(event.entity).remove::<Random>();
-            }
-            Species::Abazon => {
-                commands.entity(event.entity).remove::<(Immobile, Hunt)>();
-            }
-            Species::Apiarist | Species::Shrike => {
-                commands.entity(event.entity).remove::<(Speed, Hunt)>();
-            }
-        }
-        if let Some(potency_and_stacks) = status_effects_list.effects.get(&StatusEffect::Invincible)
-        {
-            if potency_and_stacks.is_active() {
-                commands.entity(event.entity).insert(Invincible);
-            }
-        }
-        if let Some(potency_and_stacks) = status_effects_list.effects.get(&StatusEffect::Dizzy) {
-            if potency_and_stacks.is_active() {
-                commands.entity(event.entity).insert(Dizzy);
-            }
-        }
+        commands.entity(flags.species_flags).clear();
     }
 }
 
 /// Add any species-specific components.
 pub fn assign_species_components(
-    changed_species: Query<(Entity, &Species), Changed<Species>>,
+    changed_species: Query<(&CreatureFlags, &Species), Changed<Species>>,
     mut commands: Commands,
 ) {
-    for (entity, species) in changed_species.iter() {
-        let mut new_creature = commands.entity(entity);
+    for (flags, species) in changed_species.iter() {
+        let mut new_creature = commands.entity(flags.species_flags);
         match species {
-            Species::Player => {
-                new_creature.insert(Player);
-            }
             Species::Trap => {
                 new_creature.insert((
                     Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
@@ -567,6 +511,7 @@ pub fn assign_species_components(
                     Hunt,
                 ));
             }
+            _ => (),
         }
     }
 }
@@ -643,7 +588,9 @@ impl TeleportEntity {
 
 pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut creature: Query<(&mut Position, Has<Intangible>, Has<Immobile>)>,
+    mut creature: Query<(&mut Position, &CreatureFlags)>,
+    intangible_query: Query<&Intangible>,
+    immobile_query: Query<&Immobile>,
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
@@ -652,10 +599,18 @@ pub fn teleport_entity(
     is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
-        let (mut creature_position, is_intangible, is_immobile) = creature
+        let (mut creature_position, creature_flags) = creature
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
+        let (is_intangible, is_immobile) = {
+            (
+                intangible_query.contains(creature_flags.species_flags)
+                    || intangible_query.contains(creature_flags.effects_flags),
+                immobile_query.contains(creature_flags.species_flags)
+                    || immobile_query.contains(creature_flags.effects_flags),
+            )
+        };
         // If motion is possible...
         if !is_immobile
             && (map.is_passable(event.destination.x, event.destination.y) || is_intangible)
@@ -708,10 +663,13 @@ pub fn stepped_on_tile(
     mut events: EventReader<SteppedOnTile>,
     mut contingency: EventWriter<TriggerContingency>,
     mut remove: EventWriter<RemoveCreature>,
-    stepped_on_creatures: Query<(Entity, &Position, Has<Fragile>), With<Fragile>>,
+    stepped_on_creatures: Query<(Entity, &Position, &CreatureFlags)>,
+    fragile: Query<&Fragile>,
 ) {
     for event in events.read() {
-        for (entity, position, is_fragile) in stepped_on_creatures.iter() {
+        for (entity, position, flags) in stepped_on_creatures.iter() {
+            let is_fragile =
+                fragile.contains(flags.species_flags) || fragile.contains(flags.effects_flags);
             // If an entity is at the Position that was stepped on and isn't the creature
             // responsible for stepping...
             if event.position == *position && entity != event.entity {
@@ -738,10 +696,10 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
-    attacker_flags: Query<&Stab>,
-    defender_flags: Query<Has<Meleeproof>>,
+    stab_query: Query<&Stab>,
+    meleeproof_query: Query<&Meleeproof>,
     mut turn_manager: ResMut<TurnManager>,
-    mut creature: Query<(&mut Transform, Has<Player>)>,
+    mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags)>,
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
@@ -751,8 +709,9 @@ pub fn creature_collision(
             // No colliding with yourself.
             continue;
         }
-        let cannot_be_melee_attacked = defender_flags.get(event.collided_with).unwrap();
-        let (mut attacker_transform, is_player) = creature.get_mut(event.culprit).unwrap();
+        let (mut attacker_transform, is_player, flags) = creature.get_mut(event.culprit).unwrap();
+        let cannot_be_melee_attacked = meleeproof_query.contains(flags.species_flags)
+            || meleeproof_query.contains(flags.effects_flags);
         // if is_door {
         // Open doors.
         // NOTE: Disabled as doors are currently automatic.
@@ -763,7 +722,11 @@ pub fn creature_collision(
         // }
         // else
         if !cannot_be_melee_attacked {
-            let damage = if let Ok(stab) = attacker_flags.get(event.culprit) {
+            let damage = if let Ok(stab) = {
+                stab_query
+                    .get(flags.species_flags)
+                    .or(stab_query.get(flags.effects_flags))
+            } {
                 // Attacking something with Stab active resets the Stab bonus.
                 let mut status_effects = effects.get_mut(event.culprit).unwrap();
                 status_effects
@@ -844,14 +807,15 @@ pub struct DamageOrHealCreature {
 pub fn harm_creature(
     mut events: EventReader<DamageOrHealCreature>,
     mut remove: EventWriter<RemoveCreature>,
-    mut creature: Query<(&mut Health, &Children)>,
+    mut creature: Query<(&mut Health, &Children, &CreatureFlags)>,
     mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
-    defender_flags: Query<Has<Invincible>>,
+    defender_flags: Query<&Invincible>,
     mut contingency: EventWriter<TriggerContingency>,
 ) {
     for event in events.read() {
-        let (mut health, children) = creature.get_mut(event.entity).unwrap();
-        let is_invincible = defender_flags.get(event.entity).unwrap();
+        let (mut health, children, flags) = creature.get_mut(event.entity).unwrap();
+        let is_invincible = defender_flags.contains(flags.effects_flags)
+            || defender_flags.contains(flags.species_flags);
         // Apply damage or healing.
         match event.hp_mod.signum() {
             -1 => {
@@ -1020,7 +984,8 @@ pub struct RemoveCreature {
 pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
-    creature: Query<(&Position, &Soul, Has<Player>, Has<NoDropSoul>)>,
+    creature: Query<(&Position, &Soul, Has<Player>, &CreatureFlags)>,
+    dying_flags: Query<&NoDropSoul>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut contingency: EventWriter<TriggerContingency>,
@@ -1030,7 +995,9 @@ pub fn remove_creature(
     // NOTE: This filter prevents double-removal of a single entity by removing duplicates.
     // As an example, this can happen if two Shrikes simultaneously attack the player.
     for event in events.read().filter(|e| seen.insert(e.entity)) {
-        let (position, soul, is_player, cannot_drop_soul) = creature.get(event.entity).unwrap();
+        let (position, soul, is_player, flags) = creature.get(event.entity).unwrap();
+        let cannot_drop_soul =
+            dying_flags.contains(flags.effects_flags) || dying_flags.contains(flags.species_flags);
         // Visually flash an X where the creature was removed.
         magic_vfx.send(PlaceMagicVfx {
             targets: vec![*position],
@@ -1128,7 +1095,8 @@ pub fn remove_designated_creatures(
 
     awake: Query<&Awake>,
     sleeping: Query<&Sleeping>,
-    doors: Query<Entity, (With<Door>, Without<Intangible>)>,
+    doors: Query<(Entity, &CreatureFlags)>,
+    closed_door_query: Query<&Door, Without<Intangible>>,
     mut open: EventWriter<OpenCloseDoor>,
 ) {
     for designated in remove.iter() {
@@ -1151,11 +1119,15 @@ pub fn remove_designated_creatures(
     // try to open doors that are in the process of being
     // despawned by the victory check.
     if awake.is_empty() && !sleeping.is_empty() {
-        for door in doors.iter() {
-            open.send(OpenCloseDoor {
-                entity: door,
-                open: true,
-            });
+        for (door, flags) in doors.iter() {
+            if closed_door_query.contains(flags.species_flags)
+                || closed_door_query.contains(flags.effects_flags)
+            {
+                open.send(OpenCloseDoor {
+                    entity: door,
+                    open: true,
+                });
+            }
         }
     }
 }
@@ -1167,13 +1139,14 @@ pub fn end_turn(
     mut events: EventReader<EndTurn>,
     mut npc_actions: EventWriter<DistributeNpcActions>,
     mut turn_manager: ResMut<TurnManager>,
-    mut effects: Query<(Entity, &mut StatusEffectsList, &Species)>,
+    mut effects: Query<(Entity, &mut StatusEffectsList)>,
     mut commands: Commands,
     awake_creatures: Query<&Awake>,
-    sleeping_creatures: Query<(Entity, &Sleeping), (Without<Wall>, Without<Door>)>,
+    sleeping_creatures: Query<(Entity, &Sleeping)>,
     mut faiths_end: ResMut<FaithsEnd>,
     player_position: Query<&Position, With<Player>>,
-    doors: Query<Entity, With<Door>>,
+    flags_query: Query<(Entity, &CreatureFlags)>,
+    open_door_query: Query<&Door, With<Intangible>>,
     mut open: EventWriter<OpenCloseDoor>,
     mut respawn: EventWriter<RespawnPlayer>,
     mut status_effect: EventWriter<AddStatusEffect>,
@@ -1202,11 +1175,15 @@ pub fn end_turn(
                     .is_within_range(&boundary_a, &boundary_b)
             {
                 faiths_end.current_cage += 1;
-                for airlock in doors.iter() {
-                    open.send(OpenCloseDoor {
-                        entity: airlock,
-                        open: false,
-                    });
+                for (door, flags) in flags_query.iter() {
+                    if open_door_query.contains(flags.species_flags)
+                        || open_door_query.contains(flags.effects_flags)
+                    {
+                        open.send(OpenCloseDoor {
+                            entity: door,
+                            open: true,
+                        });
+                    }
                 }
                 for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
                     if sleeping_component.cage_idx == faiths_end.current_cage {
@@ -1215,7 +1192,9 @@ pub fn end_turn(
                         // Give one turn for the player to act.
                         // This also prevents them from immediately moving
                         // inside the closing doors.
-                        commands.entity(sleeping_entity).insert(Dizzy);
+                        commands
+                            .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
+                            .insert(Dizzy);
                         status_effect.send(AddStatusEffect {
                             entity: sleeping_entity,
                             effect: StatusEffect::Dizzy,
@@ -1231,32 +1210,28 @@ pub fn end_turn(
         // The turncount increases.
         turn_manager.turn_count += 1;
         // Tick down status effects.
-        for (entity, mut effect_list, species) in effects.iter_mut() {
+        for (entity, mut effect_list) in effects.iter_mut() {
             for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
                 if let EffectDuration::Finite { stacks } = &mut potency_and_stacks.stacks {
                     *stacks = stacks.saturating_sub(1);
                     if *stacks == 0 {
                         // Disable this effect.
                         potency_and_stacks.potency = 0;
+                        let effects_flags = flags_query.get(entity).unwrap().1.effects_flags;
                         match effect {
                             StatusEffect::Invincible => {
-                                commands.entity(entity).remove::<Invincible>();
+                                commands.entity(effects_flags).remove::<Invincible>();
                             }
                             StatusEffect::Stab => {
-                                commands.entity(entity).remove::<Stab>();
+                                commands.entity(effects_flags).remove::<Stab>();
                             }
                             StatusEffect::Dizzy => {
-                                commands.entity(entity).remove::<Dizzy>();
+                                commands.entity(effects_flags).remove::<Dizzy>();
                             }
                             StatusEffect::DimensionBond => {
-                                commands.entity(entity).remove::<Summoned>();
+                                commands.entity(effects_flags).remove::<Summoned>();
                             }
                         }
-                        // HACK: Transforming the entity into its own species has no effect on
-                        // the creature, but it does trigger assign_species_components's change
-                        // detection, which will prevent walls from losing Invincible due to
-                        // running out of the Invincible status effect, for example.
-                        commands.entity(entity).insert(*species);
                     }
                 }
             }
@@ -1277,28 +1252,38 @@ pub fn distribute_npc_actions(
     mut events: EventReader<DistributeNpcActions>,
     turn_manager: Res<TurnManager>,
     player: Query<&Position, With<Player>>,
-    npcs: Query<
-        (
-            Entity,
-            &Position,
-            &Species,
-            &Spellbook,
-            Option<&Speed>,
-            Has<Hunt>,
-            Has<Random>,
-        ),
-        (Without<Player>, Without<Dizzy>, Without<Sleeping>),
-    >,
+    npcs: Query<(Entity, &Position, &Species, &Spellbook, &CreatureFlags), Without<Player>>,
     species: Query<&Species>,
     map: Res<Map>,
+
+    hunt_query: Query<&Hunt>,
+    random_query: Query<&Random>,
+    speed_query: Query<&Speed>,
+    stunned_query: Query<Entity, Or<(With<Dizzy>, With<Sleeping>)>>,
 ) {
     for event in events.read() {
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
-        for (npc_entity, npc_pos, npc_species, npc_spellbook, speed, is_hunter, is_random) in
-            npcs.iter()
-        {
-            if let Some(speed) = speed {
+        for (npc_entity, npc_pos, npc_species, npc_spellbook, flags) in npcs.iter() {
+            let (is_hunter, is_random, is_stunned, speed) = {
+                (
+                    hunt_query.contains(flags.species_flags)
+                        || hunt_query.contains(flags.effects_flags),
+                    random_query.contains(flags.species_flags)
+                        || random_query.contains(flags.effects_flags),
+                    stunned_query.contains(flags.species_flags)
+                        || stunned_query.contains(flags.effects_flags),
+                    // NOTE: Currently, status effect speed overrides species speed.
+                    // Maybe it would be interesting to have them cancel each other out.
+                    speed_query
+                        .get(flags.effects_flags)
+                        .or(speed_query.get(flags.species_flags)),
+                )
+            };
+            if is_stunned {
+                continue;
+            }
+            if let Ok(speed) = speed {
                 match speed {
                     Speed::Slow { wait_turns } => {
                         if turn_manager.turn_count % (wait_turns + 1) != 0 || event.speed_level > 1
