@@ -16,7 +16,7 @@ use crate::{
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
-        SlideAnimation, SpriteSheetAtlas,
+        Screenshake, SlideAnimation, SpriteSheetAtlas,
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{Axiom, CastSpell, TriggerContingency},
@@ -208,7 +208,7 @@ pub fn use_wheel_soul(
             if newly_discarded == Soul::Ordered {
                 // TODO HACK: This makes the shield not take a turn. It should
                 // probably be a "Timeless" axiom instead.
-                turn_manager.action_this_turn = PlayerAction::Invalid;
+                turn_manager.action_this_turn = PlayerAction::Skipped;
             }
         }
     }
@@ -219,6 +219,7 @@ pub enum PlayerAction {
     Spell,
     Draw,
     Invalid,
+    Skipped,
 }
 
 #[derive(Event)]
@@ -1166,10 +1167,17 @@ pub fn end_turn(
     mut open: EventWriter<OpenCloseDoor>,
     mut respawn: EventWriter<RespawnPlayer>,
     mut status_effect: EventWriter<AddStatusEffect>,
+    mut screenshake: ResMut<Screenshake>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
-        if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+        if matches!(
+            turn_manager.action_this_turn,
+            PlayerAction::Invalid | PlayerAction::Skipped
+        ) {
+            if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+                screenshake.intensity = 3;
+            }
             return;
         }
         // Victory check.
@@ -1197,7 +1205,7 @@ pub fn end_turn(
                     {
                         open.send(OpenCloseDoor {
                             entity: door,
-                            open: true,
+                            open: false,
                         });
                     }
                 }

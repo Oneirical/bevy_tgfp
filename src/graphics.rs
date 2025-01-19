@@ -1,4 +1,7 @@
+use std::f32::consts::PI;
+
 use bevy::prelude::*;
+use rand::{thread_rng, Rng};
 
 use crate::{creature::Player, map::Position, TILE_SIZE};
 
@@ -9,7 +12,13 @@ impl Plugin for GraphicsPlugin {
         app.init_resource::<SpriteSheetAtlas>();
         app.add_event::<PlaceMagicVfx>();
         app.add_systems(Startup, setup_camera);
+        app.insert_resource(Screenshake { intensity: 0 });
     }
+}
+
+#[derive(Resource)]
+pub struct Screenshake {
+    pub intensity: usize,
 }
 
 #[derive(Resource)]
@@ -49,6 +58,7 @@ pub fn adjust_transforms(
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
     time: Res<Time>,
     mut commands: Commands,
+    mut screenshake: ResMut<Screenshake>,
 ) {
     for (entity, pos, mut trans, is_animated, is_player) in creatures.iter_mut() {
         // If this creature is affected by an animation...
@@ -76,10 +86,17 @@ pub fn adjust_transforms(
             trans.translation.y = pos.y as f32 * TILE_SIZE;
         }
         if is_player {
+            screenshake.intensity = screenshake.intensity.saturating_sub(1);
+            let mut rng = thread_rng();
+            let shake_angle = rng.gen::<f32>() * PI * 2.;
+            let (shake_x, shake_y) = (
+                shake_angle.cos() * screenshake.intensity as f32,
+                shake_angle.sin() * screenshake.intensity as f32,
+            );
             // The camera follows the player.
             let mut camera_trans = camera.get_single_mut().unwrap();
             (camera_trans.translation.x, camera_trans.translation.y) =
-                (trans.translation.x, trans.translation.y);
+                (trans.translation.x + shake_x, trans.translation.y + shake_y);
         }
     }
 }
