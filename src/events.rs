@@ -907,6 +907,9 @@ pub struct BecomingVisible {
     timer: Timer,
 }
 
+#[derive(Component)]
+pub struct DoorPanel;
+
 pub fn open_close_door(
     mut events: EventReader<OpenCloseDoor>,
     mut commands: Commands,
@@ -936,6 +939,7 @@ pub fn open_close_door(
         // Loop twice: for each pane of the door.
         for offset in [offset_1, offset_2] {
             commands.spawn((
+                DoorPanel,
                 // The sliding panes are represented as a MagicEffect with a very slow decay.
                 MagicEffect {
                     // The panes slide into the adjacent walls to the door, hence the offset.
@@ -997,12 +1001,16 @@ pub fn render_closing_doors(
     mut commands: Commands,
     mut becoming_visible: Query<(Entity, &mut BecomingVisible, &mut Visibility)>,
     time: Res<Time>,
+    door_panes: Query<Entity, With<DoorPanel>>,
 ) {
     for (entity, mut door_timer, mut door_vis) in becoming_visible.iter_mut() {
         door_timer.timer.tick(time.delta());
         if door_timer.timer.finished() {
             *door_vis = Visibility::Inherited;
             commands.entity(entity).remove::<BecomingVisible>();
+            for pane in door_panes.iter() {
+                commands.entity(pane).try_despawn();
+            }
         }
     }
 }
