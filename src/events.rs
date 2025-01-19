@@ -1016,13 +1016,15 @@ pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
     creature: Query<(&Position, &Soul, Has<Player>, Has<NoDropSoul>)>,
-    // mut spell_stack: ResMut<SpellStack>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut contingency: EventWriter<TriggerContingency>,
     mut respawn: EventWriter<RespawnPlayer>,
 ) {
-    for event in events.read() {
+    let mut seen = HashSet::new();
+    // NOTE: This filter prevents double-removal of a single entity by removing duplicates.
+    // As an example, this can happen if two Shrikes simultaneously attack the player.
+    for event in events.read().filter(|e| seen.insert(e.entity)) {
         let (position, soul, is_player, cannot_drop_soul) = creature.get(event.entity).unwrap();
         // Visually flash an X where the creature was removed.
         magic_vfx.send(PlaceMagicVfx {
@@ -1073,8 +1075,8 @@ pub fn respawn_player(
     mut remove: EventWriter<RemoveCreature>,
     mut heal: EventWriter<DamageOrHealCreature>,
     mut teleport: EventWriter<TeleportEntity>,
-    mut cage: EventWriter<RespawnCage>,
     mut title: EventWriter<AnnounceGameOver>,
+    mut cage: EventWriter<RespawnCage>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut faiths_end: ResMut<FaithsEnd>,
 ) {
@@ -1353,8 +1355,12 @@ pub fn echo_speed(
 #[derive(Event)]
 pub struct RespawnCage;
 
+/// This is necessary to come last, as to ensure everything has despawned
+/// before spawning the next batch of creatures.
 pub fn respawn_cage(mut events: EventReader<RespawnCage>, mut commands: Commands) {
-    for _event in events.read() {
+    // HACK: If multiple RespawnCage events are processed, it will build multiple
+    // levels on top of each other, making the game unplayable.
+    if events.read().count() > 0 {
         commands.run_system_cached(spawn_cage);
     }
 }

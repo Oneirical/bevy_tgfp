@@ -1,12 +1,12 @@
 # Major
 
 - Very occasionally, the game will crash when passing through a door due to the door recovering tangibility on top of another creature.
-- After a non-deterministic number of respawns, room generation will glitch, causing isolated islands in rooms and fake "ghost" monsters.
 
 # Minor
 
 - The "defeated/victorious" title flickers for a brief moment when spawned.
 - Doors keep their fading out effect if opened too fast.
+- Very rarely, the game does not accept any input on startup and must be restarted
 
 # Bad code
 
