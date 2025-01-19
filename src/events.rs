@@ -712,6 +712,7 @@ pub fn creature_collision(
     meleeproof_query: Query<&Meleeproof>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags)>,
+    flags_query: Query<&CreatureFlags>,
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
@@ -722,8 +723,11 @@ pub fn creature_collision(
             continue;
         }
         let (mut attacker_transform, is_player, flags) = creature.get_mut(event.culprit).unwrap();
-        let cannot_be_melee_attacked = meleeproof_query.contains(flags.species_flags)
-            || meleeproof_query.contains(flags.effects_flags);
+        let cannot_be_melee_attacked = {
+            let defender_flags = flags_query.get(event.collided_with).unwrap();
+            meleeproof_query.contains(defender_flags.species_flags)
+                || meleeproof_query.contains(defender_flags.effects_flags)
+        };
         // if is_door {
         // Open doors.
         // NOTE: Disabled as doors are currently automatic.
@@ -1284,7 +1288,10 @@ pub fn distribute_npc_actions(
                     random_query.contains(flags.species_flags)
                         || random_query.contains(flags.effects_flags),
                     stunned_query.contains(flags.species_flags)
-                        || stunned_query.contains(flags.effects_flags),
+                        || stunned_query.contains(flags.effects_flags)
+                        // HACK: The "Sleeping" component currently appears
+                        // on the creature itself and not the effects_flags.
+                        || stunned_query.contains(npc_entity),
                     // NOTE: Currently, status effect speed overrides species speed.
                     // Maybe it would be interesting to have them cancel each other out.
                     speed_query
