@@ -11,8 +11,8 @@ use bevy::{
 
 use crate::{
     creature::{
-        CreatureFlags, EffectDuration, Player, Soul, Species, Spellbook, Spellproof, StatusEffect,
-        StatusEffectsList, Summoned, Wall,
+        CreatureFlags, EffectDuration, FlagEntity, Player, Soul, Species, Spellbook, Spellproof,
+        StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     events::{
         AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
@@ -1032,10 +1032,9 @@ fn axiom_function_abjuration(
     mut remove: EventWriter<RemoveCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    summons: Query<(Entity, &CreatureFlags)>,
+    summons: Query<(&Summoned, &FlagEntity)>,
     spellproof_query: Query<&Spellproof>,
     flags: Query<&CreatureFlags>,
-    summoned_query: Query<&Summoned>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     for entity in synapse_data.get_all_targeted_entities(&map) {
@@ -1043,19 +1042,10 @@ fn axiom_function_abjuration(
         if is_spellproof(entity, &flags, &spellproof_query) {
             continue;
         }
-        for (summoned_entity, flags) in summons.iter() {
-            if {
-                if let Ok(summon_component) = summoned_query
-                    .get(flags.species_flags)
-                    .or(summoned_query.get(flags.effects_flags))
-                {
-                    summon_component.summoner == entity
-                } else {
-                    false
-                }
-            } {
+        for (summoned_component, flag_entity) in summons.iter() {
+            if summoned_component.summoner == entity {
                 remove.send(RemoveCreature {
-                    entity: summoned_entity,
+                    entity: flag_entity.parent_creature,
                 });
             }
         }

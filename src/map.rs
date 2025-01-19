@@ -8,7 +8,7 @@ use rand::{
 };
 
 use crate::{
-    creature::{Intangible, Player, Species},
+    creature::{CreatureFlags, FlagEntity, Intangible, Player, Species},
     events::{RemoveCreature, SummonCreature},
     OrdDir,
 };
@@ -160,38 +160,30 @@ pub fn register_creatures(
     // Any entity that has a Position that just got added to it -
     // currently only possible as a result of having just been spawned in.
     // Naturally intangible creatures skip this.
-    displaced_creatures: Query<
-        (&Position, Entity),
-        (Added<Position>, With<Species>, Without<Intangible>),
-    >,
-    intangible_creatures: Query<(Entity, &Position), (Added<Intangible>, With<Species>)>,
+    newly_positioned_creatures: Query<(&Position, Entity, &CreatureFlags), Added<Position>>,
+    intangible_query: Query<&FlagEntity, Added<Intangible>>,
+
+    intangible_creature: Query<&Position>,
     tangible_creatures: Query<&Position, With<Species>>,
+    flag_query: Query<&FlagEntity>,
     mut tangible_entities: RemovedComponents<Intangible>,
     mut remove: EventWriter<RemoveCreature>,
 ) {
-    for (position, entity) in displaced_creatures.iter() {
-        // Insert the new creature in the Map. Position implements Copy,
-        // so it can be dereferenced (*), but `.clone()` would have been
-        // fine too.
-        map.creatures.insert(*position, entity);
-    }
-
-    // Newly intangible creatures are removed from the map.
-    for (entity, intangible_position) in intangible_creatures.iter() {
-        if let Some(preexisting_entity) = map.creatures.get(intangible_position) {
-            // Check that the entity being removed is actually the intangible entity.
-            // REASON: If a creature spawns in already intangible on top of a
-            // tangible creature, without this check, it would remove
-            // the tangible creature from the map.
-            if *preexisting_entity != entity {
-                continue;
-            }
+    for (position, entity, flags) in newly_positioned_creatures.iter() {
+        // Intangible creatures are not added to the map.
+        if !intangible_query.contains(flags.effects_flags)
+            && !intangible_query.contains(flags.species_flags)
+        {
+            // Insert the new creature in the Map. Position implements Copy,
+            // so it can be dereferenced (*), but `.clone()` would have been
+            // fine too.
+            map.creatures.insert(*position, entity);
         }
-        map.creatures.remove(intangible_position);
     }
 
     // A creature recovering its tangibility is added to the map.
-    for entity in tangible_entities.read() {
+    for flag_entity in tangible_entities.read() {
+        let entity = flag_query.get(flag_entity).unwrap().parent_creature;
         if let Ok(tangible_position) = tangible_creatures.get(entity) {
             if map.creatures.get(tangible_position).is_some() {
                 // NOTE: This is kind of like Caves of Qud's death by phasing
@@ -205,6 +197,23 @@ pub fn register_creatures(
                 map.creatures.insert(*tangible_position, entity);
             }
         }
+    }
+
+    // Newly intangible creatures are removed from the map.
+    for flag_entity in intangible_query.iter() {
+        let intangible_position = intangible_creature
+            .get(flag_entity.parent_creature)
+            .unwrap();
+        if let Some(preexisting_entity) = map.creatures.get(intangible_position) {
+            // Check that the entity being removed is actually the intangible entity.
+            // REASON: If a creature spawns in already intangible on top of a
+            // tangible creature, without this check, it would remove
+            // the tangible creature from the map.
+            if *preexisting_entity != flag_entity.parent_creature {
+                continue;
+            }
+        }
+        map.creatures.remove(intangible_position);
     }
 }
 

@@ -25,6 +25,11 @@ pub struct CreatureFlags {
     pub species_flags: Entity,
 }
 
+#[derive(Component, Clone)]
+pub struct FlagEntity {
+    pub parent_creature: Entity,
+}
+
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Soul {
     Saintly,

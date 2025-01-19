@@ -9,10 +9,10 @@ use rand::{seq::IteratorRandom, thread_rng};
 use crate::{
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration, Fragile,
-        Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof, NoDropSoul,
-        Player, PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, Spellbook, Spellproof,
-        Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration, FlagEntity,
+        Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof,
+        NoDropSoul, Player, PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, Spellbook,
+        Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -325,7 +325,10 @@ pub fn summon_creature(
             commands.entity(effects_flags).insert(Summoned { summoner });
         }
 
-        let mut new_creature = commands.spawn((
+        let mut new_creature = commands.spawn_empty();
+        let parent_creature = new_creature.id();
+
+        new_creature.insert((
             Creature {
                 position: event.position,
                 species: event.species,
@@ -427,6 +430,15 @@ pub fn summon_creature(
         // Free the borrow on Commands.
         let new_creature_entity = new_creature.id();
 
+        // Inform the effects and species flags that this creature
+        // is their parent.
+        commands
+            .entity(effects_flags)
+            .insert(FlagEntity { parent_creature });
+        commands
+            .entity(species_flags)
+            .insert(FlagEntity { parent_creature });
+
         let hp_bar = commands
             .spawn(HealthIndicator {
                 sprite: Sprite {
@@ -463,9 +475,9 @@ pub fn transform_creature(
         // Change the species.
         *species_of_creature = event.new_species;
         sprite.texture_atlas.as_mut().unwrap().index = get_species_sprite(&event.new_species);
-        // Remove all components except for the basics of a Creature.
+        // Remove all components except for its knowledge of its parent.
         // The appropriate ones will be readded by assign_species_components.
-        commands.entity(flags.species_flags).clear();
+        commands.entity(flags.species_flags).retain::<FlagEntity>();
     }
 }
 
@@ -874,20 +886,20 @@ pub struct DoorPanel;
 pub fn open_close_door(
     mut events: EventReader<OpenCloseDoor>,
     mut commands: Commands,
-    mut door: Query<(&mut Visibility, &Position, &OrdDir)>,
+    mut door: Query<(&mut Visibility, &Position, &OrdDir, &CreatureFlags)>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
     for event in events.read() {
         // Gather component values of the door.
-        let (mut visibility, position, orientation) = door.get_mut(event.entity).unwrap();
+        let (mut visibility, position, orientation, flags) = door.get_mut(event.entity).unwrap();
         if event.open {
             // The door becomes intangible, and can be walked through.
-            commands.entity(event.entity).insert(Intangible);
+            commands.entity(flags.species_flags).insert(Intangible);
             // The door is no longer visible, as it is open.
             *visibility = Visibility::Hidden;
         } else {
-            commands.entity(event.entity).remove::<Intangible>();
+            commands.entity(flags.species_flags).remove::<Intangible>();
             commands.entity(event.entity).insert(BecomingVisible {
                 timer: Timer::from_seconds(0.4, TimerMode::Once),
             });
