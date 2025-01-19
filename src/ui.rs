@@ -438,7 +438,43 @@ fn setup(
                                     },
                                 ));
                             parent.spawn((
-                                    TextSpan::new(": Cast a spell corresponding to the chosen slot on the Soul Wheel."),
+                                    TextSpan::new(": Cast a spell corresponding to the chosen slot on the Soul Wheel.\n"),
+                                    TextColor(Color::WHITE),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 0.9,
+                                        ..default()
+                                    },
+                                ));
+                            parent.spawn((
+                                    TextSpan::new("Z"),
+                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 0.9,
+                                        ..default()
+                                    },
+                                ));
+                            parent.spawn((
+                                    TextSpan::new(" or "),
+                                    TextColor(Color::WHITE),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 0.9,
+                                        ..default()
+                                    },
+                                ));
+                            parent.spawn((
+                                    TextSpan::new("X"),
+                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 0.9,
+                                        ..default()
+                                    },
+                                ));
+                            parent.spawn((
+                                    TextSpan::new(": Reset the game.\n"),
                                     TextColor(Color::WHITE),
                                     TextFont {
                                         font: asset_server.load("fonts/Play-Regular.ttf"),

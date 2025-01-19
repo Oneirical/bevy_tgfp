@@ -9,7 +9,7 @@ use rand::{
 
 use crate::{
     creature::{Intangible, Player, Species},
-    events::SummonCreature,
+    events::{RemoveCreature, SummonCreature},
     OrdDir,
 };
 
@@ -167,6 +167,7 @@ pub fn register_creatures(
     intangible_creatures: Query<(Entity, &Position), (Added<Intangible>, With<Species>)>,
     tangible_creatures: Query<&Position, With<Species>>,
     mut tangible_entities: RemovedComponents<Intangible>,
+    mut remove: EventWriter<RemoveCreature>,
 ) {
     for (position, entity) in displaced_creatures.iter() {
         // Insert the new creature in the Map. Position implements Copy,
@@ -193,10 +194,16 @@ pub fn register_creatures(
     for entity in tangible_entities.read() {
         if let Ok(tangible_position) = tangible_creatures.get(entity) {
             if map.creatures.get(tangible_position).is_some() {
+                // NOTE: This is kind of like Caves of Qud's death by phasing
+                // ("the pauli principle"). Creatures recovering tangibility
+                // on top of another die. I am mostly adding this so I can
+                // debug the occasional door issue.
+                remove.send(RemoveCreature { entity });
                 dbg!(tangible_position);
-                panic!("A creature recovered its tangibility while on top of another creature!");
+                dbg!("A creature recovered its tangibility while on top of another creature!");
+            } else {
+                map.creatures.insert(*tangible_position, entity);
             }
-            map.creatures.insert(*tangible_position, entity);
         }
     }
 }

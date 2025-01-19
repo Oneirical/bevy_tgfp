@@ -5,7 +5,6 @@
 # Minor
 
 - The "defeated/victorious" title flickers for a brief moment when spawned.
-- Doors keep their fading out effect if opened too fast.
 - Very rarely, the game does not accept any input on startup and must be restarted
 
 # Bad code

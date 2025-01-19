@@ -504,10 +504,7 @@ pub fn transform_creature(
             Species::Abazon => {
                 commands.entity(event.entity).remove::<(Immobile, Hunt)>();
             }
-            Species::Apiarist => {
-                commands.entity(event.entity).remove::<(Speed, Hunt)>();
-            }
-            Species::Shrike => {
+            Species::Apiarist | Species::Shrike => {
                 commands.entity(event.entity).remove::<(Speed, Hunt)>();
             }
         }
@@ -1061,13 +1058,15 @@ pub fn remove_creature(
                     .and_modify(|amount| *amount += 1);
             }
         } else {
-            respawn.send(RespawnPlayer);
+            respawn.send(RespawnPlayer { victorious: false });
         }
     }
 }
 
 #[derive(Event)]
-pub struct RespawnPlayer;
+pub struct RespawnPlayer {
+    pub victorious: bool,
+}
 
 pub fn respawn_player(
     mut events: EventReader<RespawnPlayer>,
@@ -1088,7 +1087,7 @@ pub fn respawn_player(
     mut soul_wheel: ResMut<SoulWheel>,
     mut faiths_end: ResMut<FaithsEnd>,
 ) {
-    for _event in events.read() {
+    for event in events.read() {
         for npc in npcs.iter() {
             remove.send(RemoveCreature { entity: npc });
         }
@@ -1111,7 +1110,9 @@ pub fn respawn_player(
         faiths_end.cage_address_position.clear();
         faiths_end.current_cage = 0;
         cage.send(RespawnCage);
-        title.send(AnnounceGameOver { victorious: false });
+        title.send(AnnounceGameOver {
+            victorious: event.victorious,
+        });
     }
 }
 
@@ -1170,6 +1171,8 @@ pub fn end_turn(
     player_position: Query<&Position, With<Player>>,
     doors: Query<Entity, With<Door>>,
     mut open: EventWriter<OpenCloseDoor>,
+    mut respawn: EventWriter<RespawnPlayer>,
+    mut status_effect: EventWriter<AddStatusEffect>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
@@ -1198,10 +1201,24 @@ pub fn end_turn(
                         open: false,
                     });
                 }
+                if sleeping_creatures.is_empty() {
+                    respawn.send(RespawnPlayer { victorious: true });
+                }
                 for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
                     if sleeping_component.cage_idx == faiths_end.current_cage {
                         commands.entity(sleeping_entity).insert(Awake);
                         commands.entity(sleeping_entity).remove::<Sleeping>();
+                        // Give one turn for the player to act.
+                        // This also prevents them from immediately moving
+                        // inside the closing doors.
+                        commands.entity(sleeping_entity).insert(Dizzy);
+                        status_effect.send(AddStatusEffect {
+                            entity: sleeping_entity,
+                            effect: StatusEffect::Dizzy,
+                            potency: 1,
+                            stacks: EffectDuration::Finite { stacks: 1 },
+                            culprit: sleeping_entity,
+                        });
                     }
                 }
             }

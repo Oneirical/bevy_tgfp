@@ -70,6 +70,9 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 
 - Instead of "UntargetCaster", make a mutator that makes every form untarget tiles instead of targeting them - "untarget" + "ego" instead of "untargetcaster".
 
+- A cave where you must push around a little cart on a railroad, "cold fire" themed
+- A racetrack with many obstacles on the way against an NPC
+
 # Coding
 
 - For NPC AI, enter a game state where events get routed to systems that don't actually affect the game state but calculate heuristics.
@@ -81,7 +84,7 @@ Volume (impact) Pianissimo, Piano, Forte, Fortissimo
 
 
 # Tutorial
-- Mention the Color imprements Copy oddity from bevy discord.
+- Mention the Color implements Copy oddity from bevy discord.
 - Mention the exclusive system (&mut World) and associated weird bevy errors.
 - A Gimp tutorial for the spritesheet, inspired by the broughlike one.
 - Is the ̀`Map` too weird? Maybe it should just fetch the entity with the correct Position?

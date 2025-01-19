@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Player,
-    events::{CreatureStep, DrawSoul, EndTurn, PlayerAction, TurnManager, UseWheelSoul},
+    events::{
+        CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
+    },
     OrdDir,
 };
 
@@ -15,6 +17,7 @@ pub fn keyboard_input(
     input: Res<ButtonInput<KeyCode>>,
     mut turn_manager: ResMut<TurnManager>,
     mut turn_end: EventWriter<EndTurn>,
+    mut respawn: EventWriter<RespawnPlayer>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -71,5 +74,8 @@ pub fn keyboard_input(
         });
         turn_manager.action_this_turn = PlayerAction::Step;
         turn_end.send(EndTurn);
+    }
+    if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {
+        respawn.send(RespawnPlayer { victorious: false });
     }
 }
