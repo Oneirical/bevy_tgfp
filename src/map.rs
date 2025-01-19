@@ -221,8 +221,9 @@ pub fn spawn_cage(
     player: Query<&Player>,
 ) {
     let size = 9;
-    for tower_floor in 0..15 {
+    for tower_floor in 0..2 {
         let mut cage = generate_cage(
+            tower_floor,
             // Spawn the player in the first room
             // (the player must not already exist).
             tower_floor == 0 && player.is_empty(),
@@ -309,7 +310,12 @@ fn add_creatures(cage: &mut [char], creatures_amount: usize) {
     }
 }
 
-pub fn generate_cage(spawn_player: bool, size: usize, connections: &[OrdDir]) -> Vec<char> {
+pub fn generate_cage(
+    floor: usize,
+    spawn_player: bool,
+    size: usize,
+    connections: &[OrdDir],
+) -> Vec<char> {
     let mut cage = Vec::new();
 
     for _i in 0..100 {
@@ -320,6 +326,15 @@ pub fn generate_cage(spawn_player: bool, size: usize, connections: &[OrdDir]) ->
             // If the player is here, it spawns in the middle.
             if spawn_player && xy_idx(i, size) == ((size - 1) / 2, (size - 1) / 2) {
                 cage.push('@');
+                passable_tiles += 1;
+            // If the player is already spawned, the bottom cage should still
+            // not place anything in its centre so the player can be teleported
+            // there.
+            } else if !spawn_player
+                && floor == 0
+                && xy_idx(i, size) == ((size - 1) / 2, (size - 1) / 2)
+            {
+                cage.push('.');
                 passable_tiles += 1;
             // Edges get walls 100% of the time, other tiles, 30% of the time.
             } else if is_edge(i, size) {

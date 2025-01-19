@@ -1127,6 +1127,7 @@ pub fn remove_designated_creatures(
     position: Query<&Position>,
 
     awake: Query<&Awake>,
+    sleeping: Query<&Sleeping>,
     doors: Query<Entity, (With<Door>, Without<Intangible>)>,
     mut open: EventWriter<OpenCloseDoor>,
 ) {
@@ -1146,7 +1147,10 @@ pub fn remove_designated_creatures(
         commands.entity(designated).despawn_recursive();
     }
 
-    if awake.is_empty() {
+    // `sleeping` should be empty, or else this will
+    // try to open doors that are in the process of being
+    // despawned by the victory check.
+    if awake.is_empty() && !sleeping.is_empty() {
         for door in doors.iter() {
             open.send(OpenCloseDoor {
                 entity: door,
@@ -1179,10 +1183,13 @@ pub fn end_turn(
         if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
             return;
         }
-
+        // Victory check.
+        if sleeping_creatures.is_empty() && awake_creatures.is_empty() {
+            respawn.send(RespawnPlayer { victorious: true });
+        }
         // If the player has cleared a cage inside of faith's end, awaken all the
         // creatures in the next cage.
-        if let Some((mut boundary_a, mut boundary_b)) = faiths_end
+        else if let Some((mut boundary_a, mut boundary_b)) = faiths_end
             .cage_dimensions
             .get(&(faiths_end.current_cage + 1))
         {
@@ -1200,9 +1207,6 @@ pub fn end_turn(
                         entity: airlock,
                         open: false,
                     });
-                }
-                if sleeping_creatures.is_empty() {
-                    respawn.send(RespawnPlayer { victorious: true });
                 }
                 for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
                     if sleeping_component.cage_idx == faiths_end.current_cage {
