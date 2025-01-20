@@ -20,14 +20,14 @@ use sets::SetsPlugin;
 use spells::SpellPlugin;
 use ui::UIPlugin;
 
-pub const TILE_SIZE: f32 = 4.;
+pub const TILE_SIZE: f32 = 3.;
 
 fn main() {
     let app_window = Some(Window {
         title: "The Games Foxes Play".into(),
         resolution: WindowResolution::new(5120., 2880.).with_scale_factor_override(16.),
-        mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
-        // mode: bevy::window::WindowMode::Windowed,
+        // mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+        mode: bevy::window::WindowMode::Windowed,
         ..default()
     });
     App::new()

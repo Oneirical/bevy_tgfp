@@ -95,8 +95,10 @@ pub fn adjust_transforms(
             );
             // The camera follows the player.
             let mut camera_trans = camera.get_single_mut().unwrap();
-            (camera_trans.translation.x, camera_trans.translation.y) =
-                (trans.translation.x + shake_x, trans.translation.y + shake_y);
+            (camera_trans.translation.x, camera_trans.translation.y) = (
+                trans.translation.x + shake_x + 10.,
+                trans.translation.y + shake_y,
+            );
         }
     }
 }
