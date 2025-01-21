@@ -1,6 +1,6 @@
 use std::f32::consts::PI;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, window::Monitor};
 
 use crate::{
     creature::{get_species_sprite, Species},
@@ -19,6 +19,7 @@ impl Plugin for UIPlugin {
 const SOUL_WHEEL_CONTAINER_SIZE: f32 = 33.;
 const SOUL_WHEEL_RADIUS: f32 = 8.;
 const SOUL_WHEEL_SLOT_SPRITE_SIZE: f32 = 4.;
+const CHAIN_SIZE: f32 = 4.;
 const TITLE_FADE_TIME: f32 = 3.;
 
 #[derive(Component)]
@@ -255,8 +256,10 @@ fn setup(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
     mut scale: ResMut<UiScale>,
+    window: Query<&Monitor>,
 ) {
-    scale.0 = 1.0;
+    let win_height = window.iter().next().unwrap().physical_height;
+    scale.0 = 0.75;
     // root node
     commands
         .spawn(Node {
@@ -281,7 +284,7 @@ fn setup(
                         max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                         min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                         max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        border: UiRect::all(Val::Px(2.)),
+                        border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0., 0., 0.)),
@@ -304,12 +307,12 @@ fn setup(
                                 left: Val::Px(
                                     ((i + 6) as f32 * rot).cos() * SOUL_WHEEL_RADIUS
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE,
+                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE + 1.,
                                 ),
                                 top: Val::Px(
                                     ((i + 6) as f32 * rot).sin() * SOUL_WHEEL_RADIUS
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE,
+                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE + 1.,
                                 ),
                                 position_type: PositionType::Absolute,
                                 width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
@@ -329,13 +332,13 @@ fn setup(
                                 left: Val::Px(
                                     SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).cos()
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7,
+                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7 + 1.,
                                 ),
                                 top: Val::Px(
                                     SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).sin()
                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
-                                        - 0.3,
+                                        + 0.7,
                                 ),
                                 position_type: PositionType::Absolute,
                                 ..default()
@@ -344,13 +347,15 @@ fn setup(
                     }
 
                 });
-            
+            dbg!(win_height);
             parent.spawn((
                     ChainBox,
                     Node {
                         width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        border: UiRect::all(Val::Px(2.)),
+                        height: text_box_height(win_height),
+                        min_height: text_box_height(win_height),
+                        max_height: text_box_height(win_height),
+                        border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0., 0., 0.)),
@@ -563,6 +568,18 @@ fn setup(
                         });
 
                 });
+            parent.spawn((
+                    ChainBox,
+                    Node {
+                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                        height: Val::Px(7.),
+                        min_height: Val::Px(7.),
+                        max_height: Val::Px(7.),
+                        border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0., 0., 0.)),
+                ));
         }); });
 
     commands
@@ -706,8 +723,8 @@ fn decorate_with_chains(
         } else {
             panic!();
         };
-        let number_of_chains_left_right = height / 2 - 1;
-        let number_of_chains_top_bottom = width / 2 - 1;
+        let number_of_chains_left_right = height / CHAIN_SIZE as usize;
+        let number_of_chains_top_bottom = width / CHAIN_SIZE as usize;
         commands.entity(chain_box).with_children(|parent| {
             for i in 0..number_of_chains_top_bottom {
                 // top chains
@@ -726,10 +743,10 @@ fn decorate_with_chains(
                         ..Default::default()
                     },
                     Node {
-                        left: Val::Px(-0.5 + i as f32 * 2.),
+                        left: Val::Px(-0.5 + i as f32 * CHAIN_SIZE),
                         top: Val::Px(-0.5),
-                        width: Val::Px(2.),
-                        height: Val::Px(2.),
+                        width: Val::Px(CHAIN_SIZE),
+                        height: Val::Px(CHAIN_SIZE),
                         position_type: PositionType::Absolute,
                         ..default()
                     },
@@ -753,10 +770,10 @@ fn decorate_with_chains(
                             ..Default::default()
                         },
                         Node {
-                            left: Val::Px(-0.5 + i as f32 * 2.),
+                            left: Val::Px(-0.5 + i as f32 * CHAIN_SIZE),
                             bottom: Val::Px(-0.5),
-                            width: Val::Px(2.),
-                            height: Val::Px(2.),
+                            width: Val::Px(CHAIN_SIZE),
+                            height: Val::Px(CHAIN_SIZE),
                             position_type: PositionType::Absolute,
                             ..default()
                         },
@@ -766,61 +783,75 @@ fn decorate_with_chains(
             }
 
             for i in 0..number_of_chains_left_right {
-
-                        // right chains
-                        if i != number_of_chains_left_right - 1 {
-                            parent.spawn((
-                                ImageNode {
-                                    image: asset_server.load("spritesheet.png"),
-                                    texture_atlas: Some(TextureAtlas {
-                                        layout: atlas_layout.handle.clone(),
-                                        index: if i == 0 || i == number_of_chains_left_right - 1 { 140 } else { 139 },
-                                    }),
-                                    ..Default::default()
-                                },
-                                Node {
-                                    bottom: Val::Px(-0.5 + i as f32 * 2.),
-                                    right: Val::Px(-0.5),
-                                    width: Val::Px(2.),
-                                    height: Val::Px(2.),
-                                    position_type: PositionType::Absolute,
-                                    ..default()
-                                },
-                                Transform::from_rotation(if i == number_of_chains_left_right - 1 {
-                                    Quat::from_rotation_z(3. * PI / 2.)
+                // right chains
+                if i != number_of_chains_left_right - 1 {
+                    parent.spawn((
+                        ImageNode {
+                            image: asset_server.load("spritesheet.png"),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: atlas_layout.handle.clone(),
+                                index: if i == 0 || i == number_of_chains_left_right - 1 {
+                                    140
                                 } else {
-                                    Quat::from_rotation_z(PI)
-                                }),
-                            ));
-                        }
-                        // left chains
-                        if i != number_of_chains_left_right - 1 {
-                            parent.spawn((
-                                ImageNode {
-                                    image: asset_server.load("spritesheet.png"),
-                                    texture_atlas: Some(TextureAtlas {
-                                        layout: atlas_layout.handle.clone(),
-                                        index: if i == 0 || i == number_of_chains_left_right - 1 { 140 } else { 139 },
-                                    }),
-                                    ..Default::default()
+                                    139
                                 },
-                                Node {
-                                    bottom: Val::Px(-0.5 + i as f32 * 2.),
-                                    left: Val::Px(-0.5),
-                                    width: Val::Px(2.),
-                                    height: Val::Px(2.),
-                                    position_type: PositionType::Absolute,
-                                    ..default()
-                                },
-                                Transform::from_rotation(if i == 0 {
-                                    Quat::from_rotation_z(3. * PI / 2.)
+                            }),
+                            ..Default::default()
+                        },
+                        Node {
+                            bottom: Val::Px(-0.5 + i as f32 * CHAIN_SIZE),
+                            right: Val::Px(-0.5),
+                            width: Val::Px(CHAIN_SIZE),
+                            height: Val::Px(CHAIN_SIZE),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        Transform::from_rotation(if i == number_of_chains_left_right - 1 {
+                            Quat::from_rotation_z(3. * PI / 2.)
+                        } else {
+                            Quat::from_rotation_z(PI)
+                        }),
+                    ));
+                }
+                // left chains
+                if i != number_of_chains_left_right - 1 {
+                    parent.spawn((
+                        ImageNode {
+                            image: asset_server.load("spritesheet.png"),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: atlas_layout.handle.clone(),
+                                index: if i == 0 || i == number_of_chains_left_right - 1 {
+                                    140
                                 } else {
-                                    Quat::from_rotation_z(0.)
-                                }),
-                            ));
-                        }
-}
-            
+                                    139
+                                },
+                            }),
+                            ..Default::default()
+                        },
+                        Node {
+                            bottom: Val::Px(-0.5 + i as f32 * CHAIN_SIZE),
+                            left: Val::Px(-0.5),
+                            width: Val::Px(CHAIN_SIZE),
+                            height: Val::Px(CHAIN_SIZE),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                        Transform::from_rotation(if i == 0 {
+                            Quat::from_rotation_z(3. * PI / 2.)
+                        } else {
+                            Quat::from_rotation_z(0.)
+                        }),
+                    ));
+                }
+            }
         });
     }
+}
+
+fn text_box_height(window_size: u32) -> Val {
+    let mut height = window_size * 28 / 1080;
+    if height % 2 != 0 {
+        height -= 1;
+    }
+    Val::Px(height as f32)
 }
