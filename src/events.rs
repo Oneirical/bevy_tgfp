@@ -709,24 +709,21 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
-    mut text: EventWriter<AddMessage>,
     stab_query: Query<&Stab>,
     meleeproof_query: Query<&Meleeproof>,
     mut turn_manager: ResMut<TurnManager>,
-    mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags, &Species)>,
+    mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags)>,
     flags_query: Query<&CreatureFlags>,
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
-    species_query: Query<&Species>,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
             // No colliding with yourself.
             continue;
         }
-        let (mut attacker_transform, is_player, flags, species) =
-            creature.get_mut(event.culprit).unwrap();
+        let (mut attacker_transform, is_player, flags) = creature.get_mut(event.culprit).unwrap();
         let cannot_be_melee_attacked = {
             let defender_flags = flags_query.get(event.collided_with).unwrap();
             meleeproof_query.contains(defender_flags.species_flags)
@@ -764,18 +761,6 @@ pub fn creature_collision(
                 culprit: event.culprit,
                 hp_mod: damage,
             });
-            if is_player {
-                text.send(AddMessage {
-                    message: Message::PlayerMeleeAttack(
-                        *species_query.get(event.collided_with).unwrap(),
-                        -damage,
-                    ),
-                });
-            } else {
-                text.send(AddMessage {
-                    message: Message::HostileMeleeAttack(*species, -damage),
-                });
-            }
             // Melee attack animation.
             // This must be calculated and cannot be "momentum", it has not been altered yet.
             let atk_pos = position.get(event.culprit).unwrap();
@@ -843,6 +828,8 @@ pub fn harm_creature(
     mut hp_bar: Query<(&mut Visibility, &mut Sprite)>,
     defender_flags: Query<&Invincible>,
     mut contingency: EventWriter<TriggerContingency>,
+    mut text: EventWriter<AddMessage>,
+    text_query: Query<(&Species, Has<Player>)>,
 ) {
     for event in events.read() {
         let (mut health, children, flags) = creature.get_mut(event.entity).unwrap();
@@ -851,9 +838,35 @@ pub fn harm_creature(
         // Apply damage or healing.
         match event.hp_mod.signum() {
             -1 => {
+                let (culprit_species, culprit_is_player) = text_query.get(event.culprit).unwrap();
+                let (victim_species, victim_is_player) = text_query.get(event.entity).unwrap();
                 if is_invincible {
+                    if victim_is_player {
+                        text.send(AddMessage {
+                            message: Message::PlayerIsInvincible(*culprit_species),
+                        });
+                    }
                     continue;
                 }
+
+                if culprit_is_player {
+                    text.send(AddMessage {
+                        message: Message::PlayerAttack(*victim_species, -event.hp_mod),
+                    });
+                } else if victim_is_player {
+                    text.send(AddMessage {
+                        message: Message::HostileAttack(*culprit_species, -event.hp_mod),
+                    });
+                } else {
+                    text.send(AddMessage {
+                        message: Message::NoPlayerAttack(
+                            *culprit_species,
+                            *victim_species,
+                            -event.hp_mod,
+                        ),
+                    });
+                }
+
                 health.hp = health.hp.saturating_sub((-event.hp_mod) as usize);
                 contingency.send(TriggerContingency {
                     caster: event.culprit,

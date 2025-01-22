@@ -3,7 +3,7 @@ use std::{f32::consts::PI, time::Duration};
 use bevy::{prelude::*, text::TextLayoutInfo, window::Monitor};
 
 use crate::{
-    creature::{get_species_sprite, Species},
+    creature::Species,
     graphics::SpriteSheetAtlas,
     text::{split_text, LORE},
 };
@@ -901,8 +901,10 @@ pub struct LogSlide {
 
 pub enum Message {
     WASD,
-    HostileMeleeAttack(Species, isize),
-    PlayerMeleeAttack(Species, isize),
+    HostileAttack(Species, isize),
+    PlayerAttack(Species, isize),
+    NoPlayerAttack(Species, Species, isize),
+    PlayerIsInvincible(Species),
 }
 
 pub fn print_message_in_log(
@@ -915,12 +917,26 @@ pub fn print_message_in_log(
     for (i, event) in events.read().enumerate() {
         let new_string = match event.message {
             Message::WASD => LORE[0],
-            Message::HostileMeleeAttack(species, damage) => {
-                &format!("The {:?} hits you for {} damage.", species, damage)
-            }
-            Message::PlayerMeleeAttack(species, damage) => {
-                &format!("You hit the {:?} for {} damage.", species, damage)
-            }
+            Message::HostileAttack(species, damage) => &format!(
+                "The {} hits you for [r]{}[w] damage.",
+                match_species_with_string(&species),
+                damage
+            ),
+            Message::PlayerIsInvincible(species) => &format!(
+                "The {} fails to hit you.",
+                match_species_with_string(&species)
+            ),
+            Message::PlayerAttack(species, damage) => &format!(
+                "You hit the {} for [r]{}[w] damage.",
+                match_species_with_string(&species),
+                damage
+            ),
+            Message::NoPlayerAttack(culprit_species, victim_species, damage) => &format!(
+                "The {} hits the {} for [r]{}[w] damage.",
+                match_species_with_string(&culprit_species),
+                match_species_with_string(&victim_species),
+                damage
+            ),
         };
         commands.entity(log.single()).with_children(|parent| {
             let split_string = split_text(new_string);
@@ -1009,4 +1025,19 @@ pub fn slide_message_log(mut messages: Query<(&mut Node, &mut LogSlide)>, time: 
             message.bottom = Val::Px(new_height);
         }
     }
+}
+
+fn match_species_with_string(species: &Species) -> String {
+    let string = match species {
+        Species::Hunter => "[l]Scion of the Old World[w]",
+        Species::Apiarist => "[m]Brass Apiarist[w]",
+        Species::Tinker => "[d]Frenzied Dreamtinker[w]",
+        Species::Oracle => "[r]Anisychic Oracle[w]",
+        Species::Shrike => "[y]Jade Shrike[w]",
+        Species::Second => "[b]Emblem of Sin[w]",
+        Species::Trap => "[c]Psychic Prism[w]",
+        Species::Abazon => "[s]Terracotta Sentry[w]",
+        _ => &format!("{:?}", species),
+    };
+    string.to_owned()
 }

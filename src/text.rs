@@ -1,11 +1,12 @@
 use bevy::{
-    asset::AssetServer,
     color::{
-        palettes::css::{LIGHT_BLUE, LIME, ORANGE_RED, VIOLET, WHITE, YELLOW},
+        palettes::css::{
+            BURLYWOOD, DARK_SALMON, DARK_SEA_GREEN, LIGHT_BLUE, LIME, MAGENTA, ORANGE_RED, VIOLET,
+            WHITE, YELLOW,
+        },
         Color,
     },
     log::info,
-    prelude::Res,
     text::TextColor,
 };
 
@@ -65,6 +66,10 @@ fn match_char_code_with_color(some_char: Option<char>) -> Color {
             'w' => WHITE.into(),
             'l' => LIME.into(),
             'c' => LIGHT_BLUE.into(),
+            'm' => MAGENTA.into(),
+            'd' => DARK_SEA_GREEN.into(),
+            'b' => BURLYWOOD.into(),
+            's' => DARK_SALMON.into(),
             _ => {
                 info!("Warning, an invalid color tag was used.");
                 Color::WHITE
