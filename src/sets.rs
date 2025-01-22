@@ -14,7 +14,10 @@ use crate::{
     spells::{
         cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
     },
-    ui::{decay_fading_title, despawn_fading_title, spawn_fading_title},
+    ui::{
+        decay_fading_title, despawn_fading_title, dispense_sliding_components,
+        print_message_in_log, slide_message_log, spawn_fading_title,
+    },
 };
 
 pub struct SetsPlugin;
@@ -78,6 +81,11 @@ impl Plugin for SetsPlugin {
                 spawn_fading_title,
                 decay_fading_title,
                 despawn_fading_title,
+                // NOTE: This must go before print_message_in_log,
+                // or else TextLayoutInfo has no time to compute.
+                dispense_sliding_components,
+                print_message_in_log,
+                slide_message_log,
             )
                 .chain())
             .in_set(AnimationPhase),

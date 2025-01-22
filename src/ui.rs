@@ -1,6 +1,6 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, time::Duration};
 
-use bevy::{prelude::*, window::Monitor};
+use bevy::{prelude::*, text::TextLayoutInfo, window::Monitor};
 
 use crate::{
     creature::{get_species_sprite, Species},
@@ -13,13 +13,15 @@ impl Plugin for UIPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup);
         app.add_event::<AnnounceGameOver>();
+        app.add_event::<AddMessage>();
+        app.add_event::<SlideMessages>();
     }
 }
 
 const SOUL_WHEEL_CONTAINER_SIZE: f32 = 33.;
 const SOUL_WHEEL_RADIUS: f32 = 8.;
 const SOUL_WHEEL_SLOT_SPRITE_SIZE: f32 = 4.;
-const CHAIN_SIZE: f32 = 4.;
+const CHAIN_SIZE: f32 = 2.;
 const TITLE_FADE_TIME: f32 = 3.;
 
 #[derive(Component)]
@@ -259,7 +261,7 @@ fn setup(
     window: Query<&Monitor>,
 ) {
     let win_height = window.iter().next().unwrap().physical_height;
-    scale.0 = 0.75;
+    scale.0 = win_height as f32 / 1080.;
     // root node
     commands
         .spawn(Node {
@@ -347,20 +349,31 @@ fn setup(
                     }
 
                 });
-            dbg!(win_height);
             parent.spawn((
                     ChainBox,
                     Node {
                         width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: text_box_height(win_height),
-                        min_height: text_box_height(win_height),
-                        max_height: text_box_height(win_height),
+                        height: Val::Px(25.),
+                        min_height: Val::Px(25.),
+                        max_height: Val::Px(25.),
                         border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
                         ..default()
                     },
                     BackgroundColor(Color::srgb(0., 0., 0.)),
                 ))
                 .with_children(|parent| {
+
+            parent.spawn((
+                    MessageLog,
+                    Node {
+                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                        height: Val::Px(23.),
+                        min_height: Val::Px(23.),
+                        max_height: Val::Px(23.),
+                        overflow: Overflow::clip(),
+                        ..default()
+                    },
+                ));
                     parent.spawn((
                         Text::new("Stay alive, and slay every creature in the tower to win!\n\n\
                             Bump into creatures to attack them in melee. Slain creatures drop their "),
@@ -848,10 +861,112 @@ fn decorate_with_chains(
     }
 }
 
-fn text_box_height(window_size: u32) -> Val {
-    let mut height = window_size * 28 / 1080;
-    if height % 2 != 0 {
-        height -= 1;
+#[derive(Component)]
+pub struct MessageLog;
+
+#[derive(Component)]
+pub struct LogEntry;
+
+#[derive(Event)]
+pub struct AddMessage {
+    pub message: Message,
+}
+
+#[derive(Event)]
+pub struct SlideMessages;
+
+#[derive(Component)]
+pub struct LogSlide {
+    timer: Timer,
+    curve: EasingCurve<f32>,
+}
+
+pub enum Message {
+    WASD,
+}
+
+pub fn print_message_in_log(
+    mut events: EventReader<AddMessage>,
+    mut slide: EventWriter<SlideMessages>,
+    log: Query<Entity, With<MessageLog>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+) {
+    for (i, event) in events.read().enumerate() {
+        let new_string = match event.message {
+            Message::WASD => "This is a test",
+        };
+        commands.entity(log.single()).with_children(|parent| {
+            parent.spawn((
+                LogEntry,
+                Text::new(new_string),
+                TextLayout {
+                    justify: JustifyText::Left,
+                    linebreak: LineBreak::WordBoundary,
+                },
+                TextFont {
+                    font: asset_server.load("fonts/Play-Regular.ttf"),
+                    font_size: 1.5,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                Label,
+                Node {
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Px(-2.5),
+                    left: Val::Px(0.5),
+                    ..default()
+                },
+            ));
+        });
+        // This should only happen once.
+        if i == 0 {
+            slide.send(SlideMessages);
+        }
     }
-    Val::Px(height as f32)
+}
+
+pub fn dispense_sliding_components(
+    mut events: EventReader<SlideMessages>,
+    mut commands: Commands,
+    new_log: Query<(Entity, &TextLayoutInfo), Added<LogEntry>>,
+    old_log: Query<(Entity, &LogSlide)>,
+) {
+    for _event in events.read() {
+        let mut total_slide_distance = 0.;
+        for (entity, layout) in new_log.iter() {
+            commands.entity(entity).insert(LogSlide {
+                timer: Timer::new(Duration::from_millis(1500), TimerMode::Once),
+                curve: EasingCurve::new(
+                    -2.5,
+                    0.5 + total_slide_distance,
+                    EaseFunction::ElasticInOut,
+                ),
+            });
+            total_slide_distance += layout.size.y;
+        }
+        for (entity, slide) in old_log.iter() {
+            let current_height = slide.curve.domain().end();
+            dbg!(current_height);
+
+            commands.entity(entity).insert(LogSlide {
+                timer: Timer::new(Duration::from_millis(1500), TimerMode::Once),
+                curve: EasingCurve::new(
+                    current_height,
+                    current_height + total_slide_distance,
+                    EaseFunction::ElasticInOut,
+                ),
+            });
+        }
+    }
+}
+
+pub fn slide_message_log(mut messages: Query<(&mut Node, &mut LogSlide)>, time: Res<Time>) {
+    for (mut message, mut log) in messages.iter_mut() {
+        {
+            log.timer.tick(time.delta());
+            let new_height = log.curve.sample_clamped(log.timer.fraction());
+            message.bottom = Val::Px(new_height);
+        }
+    }
 }

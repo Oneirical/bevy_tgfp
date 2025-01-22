@@ -5,6 +5,7 @@ use crate::{
     events::{
         CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
     },
+    ui::{AddMessage, Message},
     OrdDir,
 };
 
@@ -18,6 +19,7 @@ pub fn keyboard_input(
     mut turn_manager: ResMut<TurnManager>,
     mut turn_end: EventWriter<EndTurn>,
     mut respawn: EventWriter<RespawnPlayer>,
+    mut text: EventWriter<AddMessage>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -77,5 +79,11 @@ pub fn keyboard_input(
     }
     if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {
         respawn.send(RespawnPlayer { victorious: false });
+    }
+
+    if input.just_pressed(KeyCode::KeyO) || input.just_pressed(KeyCode::KeyP) {
+        text.send(AddMessage {
+            message: Message::WASD,
+        });
     }
 }
