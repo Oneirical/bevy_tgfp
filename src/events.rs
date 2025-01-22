@@ -20,7 +20,7 @@ use crate::{
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{Axiom, CastSpell, TriggerContingency},
-    ui::{AnnounceGameOver, SoulSlot},
+    ui::{AddMessage, AnnounceGameOver, Message, SoulSlot},
     OrdDir, TILE_SIZE,
 };
 
@@ -709,10 +709,11 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
+    mut text: EventWriter<AddMessage>,
     stab_query: Query<&Stab>,
     meleeproof_query: Query<&Meleeproof>,
     mut turn_manager: ResMut<TurnManager>,
-    mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags)>,
+    mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags, &Species)>,
     flags_query: Query<&CreatureFlags>,
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
@@ -723,7 +724,8 @@ pub fn creature_collision(
             // No colliding with yourself.
             continue;
         }
-        let (mut attacker_transform, is_player, flags) = creature.get_mut(event.culprit).unwrap();
+        let (mut attacker_transform, is_player, flags, species) =
+            creature.get_mut(event.culprit).unwrap();
         let cannot_be_melee_attacked = {
             let defender_flags = flags_query.get(event.collided_with).unwrap();
             meleeproof_query.contains(defender_flags.species_flags)
@@ -760,6 +762,9 @@ pub fn creature_collision(
                 entity: event.collided_with,
                 culprit: event.culprit,
                 hp_mod: damage,
+            });
+            text.send(AddMessage {
+                message: Message::MeleeAttack(*species, -damage),
             });
             // Melee attack animation.
             // This must be calculated and cannot be "momentum", it has not been altered yet.

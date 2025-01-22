@@ -879,10 +879,12 @@ pub struct SlideMessages;
 pub struct LogSlide {
     timer: Timer,
     curve: EasingCurve<f32>,
+    target: f32,
 }
 
 pub enum Message {
     WASD,
+    MeleeAttack(Species, isize),
 }
 
 pub fn print_message_in_log(
@@ -895,6 +897,9 @@ pub fn print_message_in_log(
     for (i, event) in events.read().enumerate() {
         let new_string = match event.message {
             Message::WASD => "This is a test",
+            Message::MeleeAttack(species, damage) => {
+                &format!("The {:?} hits you for {} damage.", species, damage)
+            }
         };
         commands.entity(log.single()).with_children(|parent| {
             parent.spawn((
@@ -936,26 +941,25 @@ pub fn dispense_sliding_components(
         let mut total_slide_distance = 0.;
         for (entity, layout) in new_log.iter() {
             commands.entity(entity).insert(LogSlide {
-                timer: Timer::new(Duration::from_millis(1500), TimerMode::Once),
+                timer: Timer::new(Duration::from_millis(750), TimerMode::Once),
                 curve: EasingCurve::new(
-                    -2.5,
+                    -1.5,
                     0.5 + total_slide_distance,
-                    EaseFunction::ElasticInOut,
+                    EaseFunction::QuadraticOut,
                 ),
+                target: 0.5 + total_slide_distance,
             });
             total_slide_distance += layout.size.y;
         }
         for (entity, slide) in old_log.iter() {
-            let current_height = slide.curve.domain().end();
-            dbg!(current_height);
-
             commands.entity(entity).insert(LogSlide {
-                timer: Timer::new(Duration::from_millis(1500), TimerMode::Once),
+                timer: Timer::new(Duration::from_millis(750), TimerMode::Once),
                 curve: EasingCurve::new(
-                    current_height,
-                    current_height + total_slide_distance,
-                    EaseFunction::ElasticInOut,
+                    slide.target,
+                    slide.target + total_slide_distance,
+                    EaseFunction::QuadraticInOut,
                 ),
+                target: slide.target + total_slide_distance,
             });
         }
     }
