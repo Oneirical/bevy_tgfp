@@ -941,7 +941,7 @@ pub fn print_message_in_log(
                     Label,
                     Node {
                         position_type: PositionType::Absolute,
-                        bottom: Val::Px(-2.5),
+                        bottom: Val::Px(-200.),
                         ..default()
                     },
                 ))
@@ -977,11 +977,11 @@ pub fn dispense_sliding_components(
         let mut total_slide_distance = 0.;
         for (entity, layout) in new_log.iter() {
             commands.entity(entity).insert(LogSlide {
-                timer: Timer::new(Duration::from_millis(500), TimerMode::Once),
+                timer: Timer::new(Duration::from_millis(300), TimerMode::Once),
                 curve: EasingCurve::new(
                     -layout.size.y,
                     0.5 + total_slide_distance,
-                    EaseFunction::QuadraticOut,
+                    EaseFunction::QuadraticInOut,
                 ),
                 target: 0.5 + total_slide_distance,
             });
@@ -989,7 +989,7 @@ pub fn dispense_sliding_components(
         }
         for (entity, slide) in old_log.iter() {
             commands.entity(entity).insert(LogSlide {
-                timer: Timer::new(Duration::from_millis(500), TimerMode::Once),
+                timer: Timer::new(Duration::from_millis(300), TimerMode::Once),
                 curve: EasingCurve::new(
                     slide.target,
                     slide.target + total_slide_distance,
