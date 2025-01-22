@@ -5,6 +5,7 @@ mod input;
 mod map;
 mod sets;
 mod spells;
+mod text;
 mod ui;
 
 use bevy::{

@@ -5,6 +5,7 @@ use bevy::{prelude::*, text::TextLayoutInfo, window::Monitor};
 use crate::{
     creature::{get_species_sprite, Species},
     graphics::SpriteSheetAtlas,
+    text::{split_text, LORE},
 };
 
 pub struct UIPlugin;
@@ -271,446 +272,462 @@ fn setup(
             ..default()
         })
         .insert(PickingBehavior::IGNORE)
-        .with_children(|parent|{parent.spawn(Node {
-            flex_direction: FlexDirection::Column,
-            ..default()
-        }).with_children(|parent| {
-            // left vertical fill (border)
-            parent
-                .spawn((
-                    ChainBox,
-                    Node {
-                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0., 0., 0.)),
-                ))
-                .with_children(|parent| {
-                    let rot = PI / 4.;
-                    // Soul slots, arranged in a circle formation.
-                    for i in 0..8 {
-                        parent.spawn((
-                            SoulSlot { index: i },
-                            ImageNode {
-                                image: asset_server.load("spritesheet.png"),
-                                texture_atlas: Some(TextureAtlas {
-                                    layout: atlas_layout.handle.clone(),
-                                    index: 167,
-                                }),
-                                ..Default::default()
-                            },
-                            Node {
-                                left: Val::Px(
-                                    ((i + 6) as f32 * rot).cos() * SOUL_WHEEL_RADIUS
-                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE + 1.,
-                                ),
-                                top: Val::Px(
-                                    ((i + 6) as f32 * rot).sin() * SOUL_WHEEL_RADIUS
-                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE + 1.,
-                                ),
-                                position_type: PositionType::Absolute,
-                                width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                ..default()
-                            },
-                        ));
-                        parent.spawn((
-                            Text::new((i + 1).to_string()),
-                            TextFont {
-                                font: asset_server.load("fonts/Play-Regular.ttf"),
-                                font_size: 1.,
-                                ..default()
-                            },
-                            Label,
-                            Node {
-                                left: Val::Px(
-                                    SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).cos()
-                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7 + 1.,
-                                ),
-                                top: Val::Px(
-                                    SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).sin()
-                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
-                                        + 0.7,
-                                ),
-                                position_type: PositionType::Absolute,
-                                ..default()
-                            },
-                        ));
-                    }
-
-                });
-            parent.spawn((
-                    ChainBox,
-                    Node {
-                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: Val::Px(25.),
-                        min_height: Val::Px(25.),
-                        max_height: Val::Px(25.),
-                        border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0., 0., 0.)),
-                ))
-                .with_children(|parent| {
-
-            parent.spawn((
-                    MessageLog,
-                    Node {
-                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: Val::Px(23.),
-                        min_height: Val::Px(23.),
-                        max_height: Val::Px(23.),
-                        overflow: Overflow::clip(),
-                        ..default()
-                    },
-                ));
-                    parent.spawn((
-                        Text::new("Stay alive, and slay every creature in the tower to win!\n\n\
-                            Bump into creatures to attack them in melee. Slain creatures drop their "),
-                        TextLayout {
-                            justify: JustifyText::Left,
-                            linebreak: LineBreak::WordBoundary,
-                        },
-                        TextFont {
-                            font: asset_server.load("fonts/Play-Regular.ttf"),
-                            font_size: 0.9,
-                            ..default()
-                        },
-                        Label,
-                        Node {
-                            left: Val::Px(0.5),
-                            top: Val::Px(1.5),
-                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE / 1.2),
-                            position_type: PositionType::Absolute,
-                            ..default()
-                        },
-                    )).with_children(|parent| {
-                            parent.spawn((
-                                    TextSpan::new("Soul"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(".\n\n\
-                            Draw these "),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("Souls"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(" on the "),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("Soul Wheel"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(", and cast them for one of 6 special spells.\n\n\
-                            The effects of all 6 spells, as well as the peculiarities of each creature type, \
-                            are written on the left sidebar.\n\n\nControls:\n\n"),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("Arrow Keys"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(" or "),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("WASD"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(": Move or melee attack one step in the cardinal directions.\n"),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("Space"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(" or "),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("Q"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(": Draw one Soul on the Soul Wheel.\n"),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("1-8"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(": Cast a spell corresponding to the chosen slot on the Soul Wheel.\n"),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("Z"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(" or "),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new("X"),
-                                    TextColor(Color::srgb(0.31, 0.99, 0.25)),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                            parent.spawn((
-                                    TextSpan::new(": Reset the game.\n"),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
-                                ));
-                        });
-
-                });
-            parent.spawn((
-                    ChainBox,
-                    Node {
-                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: Val::Px(7.),
-                        min_height: Val::Px(7.),
-                        max_height: Val::Px(7.),
-                        border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0., 0., 0.)),
-                ));
-        }); });
-
-    commands
-        .spawn(Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            justify_content: JustifyContent::FlexStart,
-            ..default()
-        })
-        .insert(PickingBehavior::IGNORE)
         .with_children(|parent| {
             parent
-                .spawn((
-                    ChainBox,
-                    Node {
-                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                        height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE * 2. + 1.),
-                        display: Display::Flex,
-                        justify_content: JustifyContent::SpaceAround,
-                        flex_direction: FlexDirection::Column,
-                        border: UiRect::all(Val::Px(2.)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0., 0., 0.)),
-                ))
+                .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                })
                 .with_children(|parent| {
-                    for i in 0..12 {
-                        parent
-                            .spawn((
-                                ImageNode {
-                                    image: asset_server.load("spritesheet.png"),
-                                    texture_atlas: Some(TextureAtlas {
-                                        layout: atlas_layout.handle.clone(),
-                                        index: match i {
-                                            6 => get_species_sprite(&Species::Hunter),
-                                            7 => get_species_sprite(&Species::Apiarist),
-                                            8 => get_species_sprite(&Species::Tinker),
-                                            9 => get_species_sprite(&Species::Oracle),
-                                            10 => get_species_sprite(&Species::Shrike),
-                                            11 => get_species_sprite(&Species::Second),
-                                            _ => 160 + i,
-                                        },
-                                    }),
-                                    ..Default::default()
-                                },
-                                Node {
-                                    width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                    height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                    left: Val::Px(1.),
-                                    ..default()
-                                },
-                            ))
-                            .with_children(|parent| {
+                    // left vertical fill (border)
+                    parent
+                        .spawn((
+                            ChainBox,
+                            Node {
+                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                border: UiRect::new(
+                                    Val::Px(0.),
+                                    Val::Px(2.),
+                                    Val::Px(2.),
+                                    Val::Px(0.),
+                                ),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0., 0., 0.)),
+                        ))
+                        .with_children(|parent| {
+                            let rot = PI / 4.;
+                            // Soul slots, arranged in a circle formation.
+                            for i in 0..8 {
                                 parent.spawn((
-                                    Text::new(match i {
-                                        0 => "Saintly",
-                                        1 => "Ordered",
-                                        2 => "Artistic",
-                                        3 => "Unhinged",
-                                        4 => "Feral",
-                                        5 => "Vile",
-                                        6 => "Scion (Saintly Soul)",
-                                        7 => "Apiarist (Ordered Soul)",
-                                        8 => "Tinker (Artistic Soul)",
-                                        9 => "Oracle (Unhinged Soul)",
-                                        10 => "Shrike (Feral Soul)",
-                                        _ => "Emblem (Vile Soul)",
-                                    }),
-                                    TextLayout {
-                                        justify: JustifyText::Left,
-                                        linebreak: LineBreak::WordBoundary,
+                                    SoulSlot { index: i },
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: 167,
+                                        }),
+                                        ..Default::default()
                                     },
-                                    TextColor( match i {
-                                        0 | 6 => Color::srgb(0.31, 0.99, 0.25),
-                                        1 | 7 => Color::srgb(0.97, 0.28, 0.25),
-                                        2 | 8 => Color::srgb(0.94, 0.55, 0.38),
-                                        3 | 9 => Color::srgb(0.97, 0.99, 0.),
-                                        4 | 10 => Color::srgb(0.66, 0.82, 0.11),
-                                        _ => Color::srgb(0.87, 0.67, 0.89),
-                                    }),
+                                    Node {
+                                        left: Val::Px(
+                                            ((i + 6) as f32 * rot).cos() * SOUL_WHEEL_RADIUS
+                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE
+                                                + 1.,
+                                        ),
+                                        top: Val::Px(
+                                            ((i + 6) as f32 * rot).sin() * SOUL_WHEEL_RADIUS
+                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE
+                                                + 1.,
+                                        ),
+                                        position_type: PositionType::Absolute,
+                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        ..default()
+                                    },
+                                ));
+                                parent.spawn((
+                                    Text::new((i + 1).to_string()),
                                     TextFont {
                                         font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
+                                        font_size: 1.,
                                         ..default()
                                     },
                                     Label,
                                     Node {
-                                        left: Val::Px(5.5),
-                                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE / 1.5),
+                                        left: Val::Px(
+                                            SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).cos()
+                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
+                                                + 1.,
+                                        ),
+                                        top: Val::Px(
+                                            SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).sin()
+                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
+                                                + 0.7,
+                                        ),
                                         position_type: PositionType::Absolute,
                                         ..default()
                                     },
-                                    )).with_child((
-                                    TextSpan::new(match i {
-                                        0 => " - You, and all adjacent creatures, heal for 2 HP.",
-                                        1 => " - You cannot take damage next turn. Instantaneous.",
-                                        2 => " - Places a trap at your feet. The next creature to step on it will cause it to fire 2 damage beams in all 4 cardinal directions.",
-                                        3 => " - Fires 4 beams in all diagonal directions, dealing 2 damage.",
-                                        4 => " - Dashes 5 tiles in the direction you are facing, attacking all creatures adjacent to your path with 1 damage. Creatures struck at the end are knocked backwards.",
-                                        5 => " - The next time you strike with a melee attack, deal 6 damage.",
-                                        6 => " - Its melee attacks cause it to heal itself for 1 HP.",
-                                        7 => " - Resilient, yet slow, acting once every two turns.",
-                                        8 => " - It moves erratically, and sculpts sentries from walls. These crumble into dust once their creator is slain.",
-                                        9 => " - It charges up as it moves, empowering its next melee attack with 1 bonus damage every 5 steps.",
-                                        10 => " - Frail, but fast, acting twice every turn.",
-                                        _ => " - It hungers, devouring nearby walls to regenerate.",
-                                    }),
-                                    TextColor(Color::WHITE),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
-                                        ..default()
-                                    },
                                 ));
-                            });
-                    }
+                            }
+                        });
+                    parent
+                        .spawn((
+                            ChainBox,
+                            Node {
+                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                height: Val::Px(25.),
+                                min_height: Val::Px(25.),
+                                max_height: Val::Px(25.),
+                                border: UiRect::new(
+                                    Val::Px(0.),
+                                    Val::Px(2.),
+                                    Val::Px(2.),
+                                    Val::Px(0.),
+                                ),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0., 0., 0.)),
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                MessageLog,
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
+                                    height: Val::Px(23.),
+                                    left: Val::Px(0.5),
+                                    min_height: Val::Px(23.),
+                                    max_height: Val::Px(23.),
+                                    overflow: Overflow::clip(),
+                                    ..default()
+                                },
+                            ));
+                            // parent.spawn((
+                            //     Text::new("Stay alive, and slay every creature in the tower to win!\n\n\
+                            //         Bump into creatures to attack them in melee. Slain creatures drop their "),
+                            //     TextLayout {
+                            //         justify: JustifyText::Left,
+                            //         linebreak: LineBreak::WordBoundary,
+                            //     },
+                            //     TextFont {
+                            //         font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //         font_size: 0.9,
+                            //         ..default()
+                            //     },
+                            //     Label,
+                            //     Node {
+                            //         left: Val::Px(0.5),
+                            //         top: Val::Px(1.5),
+                            //         width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE / 1.2),
+                            //         position_type: PositionType::Absolute,
+                            //         ..default()
+                            //     },
+                            // )).with_children(|parent| {
+                            //         parent.spawn((
+                            //                 TextSpan::new("Soul"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(".\n\n\
+                            //         Draw these "),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("Souls"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(" on the "),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("Soul Wheel"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(", and cast them for one of 6 special spells.\n\n\
+                            //         The effects of all 6 spells, as well as the peculiarities of each creature type, \
+                            //         are written on the left sidebar.\n\n\nControls:\n\n"),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("Arrow Keys"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(" or "),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("WASD"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(": Move or melee attack one step in the cardinal directions.\n"),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("Space"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(" or "),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("Q"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(": Draw one Soul on the Soul Wheel.\n"),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("1-8"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(": Cast a spell corresponding to the chosen slot on the Soul Wheel.\n"),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("Z"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(" or "),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new("X"),
+                            //                 TextColor(Color::srgb(0.31, 0.99, 0.25)),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //         parent.spawn((
+                            //                 TextSpan::new(": Reset the game.\n"),
+                            //                 TextColor(Color::WHITE),
+                            //                 TextFont {
+                            //                     font: asset_server.load("fonts/Play-Regular.ttf"),
+                            //                     font_size: 0.9,
+                            //                     ..default()
+                            //                 },
+                            //             ));
+                            //     });
+                        });
+                    parent.spawn((
+                        ChainBox,
+                        Node {
+                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                            height: Val::Px(7.),
+                            min_height: Val::Px(7.),
+                            max_height: Val::Px(7.),
+                            border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0., 0., 0.)),
+                    ));
                 });
         });
+
+    // commands
+    //     .spawn(Node {
+    //         width: Val::Percent(100.0),
+    //         height: Val::Percent(100.0),
+    //         justify_content: JustifyContent::FlexStart,
+    //         ..default()
+    //     })
+    //     .insert(PickingBehavior::IGNORE)
+    //     .with_children(|parent| {
+    //         parent
+    //             .spawn((
+    //                 ChainBox,
+    //                 Node {
+    //                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+    //                     height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE * 2. + 1.),
+    //                     display: Display::Flex,
+    //                     justify_content: JustifyContent::SpaceAround,
+    //                     flex_direction: FlexDirection::Column,
+    //                     border: UiRect::all(Val::Px(2.)),
+    //                     ..default()
+    //                 },
+    //                 BackgroundColor(Color::srgb(0., 0., 0.)),
+    //             ))
+    //             .with_children(|parent| {
+    //                 for i in 0..12 {
+    //                     parent
+    //                         .spawn((
+    //                             ImageNode {
+    //                                 image: asset_server.load("spritesheet.png"),
+    //                                 texture_atlas: Some(TextureAtlas {
+    //                                     layout: atlas_layout.handle.clone(),
+    //                                     index: match i {
+    //                                         6 => get_species_sprite(&Species::Hunter),
+    //                                         7 => get_species_sprite(&Species::Apiarist),
+    //                                         8 => get_species_sprite(&Species::Tinker),
+    //                                         9 => get_species_sprite(&Species::Oracle),
+    //                                         10 => get_species_sprite(&Species::Shrike),
+    //                                         11 => get_species_sprite(&Species::Second),
+    //                                         _ => 160 + i,
+    //                                     },
+    //                                 }),
+    //                                 ..Default::default()
+    //                             },
+    //                             Node {
+    //                                 width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+    //                                 height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+    //                                 left: Val::Px(1.),
+    //                                 ..default()
+    //                             },
+    //                         ))
+    //                         .with_children(|parent| {
+    //                             parent.spawn((
+    //                                 Text::new(match i {
+    //                                     0 => "Saintly",
+    //                                     1 => "Ordered",
+    //                                     2 => "Artistic",
+    //                                     3 => "Unhinged",
+    //                                     4 => "Feral",
+    //                                     5 => "Vile",
+    //                                     6 => "Scion (Saintly Soul)",
+    //                                     7 => "Apiarist (Ordered Soul)",
+    //                                     8 => "Tinker (Artistic Soul)",
+    //                                     9 => "Oracle (Unhinged Soul)",
+    //                                     10 => "Shrike (Feral Soul)",
+    //                                     _ => "Emblem (Vile Soul)",
+    //                                 }),
+    //                                 TextLayout {
+    //                                     justify: JustifyText::Left,
+    //                                     linebreak: LineBreak::WordBoundary,
+    //                                 },
+    //                                 TextColor( match i {
+    //                                     0 | 6 => Color::srgb(0.31, 0.99, 0.25),
+    //                                     1 | 7 => Color::srgb(0.97, 0.28, 0.25),
+    //                                     2 | 8 => Color::srgb(0.94, 0.55, 0.38),
+    //                                     3 | 9 => Color::srgb(0.97, 0.99, 0.),
+    //                                     4 | 10 => Color::srgb(0.66, 0.82, 0.11),
+    //                                     _ => Color::srgb(0.87, 0.67, 0.89),
+    //                                 }),
+    //                                 TextFont {
+    //                                     font: asset_server.load("fonts/Play-Regular.ttf"),
+    //                                     font_size: 0.9,
+    //                                     ..default()
+    //                                 },
+    //                                 Label,
+    //                                 Node {
+    //                                     left: Val::Px(5.5),
+    //                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE / 1.5),
+    //                                     position_type: PositionType::Absolute,
+    //                                     ..default()
+    //                                 },
+    //                                 )).with_child((
+    //                                 TextSpan::new(match i {
+    //                                     0 => " - You, and all adjacent creatures, heal for 2 HP.",
+    //                                     1 => " - You cannot take damage next turn. Instantaneous.",
+    //                                     2 => " - Places a trap at your feet. The next creature to step on it will cause it to fire 2 damage beams in all 4 cardinal directions.",
+    //                                     3 => " - Fires 4 beams in all diagonal directions, dealing 2 damage.",
+    //                                     4 => " - Dashes 5 tiles in the direction you are facing, attacking all creatures adjacent to your path with 1 damage. Creatures struck at the end are knocked backwards.",
+    //                                     5 => " - The next time you strike with a melee attack, deal 6 damage.",
+    //                                     6 => " - Its melee attacks cause it to heal itself for 1 HP.",
+    //                                     7 => " - Resilient, yet slow, acting once every two turns.",
+    //                                     8 => " - It moves erratically, and sculpts sentries from walls. These crumble into dust once their creator is slain.",
+    //                                     9 => " - It charges up as it moves, empowering its next melee attack with 1 bonus damage every 5 steps.",
+    //                                     10 => " - Frail, but fast, acting twice every turn.",
+    //                                     _ => " - It hungers, devouring nearby walls to regenerate.",
+    //                                 }),
+    //                                 TextColor(Color::WHITE),
+    //                                 TextFont {
+    //                                     font: asset_server.load("fonts/Play-Regular.ttf"),
+    //                                     font_size: 0.9,
+    //                                     ..default()
+    //                                 },
+    //                             ));
+    //                         });
+    //                 }
+    //             });
+    //     });
     commands.run_system_cached(decorate_with_chains);
 }
 
@@ -884,7 +901,8 @@ pub struct LogSlide {
 
 pub enum Message {
     WASD,
-    MeleeAttack(Species, isize),
+    HostileMeleeAttack(Species, isize),
+    PlayerMeleeAttack(Species, isize),
 }
 
 pub fn print_message_in_log(
@@ -896,33 +914,51 @@ pub fn print_message_in_log(
 ) {
     for (i, event) in events.read().enumerate() {
         let new_string = match event.message {
-            Message::WASD => "This is a test",
-            Message::MeleeAttack(species, damage) => {
+            Message::WASD => LORE[0],
+            Message::HostileMeleeAttack(species, damage) => {
                 &format!("The {:?} hits you for {} damage.", species, damage)
+            }
+            Message::PlayerMeleeAttack(species, damage) => {
+                &format!("You hit the {:?} for {} damage.", species, damage)
             }
         };
         commands.entity(log.single()).with_children(|parent| {
-            parent.spawn((
-                LogEntry,
-                Text::new(new_string),
-                TextLayout {
-                    justify: JustifyText::Left,
-                    linebreak: LineBreak::WordBoundary,
-                },
-                TextFont {
-                    font: asset_server.load("fonts/Play-Regular.ttf"),
-                    font_size: 1.5,
-                    ..default()
-                },
-                TextColor(Color::WHITE),
-                Label,
-                Node {
-                    position_type: PositionType::Absolute,
-                    bottom: Val::Px(-2.5),
-                    left: Val::Px(0.5),
-                    ..default()
-                },
-            ));
+            let split_string = split_text(new_string);
+            parent
+                .spawn((
+                    LogEntry,
+                    Text::new(&split_string[0].0),
+                    TextLayout {
+                        justify: JustifyText::Left,
+                        linebreak: LineBreak::WordBoundary,
+                    },
+                    TextFont {
+                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                        font_size: 1.5,
+                        ..default()
+                    },
+                    TextColor(*split_string[0].1),
+                    Label,
+                    Node {
+                        position_type: PositionType::Absolute,
+                        bottom: Val::Px(-2.5),
+                        ..default()
+                    },
+                ))
+                .with_children(|parent| {
+                    for (section, color) in split_string.iter().skip(1) {
+                        parent.spawn((
+                            LogEntry,
+                            TextSpan::new(section),
+                            TextFont {
+                                font: asset_server.load("fonts/Play-Regular.ttf"),
+                                font_size: 1.5,
+                                ..default()
+                            },
+                            *color,
+                        ));
+                    }
+                });
         });
         // This should only happen once.
         if i == 0 {
@@ -941,9 +977,9 @@ pub fn dispense_sliding_components(
         let mut total_slide_distance = 0.;
         for (entity, layout) in new_log.iter() {
             commands.entity(entity).insert(LogSlide {
-                timer: Timer::new(Duration::from_millis(750), TimerMode::Once),
+                timer: Timer::new(Duration::from_millis(500), TimerMode::Once),
                 curve: EasingCurve::new(
-                    -1.5,
+                    -layout.size.y,
                     0.5 + total_slide_distance,
                     EaseFunction::QuadraticOut,
                 ),
@@ -953,7 +989,7 @@ pub fn dispense_sliding_components(
         }
         for (entity, slide) in old_log.iter() {
             commands.entity(entity).insert(LogSlide {
-                timer: Timer::new(Duration::from_millis(750), TimerMode::Once),
+                timer: Timer::new(Duration::from_millis(500), TimerMode::Once),
                 curve: EasingCurve::new(
                     slide.target,
                     slide.target + total_slide_distance,

@@ -718,6 +718,7 @@ pub fn creature_collision(
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
+    species_query: Query<&Species>,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
@@ -763,9 +764,18 @@ pub fn creature_collision(
                 culprit: event.culprit,
                 hp_mod: damage,
             });
-            text.send(AddMessage {
-                message: Message::MeleeAttack(*species, -damage),
-            });
+            if is_player {
+                text.send(AddMessage {
+                    message: Message::PlayerMeleeAttack(
+                        *species_query.get(event.collided_with).unwrap(),
+                        -damage,
+                    ),
+                });
+            } else {
+                text.send(AddMessage {
+                    message: Message::HostileMeleeAttack(*species, -damage),
+                });
+            }
             // Melee attack animation.
             // This must be calculated and cannot be "momentum", it has not been altered yet.
             let atk_pos = position.get(event.culprit).unwrap();
