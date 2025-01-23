@@ -1,8 +1,8 @@
 use bevy::{
     color::{
         palettes::css::{
-            BURLYWOOD, DARK_SALMON, DARK_SEA_GREEN, LIGHT_BLUE, LIME, MAGENTA, ORANGE_RED, VIOLET,
-            WHITE, YELLOW,
+            ANTIQUE_WHITE, BURLYWOOD, DARK_SALMON, DARK_SEA_GREEN, LIGHT_BLUE, LIME, MAGENTA,
+            ORANGE_RED, VIOLET, WHITE, YELLOW,
         },
         Color,
     },
@@ -70,6 +70,7 @@ fn match_char_code_with_color(some_char: Option<char>) -> Color {
             'd' => DARK_SEA_GREEN.into(),
             'b' => BURLYWOOD.into(),
             's' => DARK_SALMON.into(),
+            'a' => ANTIQUE_WHITE.into(),
             _ => {
                 info!("Warning, an invalid color tag was used.");
                 Color::WHITE

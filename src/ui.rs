@@ -622,7 +622,7 @@ fn setup(
                                         image: asset_server.load("spritesheet.png"),
                                         texture_atlas: Some(TextureAtlas {
                                             layout: atlas_layout.handle.clone(),
-                                            index: 18,
+                                            index: 169,
                                         }),
                                         ..Default::default()
                                     },
@@ -958,6 +958,7 @@ pub enum Message {
     PlayerIsInvincible(Species),
     HealSelf(isize),
     HealOther(Species, isize),
+    CreatureHealsItself(Species, isize),
     InvalidAction(InvalidAction),
 }
 
@@ -969,7 +970,7 @@ pub fn print_message_in_log(
     asset_server: Res<AssetServer>,
 ) {
     for (i, event) in events.read().enumerate() {
-        let new_string = match event.message {
+        let new_string = match &event.message {
             Message::WASD => LORE[0],
             Message::HostileAttack(species, damage) => &format!(
                 "The {} hits you for [r]{}[w] damage.",
@@ -993,6 +994,11 @@ pub fn print_message_in_log(
                 match_species_with_string(&species),
                 damage
             ),
+            Message::CreatureHealsItself(species, damage) => &format!(
+                "The {} heals itself for [l]{}[w] health points.",
+                match_species_with_string(&species),
+                damage
+            ),
             Message::NoPlayerAttack(culprit_species, victim_species, damage) => &format!(
                 "The {} hits the {} for [r]{}[w] damage.",
                 match_species_with_string(&culprit_species),
@@ -1012,7 +1018,7 @@ pub fn print_message_in_log(
                     match_species_with_string(&species)
                     )
                 }
-                InvalidAction::EmptySlotCast => {
+                InvalidAction::EmptySlotCast => {
                     "[y]That slot has nothing in it, you cannot cast it as a spell![w]"
                 }
             },
@@ -1116,6 +1122,9 @@ fn match_species_with_string(species: &Species) -> String {
         Species::Second => "[b]Emblem of Sin[w]",
         Species::Trap => "[c]Psychic Prism[w]",
         Species::Abazon => "[s]Terracotta Sentry[w]",
+        Species::Wall => "[a]Rampart of Nacre[w]",
+        Species::WeakWall => "[a]Rampart of Nacre[w]",
+        Species::Airlock => "[a]Quicksilver Curtains[w]",
         _ => &format!("{:?}", species),
     };
     string.to_owned()

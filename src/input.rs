@@ -5,7 +5,6 @@ use crate::{
     events::{
         CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
     },
-    ui::{AddMessage, Message},
     OrdDir,
 };
 

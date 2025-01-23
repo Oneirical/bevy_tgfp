@@ -20,7 +20,7 @@ use crate::{
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{Axiom, CastSpell, TriggerContingency},
-    ui::{AddMessage, AnnounceGameOver, Message, SoulSlot},
+    ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, SoulSlot},
     OrdDir, TILE_SIZE,
 };
 
@@ -785,7 +785,7 @@ pub fn creature_collision(
             // The player spent their turn walking into a wall, disallow the turn from ending.
             text.send(AddMessage {
                 message: Message::InvalidAction(InvalidAction::CannotMelee(
-                    *species_query.get(event.entity).unwrap(),
+                    *species_query.get(event.collided_with).unwrap(),
                 )),
             });
             turn_manager.action_this_turn = PlayerAction::Invalid;
@@ -900,17 +900,23 @@ pub fn harm_creature(
                 if health.hp == health.max_hp {
                     continue;
                 }
+                let health_difference = health.hp;
                 health.hp = min(
                     health.hp.saturating_add(event.hp_mod as usize),
                     health.max_hp,
                 );
+                let health_difference = (health.hp - health_difference) as isize;
                 if victim_is_player {
                     text.send(AddMessage {
-                        message: Message::HealSelf(event.hp_mod),
+                        message: Message::HealSelf(health_difference),
+                    });
+                } else if culprit_is_player {
+                    text.send(AddMessage {
+                        message: Message::HealOther(*victim_species, health_difference),
                     });
                 } else {
                     text.send(AddMessage {
-                        message: Message::HealOther(*victim_species, event.hp_mod),
+                        message: Message::CreatureHealsItself(*victim_species, health_difference),
                     });
                 }
             } // Healing
@@ -1051,7 +1057,7 @@ pub fn render_closing_doors(
     }
 }
 
-#[derive(Event)]
+#[derive(Event, Debug)]
 pub struct RemoveCreature {
     pub entity: Entity,
 }
@@ -1070,37 +1076,43 @@ pub fn remove_creature(
     // NOTE: This filter prevents double-removal of a single entity by removing duplicates.
     // As an example, this can happen if two Shrikes simultaneously attack the player.
     for event in events.read().filter(|e| seen.insert(e.entity)) {
-        let (position, soul, is_player, flags) = creature.get(event.entity).unwrap();
-        let cannot_drop_soul =
-            dying_flags.contains(flags.effects_flags) || dying_flags.contains(flags.species_flags);
-        // Visually flash an X where the creature was removed.
-        magic_vfx.send(PlaceMagicVfx {
-            targets: vec![*position],
-            sequence: EffectSequence::Simultaneous,
-            effect: EffectType::XCross,
-            decay: 0.5,
-            appear: 0.,
-        });
-        // For now, avoid removing the player - the game panics without a player.
-        if !is_player {
-            // Add Dizzy to prevent this creature from taking any further actions.
-            commands
-                .entity(event.entity)
-                .insert((DesignatedForRemoval, Dizzy));
-            // This triggers the "when removed" contingency.
-            contingency.send(TriggerContingency {
-                caster: event.entity,
-                contingency: Axiom::WhenRemoved,
+        // HACK: This panicked once for seemingly no good reason. It has been changed
+        // to if let Ok instead of unwrap(), hoping to see the weird behaviour in game.
+        if let Ok((position, soul, is_player, flags)) = creature.get(event.entity) {
+            // Visually flash an X where the creature was removed.
+            magic_vfx.send(PlaceMagicVfx {
+                targets: vec![*position],
+                sequence: EffectSequence::Simultaneous,
+                effect: EffectType::XCross,
+                decay: 0.5,
+                appear: 0.,
             });
-            if !cannot_drop_soul {
-                // Add this entity's soul to the soul wheel
-                soul_wheel
-                    .draw_pile
-                    .entry(*soul)
-                    .and_modify(|amount| *amount += 1);
+            let cannot_drop_soul = dying_flags.contains(flags.effects_flags)
+                || dying_flags.contains(flags.species_flags);
+            // For now, avoid removing the player - the game panics without a player.
+            if !is_player {
+                // Add Dizzy to prevent this creature from taking any further actions.
+                commands
+                    .entity(event.entity)
+                    .insert((DesignatedForRemoval, Dizzy));
+                // This triggers the "when removed" contingency.
+                contingency.send(TriggerContingency {
+                    caster: event.entity,
+                    contingency: Axiom::WhenRemoved,
+                });
+                if !cannot_drop_soul {
+                    // Add this entity's soul to the soul wheel
+                    soul_wheel
+                        .draw_pile
+                        .entry(*soul)
+                        .and_modify(|amount| *amount += 1);
+                }
+            } else {
+                respawn.send(RespawnPlayer { victorious: false });
             }
         } else {
-            respawn.send(RespawnPlayer { victorious: false });
+            info!("A RemoveEntity failed to fetch components from its Entity.");
+            dbg!(event);
         }
     }
 }
