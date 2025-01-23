@@ -1,3 +1,4 @@
+mod caste;
 mod creature;
 mod cursor;
 mod events;

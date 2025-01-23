@@ -110,6 +110,9 @@ pub fn update_cursor_box(
         let examined_entity = examined_entity.0;
         let species = creature_query.get(examined_entity).unwrap();
         let cursor_box = cursor_box.single();
+        // TODO: Instead of multiple entities, would it be interesting to
+        // have these merged into a single string with \n to space them out?
+        // This would be good in case there's a ton of "effects flags".
         let (mut species_name, mut species_description) =
             (Entity::PLACEHOLDER, Entity::PLACEHOLDER);
         commands.entity(cursor_box).despawn_descendants();

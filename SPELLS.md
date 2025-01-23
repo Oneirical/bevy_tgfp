@@ -27,6 +27,11 @@ REGEN: give a regen effect
 INVISIBLE: give invis effect
 ROOMTELE: teleport into an adjacent room (momentum)
 
+Cosmetics:
+
+SCREENSHAKE
+AFTEREFFECT (magic effects left behind as a creature teleports, like old gyvji)
+
 SMOOCH SOULSTEAL "melee spellsteal + max hp reducer"
 
 EGO PARACEON GYVJI CIRCLET HARM "self rocket blast"

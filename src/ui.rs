@@ -1,9 +1,9 @@
 use std::{f32::consts::PI, time::Duration};
 
-use bevy::{prelude::*, text::TextLayoutInfo, window::Monitor};
+use bevy::{color::palettes::css::RED, prelude::*, text::TextLayoutInfo, window::Monitor};
 
 use crate::{
-    creature::Species,
+    creature::{Soul, Species},
     graphics::SpriteSheetAtlas,
     text::{split_text, LORE},
 };
@@ -407,6 +407,20 @@ fn setup(
                                 },
                                 Visibility::Hidden,
                             ));
+                            parent.spawn((
+                                CasteBox,
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
+                                    height: Val::Px(23.),
+                                    left: Val::Px(0.5),
+                                    min_height: Val::Px(23.),
+                                    max_height: Val::Px(23.),
+                                    overflow: Overflow::clip(),
+                                    position_type: PositionType::Absolute,
+                                    ..default()
+                                },
+                                Visibility::Hidden,
+                            ));
                             // parent.spawn((
                             //     Text::new("Stay alive, and slay every creature in the tower to win!\n\n\
                             //         Bump into creatures to attack them in melee. Slain creatures drop their "),
@@ -670,6 +684,163 @@ fn setup(
                                         ..default()
                                     },
                                 ));
+                            parent
+                                .spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: 166,
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    Node {
+                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        left: Val::Px(8.5),
+                                        top: Val::Px(0.5),
+                                        ..default()
+                                    },
+                                ))
+                                .with_child((
+                                    Text::new("E"),
+                                    TextLayout {
+                                        justify: JustifyText::Center,
+                                        linebreak: LineBreak::NoWrap,
+                                    },
+                                    TextColor(Color::WHITE),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 1.5,
+                                        ..default()
+                                    },
+                                    Label,
+                                    Node {
+                                        left: Val::Px(4.1),
+                                        top: Val::Px(1.),
+                                        position_type: PositionType::Absolute,
+                                        ..default()
+                                    },
+                                ));
+                        });
+                    parent
+                        .spawn((
+                            ChainBox,
+                            LargeCastePanel(Soul::Saintly),
+                            CasteBox,
+                            Visibility::Hidden,
+                            Node {
+                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                border: UiRect::new(
+                                    Val::Px(0.),
+                                    Val::Px(2.),
+                                    Val::Px(2.),
+                                    Val::Px(0.),
+                                ),
+                                right: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                position_type: PositionType::Absolute,
+                                align_items: AlignItems::Center,
+                                justify_items: JustifyItems::Center,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0., 0., 0.)),
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn((
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: 166,
+                                    }),
+                                    ..Default::default()
+                                },
+                                Node {
+                                    width: Val::Px(64.),
+                                    height: Val::Px(64.),
+                                    right: Val::Px(0.5),
+                                    ..default()
+                                },
+                            ));
+                            for i in 0..3 {
+                                parent
+                                    .spawn((
+                                        ImageNode {
+                                            image: asset_server.load("spritesheet.png"),
+                                            texture_atlas: Some(TextureAtlas {
+                                                layout: atlas_layout.handle.clone(),
+                                                index: 160 + i * 2,
+                                            }),
+                                            ..Default::default()
+                                        },
+                                        Node {
+                                            width: Val::Px(7.),
+                                            height: Val::Px(7.),
+                                            left: Val::Px(if i == 1 { 8. } else { 16. }),
+                                            top: Val::Px(i as f32 * 20. + 8.),
+                                            position_type: PositionType::Absolute,
+                                            ..default()
+                                        },
+                                    ))
+                                    .with_child((
+                                        Text::new((i * 2 + 1).to_string()),
+                                        TextFont {
+                                            font: asset_server.load("fonts/Play-Regular.ttf"),
+                                            font_size: 3.,
+                                            ..default()
+                                        },
+                                        TextColor(Color::BLACK),
+                                        Label,
+                                        Node {
+                                            right: Val::Px(8.6),
+                                            top: Val::Px(1.9),
+                                            position_type: PositionType::Absolute,
+                                            ..default()
+                                        },
+                                    ));
+                            }
+                            for i in 0..3 {
+                                parent
+                                    .spawn((
+                                        ImageNode {
+                                            image: asset_server.load("spritesheet.png"),
+                                            texture_atlas: Some(TextureAtlas {
+                                                layout: atlas_layout.handle.clone(),
+                                                index: 161 + i * 2,
+                                            }),
+                                            ..Default::default()
+                                        },
+                                        Node {
+                                            width: Val::Px(7.),
+                                            height: Val::Px(7.),
+                                            right: Val::Px(if i == 1 { 8. } else { 16. }),
+                                            top: Val::Px(i as f32 * 20. + 8.),
+                                            position_type: PositionType::Absolute,
+                                            ..default()
+                                        },
+                                    ))
+                                    .with_child((
+                                        Text::new((i * 2 + 2).to_string()),
+                                        TextFont {
+                                            font: asset_server.load("fonts/Play-Regular.ttf"),
+                                            font_size: 3.,
+                                            ..default()
+                                        },
+                                        TextColor(Color::BLACK),
+                                        Label,
+                                        Node {
+                                            left: Val::Px(8.6),
+                                            top: Val::Px(1.9),
+                                            position_type: PositionType::Absolute,
+                                            ..default()
+                                        },
+                                    ));
+                            }
                         });
                 });
         });
@@ -945,6 +1116,12 @@ pub struct MessageLog;
 
 #[derive(Component)]
 pub struct CursorBox;
+
+#[derive(Component)]
+pub struct CasteBox;
+
+#[derive(Component)]
+pub struct LargeCastePanel(pub Soul);
 
 #[derive(Component)]
 pub struct LogEntry;

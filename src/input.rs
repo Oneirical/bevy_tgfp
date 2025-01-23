@@ -1,12 +1,13 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::Player,
+    creature::{Player, Soul},
     cursor::CursorStep,
     events::{
         CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
     },
     sets::ControlState,
+    ui::LargeCastePanel,
     OrdDir,
 };
 
@@ -23,6 +24,7 @@ pub fn keyboard_input(
     state: Res<State<ControlState>>,
     mut next_state: ResMut<NextState<ControlState>>,
     mut cursor: EventWriter<CursorStep>,
+    mut caste_menu: Query<&mut LargeCastePanel>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -37,9 +39,27 @@ pub fn keyboard_input(
     if input.any_just_pressed(soul_keys) {
         for (i, key) in soul_keys.iter().enumerate() {
             if input.just_pressed(*key) {
-                use_wheel_soul.send(UseWheelSoul { index: i });
-                turn_manager.action_this_turn = PlayerAction::Spell;
-                turn_end.send(EndTurn);
+                match state.get() {
+                    ControlState::Player => {
+                        use_wheel_soul.send(UseWheelSoul { index: i });
+                        turn_manager.action_this_turn = PlayerAction::Spell;
+                        turn_end.send(EndTurn);
+                    }
+                    ControlState::CasteMenu => {
+                        let mut caste_menu = caste_menu.single_mut();
+                        let current_soul = caste_menu.0;
+                        caste_menu.0 = match i {
+                            0 => Soul::Saintly,
+                            1 => Soul::Ordered,
+                            2 => Soul::Artistic,
+                            3 => Soul::Unhinged,
+                            4 => Soul::Feral,
+                            5 => Soul::Vile,
+                            _ => current_soul,
+                        }
+                    }
+                    _ => (),
+                }
             }
         }
     }
@@ -63,6 +83,7 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
+            ControlState::CasteMenu => todo!(),
         }
     }
     if input.just_pressed(KeyCode::ArrowRight) || input.just_pressed(KeyCode::KeyD) {
@@ -80,6 +101,7 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
+            ControlState::CasteMenu => todo!(),
         }
     }
     if input.just_pressed(KeyCode::ArrowLeft) || input.just_pressed(KeyCode::KeyA) {
@@ -97,6 +119,7 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
+            ControlState::CasteMenu => todo!(),
         }
     }
     if input.just_pressed(KeyCode::ArrowDown) || input.just_pressed(KeyCode::KeyS) {
@@ -114,6 +137,7 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
+            ControlState::CasteMenu => todo!(),
         }
     }
     if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {
@@ -123,7 +147,13 @@ pub fn keyboard_input(
     if input.just_pressed(KeyCode::KeyC) {
         match state.get() {
             ControlState::Cursor => next_state.set(ControlState::Player),
-            ControlState::Player => next_state.set(ControlState::Cursor),
+            _ => next_state.set(ControlState::Cursor),
+        }
+    }
+    if input.just_pressed(KeyCode::KeyE) {
+        match state.get() {
+            ControlState::CasteMenu => next_state.set(ControlState::Player),
+            _ => next_state.set(ControlState::CasteMenu),
         }
     }
 }

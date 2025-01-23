@@ -10,7 +10,7 @@ use bevy::{
     text::TextColor,
 };
 
-use crate::creature::Species;
+use crate::creature::{Soul, Species};
 
 use regex::Regex;
 
@@ -27,6 +27,12 @@ pub const LORE: &[&str] = &[
 "It blocks movement.",
 "It's you.",
 "It strikes at foes which approach it and is incredibly robust, but crumbles once its creator is slain.",
+"You, and all adjacent creatures, heal for 2 HP.",
+"You cannot take damage next turn. Instantaneous.",
+"Places a trap at your feet. The next creature to step on it will cause it to fire 2 damage beams in all 4 cardinal directions.",
+"Fires 4 beams in all diagonal directions, dealing 2 damage.",
+"Dashes 5 tiles in the direction you are facing, attacking all creatures adjacent to your path with 1 damage. Creatures struck at the end are knocked backwards.",
+"The next time you strike with a melee attack, deal 6 damage.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -49,6 +55,18 @@ pub fn match_species_with_description(species: &Species) -> &str {
         Species::Wall => 9,
         Species::Player => 10,
         Species::Abazon => 11,
+        _ => 0,
+    }]
+}
+
+pub fn match_soul_with_description(soul: &Soul) -> &str {
+    LORE[match soul {
+        Soul::Saintly => 12,
+        Soul::Ordered => 13,
+        Soul::Artistic => 14,
+        Soul::Unhinged => 15,
+        Soul::Feral => 16,
+        Soul::Vile => 17,
         _ => 0,
     }]
 }
@@ -93,6 +111,8 @@ fn match_char_code_with_color(some_char: Option<char>) -> Color {
             'b' => BURLYWOOD.into(),
             's' => DARK_SALMON.into(),
             'a' => ANTIQUE_WHITE.into(),
+            'o' => Color::srgb(0.94, 0.55, 0.38),
+            'g' => Color::srgb(0.66, 0.82, 0.11),
             _ => {
                 info!("Warning, an invalid color tag was used.");
                 Color::WHITE
