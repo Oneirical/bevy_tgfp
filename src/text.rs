@@ -15,6 +15,18 @@ use crate::creature::Species;
 use regex::Regex;
 
 pub const LORE: &[&str] = &[
+"Unknown.",
+"Its melee attacks cause it to heal itself for 1 HP.",
+"Resilient, yet slow, acting once every two turns.",
+"It moves erratically, and sculpts sentries from walls. These crumble into dust once their creator is slain.",
+"It charges up as it moves, empowering its next melee attack with 1 bonus damage every 5 steps.",
+"Frail, but fast, acting twice every turn.",
+"It hungers, devouring nearby walls to regenerate.",
+"It opens once all hostile creatures in its connected room are slain.",
+"It blocks movement, but is vulnerable to magical effects.",
+"It blocks movement.",
+"It's you.",
+"It strikes at foes which approach it and is incredibly robust, but crumbles once its creator is slain.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -24,11 +36,21 @@ pub const LORE: &[&str] = &[
 "Focused Thought Pierces the Veil - Form\nThe Caster shoots a linear beam in the direction of its Momentum, stopping at the first Creature hit. All Tiles touched, including the contacted Creature, are Targeted.",
 ];
 
-pub fn match_species_with_description(species: &Species) -> usize {
-    match species {
-        Species::Oracle => 0,
+pub fn match_species_with_description(species: &Species) -> &str {
+    LORE[match species {
+        Species::Hunter => 1,
+        Species::Apiarist => 2,
+        Species::Tinker => 3,
+        Species::Oracle => 4,
+        Species::Shrike => 5,
+        Species::Second => 6,
+        Species::Airlock => 7,
+        Species::WeakWall => 8,
+        Species::Wall => 9,
+        Species::Player => 10,
+        Species::Abazon => 11,
         _ => 0,
-    }
+    }]
 }
 
 pub fn split_text(text: &str) -> Vec<(String, TextColor)> {

@@ -388,8 +388,24 @@ fn setup(
                                     min_height: Val::Px(23.),
                                     max_height: Val::Px(23.),
                                     overflow: Overflow::clip(),
+                                    position_type: PositionType::Absolute,
                                     ..default()
                                 },
+                                Visibility::Inherited,
+                            ));
+                            parent.spawn((
+                                CursorBox,
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
+                                    height: Val::Px(23.),
+                                    left: Val::Px(0.5),
+                                    min_height: Val::Px(23.),
+                                    max_height: Val::Px(23.),
+                                    overflow: Overflow::clip(),
+                                    position_type: PositionType::Absolute,
+                                    ..default()
+                                },
+                                Visibility::Hidden,
                             ));
                             // parent.spawn((
                             //     Text::new("Stay alive, and slay every creature in the tower to win!\n\n\
@@ -928,6 +944,9 @@ fn decorate_with_chains(
 pub struct MessageLog;
 
 #[derive(Component)]
+pub struct CursorBox;
+
+#[derive(Component)]
 pub struct LogEntry;
 
 #[derive(Event)]
@@ -1025,44 +1044,18 @@ pub fn print_message_in_log(
                 }
             },
         };
+        let mut new_text = Entity::PLACEHOLDER;
         commands.entity(log.single()).with_children(|parent| {
-            let split_string = split_text(new_string);
-            parent
-                .spawn((
-                    LogEntry,
-                    Text::new(&split_string[0].0),
-                    TextLayout {
-                        justify: JustifyText::Left,
-                        linebreak: LineBreak::WordBoundary,
-                    },
-                    TextFont {
-                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                        font_size: 1.5,
-                        ..default()
-                    },
-                    TextColor(*split_string[0].1),
-                    Label,
-                    Node {
-                        position_type: PositionType::Absolute,
-                        bottom: Val::Px(-200.),
-                        ..default()
-                    },
-                ))
-                .with_children(|parent| {
-                    for (section, color) in split_string.iter().skip(1) {
-                        parent.spawn((
-                            LogEntry,
-                            TextSpan::new(section),
-                            TextFont {
-                                font: asset_server.load("fonts/Play-Regular.ttf"),
-                                font_size: 1.5,
-                                ..default()
-                            },
-                            *color,
-                        ));
-                    }
-                });
+            new_text = spawn_split_text(new_string, parent, &asset_server);
         });
+        // Necessary to prevent a "flash" of the text before it is moved by
+        // slide_message_log.
+        commands.entity(new_text).insert(Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(-200.),
+            ..default()
+        });
+
         // This should only happen once.
         if i == 0 {
             slide.send(SlideMessages);
@@ -1114,7 +1107,7 @@ pub fn slide_message_log(mut messages: Query<(&mut Node, &mut LogSlide)>, time: 
     }
 }
 
-fn match_species_with_string(species: &Species) -> String {
+pub fn match_species_with_string(species: &Species) -> String {
     let string = match species {
         Species::Hunter => "[l]Scion of the Old World[w]",
         Species::Apiarist => "[m]Brass Apiarist[w]",
@@ -1127,7 +1120,51 @@ fn match_species_with_string(species: &Species) -> String {
         Species::Wall => "[a]Rampart of Nacre[w]",
         Species::WeakWall => "[a]Rampart of Nacre[w]",
         Species::Airlock => "[a]Quicksilver Curtains[w]",
+        Species::Player => "[p]Reality Anchor[w]",
         _ => &format!("{:?}", species),
     };
     string.to_owned()
+}
+
+pub fn spawn_split_text(
+    new_string: &str,
+    parent: &mut ChildBuilder,
+    asset_server: &Res<AssetServer>,
+) -> Entity {
+    let split_string = split_text(new_string);
+    parent
+        .spawn((
+            LogEntry,
+            Text::new(&split_string[0].0),
+            TextLayout {
+                justify: JustifyText::Left,
+                linebreak: LineBreak::WordBoundary,
+            },
+            TextFont {
+                font: asset_server.load("fonts/Play-Regular.ttf"),
+                font_size: 1.5,
+                ..default()
+            },
+            TextColor(*split_string[0].1),
+            Label,
+            Node {
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+        ))
+        .with_children(|parent| {
+            for (section, color) in split_string.iter().skip(1) {
+                parent.spawn((
+                    LogEntry,
+                    TextSpan::new(section),
+                    TextFont {
+                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                        font_size: 1.5,
+                        ..default()
+                    },
+                    *color,
+                ));
+            }
+        })
+        .id()
 }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor},
+    cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
@@ -30,7 +30,8 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnExit(ControlState::Cursor), despawn_cursor);
         app.add_systems(
             Update,
-            (cursor_step, teleport_cursor).run_if(in_state(ControlState::Cursor)),
+            (cursor_step, teleport_cursor, update_cursor_box)
+                .run_if(in_state(ControlState::Cursor)),
         );
         app.add_systems(
             Update,
