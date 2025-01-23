@@ -597,18 +597,62 @@ fn setup(
                             //             ));
                             //     });
                         });
-                    parent.spawn((
-                        ChainBox,
-                        Node {
-                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                            height: Val::Px(7.),
-                            min_height: Val::Px(7.),
-                            max_height: Val::Px(7.),
-                            border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0., 0., 0.)),
-                    ));
+                    parent
+                        .spawn((
+                            ChainBox,
+                            Node {
+                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                height: Val::Px(7.),
+                                min_height: Val::Px(7.),
+                                max_height: Val::Px(7.),
+                                border: UiRect::new(
+                                    Val::Px(0.),
+                                    Val::Px(2.),
+                                    Val::Px(2.),
+                                    Val::Px(0.),
+                                ),
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0., 0., 0.)),
+                        ))
+                        .with_children(|parent| {
+                            parent
+                                .spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: 18,
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    Node {
+                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        left: Val::Px(1.),
+                                        ..default()
+                                    },
+                                ))
+                                .with_child((
+                                    Text::new("C"),
+                                    TextLayout {
+                                        justify: JustifyText::Center,
+                                        linebreak: LineBreak::NoWrap,
+                                    },
+                                    TextColor(Color::WHITE),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 0.9,
+                                        ..default()
+                                    },
+                                    Label,
+                                    Node {
+                                        left: Val::Px(5.5),
+                                        position_type: PositionType::Absolute,
+                                        ..default()
+                                    },
+                                ));
+                        });
                 });
         });
 
@@ -899,12 +943,22 @@ pub struct LogSlide {
     target: f32,
 }
 
+pub enum InvalidAction {
+    WheelFull,
+    NoSoulsInPile,
+    CannotMelee(Species),
+    EmptySlotCast,
+}
+
 pub enum Message {
     WASD,
     HostileAttack(Species, isize),
     PlayerAttack(Species, isize),
     NoPlayerAttack(Species, Species, isize),
     PlayerIsInvincible(Species),
+    HealSelf(isize),
+    HealOther(Species, isize),
+    InvalidAction(InvalidAction),
 }
 
 pub fn print_message_in_log(
@@ -931,12 +985,37 @@ pub fn print_message_in_log(
                 match_species_with_string(&species),
                 damage
             ),
+            Message::HealSelf(damage) => {
+                &format!("You heal yourself for [l]{}[w] health points.", damage)
+            }
+            Message::HealOther(species, damage) => &format!(
+                "You heal the {} for [l]{}[w] health points.",
+                match_species_with_string(&species),
+                damage
+            ),
             Message::NoPlayerAttack(culprit_species, victim_species, damage) => &format!(
                 "The {} hits the {} for [r]{}[w] damage.",
                 match_species_with_string(&culprit_species),
                 match_species_with_string(&victim_species),
                 damage
             ),
+            Message::InvalidAction(action) => match action {
+                InvalidAction::WheelFull => {
+                    "[y]Your Soul Wheel is already full, cast some with 1-8 before drawing more![w]"
+                }
+                InvalidAction::NoSoulsInPile => {
+                    "[y]You have no Souls left in your pile, and must slay more creatures before drawing more![w]"
+                }
+                InvalidAction::CannotMelee(species) => {
+                    &format!(
+                    "[y]You cannot hope to breach the {}[y]'s defenses![w]",
+                    match_species_with_string(&species)
+                    )
+                }
+                InvalidAction::EmptySlotCast => {
+                    "[y]That slot has nothing in it, you cannot cast it as a spell![w]"
+                }
+            },
         };
         commands.entity(log.single()).with_children(|parent| {
             let split_string = split_text(new_string);

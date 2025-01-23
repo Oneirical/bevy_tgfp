@@ -125,6 +125,7 @@ pub fn draw_soul(
     mut soul_wheel: ResMut<SoulWheel>,
     mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
     mut turn_manager: ResMut<TurnManager>,
+    mut text: EventWriter<AddMessage>,
 ) {
     for event in events.read() {
         for _i in 0..event.amount {
@@ -151,10 +152,16 @@ pub fn draw_soul(
                     }
                 } else {
                     // There is nothing left in the draw pile!
+                    text.send(AddMessage {
+                        message: Message::InvalidAction(InvalidAction::NoSoulsInPile),
+                    });
                     turn_manager.action_this_turn = PlayerAction::Invalid;
                 }
             } else {
                 // There is no empty space in the Wheel!
+                text.send(AddMessage {
+                    message: Message::InvalidAction(InvalidAction::WheelFull),
+                });
                 turn_manager.action_this_turn = PlayerAction::Invalid;
             }
         }
@@ -173,6 +180,7 @@ pub fn use_wheel_soul(
     mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
     mut turn_manager: ResMut<TurnManager>,
     player: Query<(Entity, &Spellbook), With<Player>>,
+    mut text: EventWriter<AddMessage>,
 ) {
     for event in events.read() {
         let mut newly_discarded = None;
@@ -197,6 +205,9 @@ pub fn use_wheel_soul(
             }
         } else {
             // That soul slot is empty!
+            text.send(AddMessage {
+                message: Message::InvalidAction(InvalidAction::EmptySlotCast),
+            });
             turn_manager.action_this_turn = PlayerAction::Invalid;
         }
         // The spent soul is sent to the discard pile.
@@ -709,7 +720,9 @@ pub struct CreatureCollision {
 pub fn creature_collision(
     mut events: EventReader<CreatureCollision>,
     mut harm: EventWriter<DamageOrHealCreature>,
+    mut text: EventWriter<AddMessage>,
     stab_query: Query<&Stab>,
+    species_query: Query<&Species>,
     meleeproof_query: Query<&Meleeproof>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags)>,
@@ -770,6 +783,11 @@ pub fn creature_collision(
             commands.entity(event.culprit).insert(SlideAnimation);
         } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) && is_player {
             // The player spent their turn walking into a wall, disallow the turn from ending.
+            text.send(AddMessage {
+                message: Message::InvalidAction(InvalidAction::CannotMelee(
+                    *species_query.get(event.entity).unwrap(),
+                )),
+            });
             turn_manager.action_this_turn = PlayerAction::Invalid;
         }
     }
@@ -835,11 +853,11 @@ pub fn harm_creature(
         let (mut health, children, flags) = creature.get_mut(event.entity).unwrap();
         let is_invincible = defender_flags.contains(flags.effects_flags)
             || defender_flags.contains(flags.species_flags);
+        let (culprit_species, culprit_is_player) = text_query.get(event.culprit).unwrap();
+        let (victim_species, victim_is_player) = text_query.get(event.entity).unwrap();
         // Apply damage or healing.
         match event.hp_mod.signum() {
             -1 => {
-                let (culprit_species, culprit_is_player) = text_query.get(event.culprit).unwrap();
-                let (victim_species, victim_is_player) = text_query.get(event.entity).unwrap();
                 if is_invincible {
                     if victim_is_player {
                         text.send(AddMessage {
@@ -879,10 +897,22 @@ pub fn harm_creature(
             } // Damage
             1 => {
                 // Do not heal above max HP.
+                if health.hp == health.max_hp {
+                    continue;
+                }
                 health.hp = min(
                     health.hp.saturating_add(event.hp_mod as usize),
                     health.max_hp,
-                )
+                );
+                if victim_is_player {
+                    text.send(AddMessage {
+                        message: Message::HealSelf(event.hp_mod),
+                    });
+                } else {
+                    text.send(AddMessage {
+                        message: Message::HealOther(*victim_species, event.hp_mod),
+                    });
+                }
             } // Healing
             _ => (), // 0 values do nothing
         }
@@ -1203,9 +1233,10 @@ pub fn end_turn(
             turn_manager.action_this_turn,
             PlayerAction::Invalid | PlayerAction::Skipped
         ) {
-            if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
-                screenshake.intensity = 3;
-            }
+            // NOTE: Disabled because I ended up disliking this effect.
+            // if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
+            //     screenshake.intensity = 3;
+            // }
             return;
         }
         // Victory check.

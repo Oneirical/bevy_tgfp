@@ -19,7 +19,6 @@ pub fn keyboard_input(
     mut turn_manager: ResMut<TurnManager>,
     mut turn_end: EventWriter<EndTurn>,
     mut respawn: EventWriter<RespawnPlayer>,
-    mut text: EventWriter<AddMessage>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -81,9 +80,7 @@ pub fn keyboard_input(
         respawn.send(RespawnPlayer { victorious: false });
     }
 
-    if input.just_pressed(KeyCode::KeyO) || input.just_pressed(KeyCode::KeyP) {
-        text.send(AddMessage {
-            message: Message::WASD,
-        });
+    if input.just_pressed(KeyCode::KeyC) {
+        todo!()
     }
 }
