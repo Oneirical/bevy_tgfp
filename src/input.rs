@@ -2,9 +2,11 @@ use bevy::prelude::*;
 
 use crate::{
     creature::Player,
+    cursor::CursorStep,
     events::{
         CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
     },
+    sets::ControlState,
     OrdDir,
 };
 
@@ -18,6 +20,9 @@ pub fn keyboard_input(
     mut turn_manager: ResMut<TurnManager>,
     mut turn_end: EventWriter<EndTurn>,
     mut respawn: EventWriter<RespawnPlayer>,
+    state: Res<State<ControlState>>,
+    mut next_state: ResMut<NextState<ControlState>>,
+    mut cursor: EventWriter<CursorStep>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -44,42 +49,81 @@ pub fn keyboard_input(
         turn_end.send(EndTurn);
     }
     if input.just_pressed(KeyCode::ArrowUp) || input.just_pressed(KeyCode::KeyW) {
-        events.send(CreatureStep {
-            direction: OrdDir::Up,
-            entity: player.get_single().unwrap(),
-        });
-        turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn);
+        match state.get() {
+            ControlState::Cursor => {
+                cursor.send(CursorStep {
+                    direction: OrdDir::Up,
+                });
+            }
+            ControlState::Player => {
+                events.send(CreatureStep {
+                    direction: OrdDir::Up,
+                    entity: player.get_single().unwrap(),
+                });
+                turn_manager.action_this_turn = PlayerAction::Step;
+                turn_end.send(EndTurn);
+            }
+        }
     }
     if input.just_pressed(KeyCode::ArrowRight) || input.just_pressed(KeyCode::KeyD) {
-        events.send(CreatureStep {
-            direction: OrdDir::Right,
-            entity: player.get_single().unwrap(),
-        });
-        turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn);
+        match state.get() {
+            ControlState::Cursor => {
+                cursor.send(CursorStep {
+                    direction: OrdDir::Right,
+                });
+            }
+            ControlState::Player => {
+                events.send(CreatureStep {
+                    direction: OrdDir::Right,
+                    entity: player.get_single().unwrap(),
+                });
+                turn_manager.action_this_turn = PlayerAction::Step;
+                turn_end.send(EndTurn);
+            }
+        }
     }
     if input.just_pressed(KeyCode::ArrowLeft) || input.just_pressed(KeyCode::KeyA) {
-        events.send(CreatureStep {
-            direction: OrdDir::Left,
-            entity: player.get_single().unwrap(),
-        });
-        turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn);
+        match state.get() {
+            ControlState::Cursor => {
+                cursor.send(CursorStep {
+                    direction: OrdDir::Left,
+                });
+            }
+            ControlState::Player => {
+                events.send(CreatureStep {
+                    direction: OrdDir::Left,
+                    entity: player.get_single().unwrap(),
+                });
+                turn_manager.action_this_turn = PlayerAction::Step;
+                turn_end.send(EndTurn);
+            }
+        }
     }
     if input.just_pressed(KeyCode::ArrowDown) || input.just_pressed(KeyCode::KeyS) {
-        events.send(CreatureStep {
-            direction: OrdDir::Down,
-            entity: player.get_single().unwrap(),
-        });
-        turn_manager.action_this_turn = PlayerAction::Step;
-        turn_end.send(EndTurn);
+        match state.get() {
+            ControlState::Cursor => {
+                cursor.send(CursorStep {
+                    direction: OrdDir::Down,
+                });
+            }
+            ControlState::Player => {
+                events.send(CreatureStep {
+                    direction: OrdDir::Down,
+                    entity: player.get_single().unwrap(),
+                });
+                turn_manager.action_this_turn = PlayerAction::Step;
+                turn_end.send(EndTurn);
+            }
+        }
     }
     if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {
         respawn.send(RespawnPlayer { victorious: false });
     }
 
     if input.just_pressed(KeyCode::KeyC) {
-        todo!()
+        match state.get() {
+            ControlState::Cursor => next_state.set(ControlState::Player),
+            ControlState::Player => next_state.set(ControlState::Cursor),
+        }
     }
 }

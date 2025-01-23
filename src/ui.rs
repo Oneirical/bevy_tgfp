@@ -629,7 +629,8 @@ fn setup(
                                     Node {
                                         width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
                                         height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        left: Val::Px(1.),
+                                        left: Val::Px(0.5),
+                                        top: Val::Px(0.5),
                                         ..default()
                                     },
                                 ))
@@ -642,12 +643,13 @@ fn setup(
                                     TextColor(Color::WHITE),
                                     TextFont {
                                         font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 0.9,
+                                        font_size: 1.5,
                                         ..default()
                                     },
                                     Label,
                                     Node {
-                                        left: Val::Px(5.5),
+                                        left: Val::Px(4.1),
+                                        top: Val::Px(1.),
                                         position_type: PositionType::Absolute,
                                         ..default()
                                     },

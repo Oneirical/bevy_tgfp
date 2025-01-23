@@ -1,4 +1,5 @@
 mod creature;
+mod cursor;
 mod events;
 mod graphics;
 mod input;
@@ -14,6 +15,7 @@ use bevy::{
     prelude::*,
     window::WindowResolution,
 };
+use cursor::CursorPlugin;
 use events::EventPlugin;
 use graphics::GraphicsPlugin;
 use map::{MapPlugin, Position};
@@ -51,6 +53,7 @@ fn main() {
             GraphicsPlugin,
             MapPlugin,
             UIPlugin,
+            CursorPlugin,
         ))
         .edit_schedule(Update, |schedule| {
             schedule.set_build_settings(ScheduleBuildSettings {
