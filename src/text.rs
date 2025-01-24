@@ -33,6 +33,8 @@ pub const LORE: &[&str] = &[
 "Fires 4 beams in all diagonal directions, dealing 2 damage.",
 "Dashes 5 tiles in the direction you are facing, attacking all creatures adjacent to your path with 1 damage. Creatures struck at the end are knocked backwards.",
 "The next time you strike with a melee attack, deal 6 damage.",
+"[y]Arrow Keys[w] or [y]WASD[w]: Move or melee attack one step in the cardinal directions.\n[y]Space[w] or [y]Q[w]: Draw one Soul on the Soul Wheel.\n[y]1-8[w]: Cast a spell corresponding to the chosen slot on the Soul Wheel.\n[y]C[w]: Enter Cursor mode to learn more about the 6 enemy types.\n[y]E[w]: Enter Caste mode to learn more about the 6 available spells.\n[y]Z[w] or [y]X[w]: Reset the game.",
+"Press [y]1-6[w] to learn about the 6 different spells.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -67,6 +69,7 @@ pub fn match_soul_with_description(soul: &Soul) -> &str {
         Soul::Unhinged => 15,
         Soul::Feral => 16,
         Soul::Vile => 17,
+        Soul::Empty => 19,
         _ => 0,
     }]
 }

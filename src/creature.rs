@@ -38,6 +38,8 @@ pub enum Soul {
     Unhinged,
     Feral,
     Vile,
+    // Its sole purpose is to display a tutorial tooltip in the Caste UI menu.
+    Empty,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the soul type.
@@ -49,6 +51,7 @@ pub fn get_soul_sprite(soul: &Soul) -> usize {
         Soul::Unhinged => 163,
         Soul::Feral => 164,
         Soul::Vile => 165,
+        Soul::Empty => 166,
     }
 }
 

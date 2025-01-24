@@ -10,6 +10,7 @@ use rand::{
 use crate::{
     creature::{CreatureFlags, FlagEntity, Intangible, Player, Species},
     events::{RemoveCreature, SummonCreature},
+    ui::AddMessage,
     OrdDir,
 };
 
@@ -228,7 +229,11 @@ pub fn spawn_cage(
     mut summon: EventWriter<SummonCreature>,
     mut faiths_end: ResMut<FaithsEnd>,
     player: Query<&Player>,
+    mut text: EventWriter<AddMessage>,
 ) {
+    text.send(AddMessage {
+        message: crate::ui::Message::Tutorial,
+    });
     let size = 9;
     for tower_floor in 0..15 {
         let mut cage = generate_cage(

@@ -30,8 +30,8 @@ fn main() {
     let app_window = Some(Window {
         title: "The Games Foxes Play".into(),
         resolution: WindowResolution::new(5120., 2880.).with_scale_factor_override(16.),
-        mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
-        // mode: bevy::window::WindowMode::Windowed,
+        // mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+        mode: bevy::window::WindowMode::Windowed,
         ..default()
     });
     App::new()
@@ -56,12 +56,12 @@ fn main() {
             UIPlugin,
             CursorPlugin,
         ))
-        .edit_schedule(Update, |schedule| {
-            schedule.set_build_settings(ScheduleBuildSettings {
-                ambiguity_detection: LogLevel::Warn,
-                ..default()
-            });
-        })
+        // .edit_schedule(Update, |schedule| {
+        //     schedule.set_build_settings(ScheduleBuildSettings {
+        //         ambiguity_detection: LogLevel::Warn,
+        //         ..default()
+        //     });
+        // })
         .run();
 }
 

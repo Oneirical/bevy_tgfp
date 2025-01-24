@@ -86,6 +86,7 @@ pub fn match_soul_with_string(soul: &Soul) -> String {
         Soul::Unhinged => "[y]Unhinged Soul[w]",
         Soul::Feral => "[g]Feral Soul[w]",
         Soul::Vile => "[p]Vile Soul[w]",
+        Soul::Empty => "[w]Spell Menu[w]",
         _ => &format!("{:?}", soul),
     };
     string.to_owned()
