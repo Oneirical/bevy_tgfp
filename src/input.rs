@@ -25,6 +25,7 @@ pub fn keyboard_input(
     mut next_state: ResMut<NextState<ControlState>>,
     mut cursor: EventWriter<CursorStep>,
     mut caste_menu: Query<&mut LargeCastePanel>,
+    mut scale: ResMut<UiScale>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -155,5 +156,11 @@ pub fn keyboard_input(
             ControlState::CasteMenu => next_state.set(ControlState::Player),
             _ => next_state.set(ControlState::CasteMenu),
         }
+    }
+    if input.pressed(KeyCode::KeyO) {
+        scale.0 += 0.02;
+    }
+    if input.pressed(KeyCode::KeyP) {
+        scale.0 -= 0.02;
     }
 }
