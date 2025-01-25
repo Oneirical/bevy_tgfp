@@ -1,10 +1,11 @@
+cargo-features = ["codegen-backend"]
 [package]
 name = "redesign_tgfp"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.15.1", features = [] }
+bevy = { version = "0.15.1", features = ["dynamic_linking"] }
 rand = "0.8.5"
 regex = "1.11.1"
 log = { version = "*", features = ["max_level_debug", "release_max_level_warn"] }
@@ -12,10 +13,12 @@ log = { version = "*", features = ["max_level_debug", "release_max_level_warn"] 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
 opt-level = 1
+codegen-backend = "cranelift"
 
 # Enable a large amount of optimization in the dev profile for dependencies.
 [profile.dev.package."*"]
 opt-level = 3
+codegen-backend = "llvm"
 
 # Enable more optimization in the release profile at the cost of compile time.
 [profile.release]

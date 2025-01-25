@@ -1334,7 +1334,7 @@ pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
     spell_stack.spells.is_empty()
 }
 
-fn walk_grid(p0: Position, p1: Position) -> Vec<Position> {
+pub fn walk_grid(p0: Position, p1: Position) -> Vec<Position> {
     let dx = p1.x - p0.x;
     let dy = p1.y - p0.y;
     let nx = dx.abs();

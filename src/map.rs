@@ -234,24 +234,33 @@ pub fn spawn_cage(
     text.send(AddMessage {
         message: crate::ui::Message::Tutorial,
     });
-    let size = 9;
-    for tower_floor in 0..15 {
+    let tower_height = 1;
+    let mut tower_height_tiles = 0;
+    let mut last_room_size = 9;
+    for tower_floor in 0..tower_height {
+        let size = if tower_floor == 2 { 17 } else { 9 };
         let mut cage = generate_cage(
             tower_floor,
             // Spawn the player in the first room
             // (the player must not already exist).
             tower_floor == 0 && player.is_empty(),
+            tower_floor != tower_height - 1,
             size,
-            match tower_floor {
-                0 => &[OrdDir::Up],
-                14 => &[OrdDir::Down],
-                _ => &[OrdDir::Up, OrdDir::Down],
+            if tower_floor == 0 {
+                &[OrdDir::Up]
+            } else if tower_floor == tower_height - 1 {
+                &[OrdDir::Down]
+            } else {
+                &[OrdDir::Up, OrdDir::Down]
             },
         );
-        add_creatures(&mut cage, 2 + tower_floor);
+        add_creatures(&mut cage, 2 + tower_floor, tower_floor == tower_height - 1);
 
         for (idx, tile_char) in cage.iter().enumerate() {
-            let cage_corner = Position::new(0, (tower_floor * size) as i32);
+            let cage_corner = Position::new(
+                (last_room_size as i32 - size as i32) / 2,
+                tower_height_tiles as i32,
+            );
             let position = Position::new(
                 cage_corner.x + idx as i32 % size as i32,
                 cage_corner.y + size as i32 - 1 - idx as i32 / size as i32,
@@ -267,6 +276,8 @@ pub fn spawn_cage(
                 'A' => Species::Apiarist,
                 'F' => Species::Shrike,
                 'O' => Species::Oracle,
+                'E' => Species::EpsilonHead,
+                't' => Species::EpsilonTail,
                 '^' | '>' | '<' | 'V' => Species::Airlock,
                 _ => continue,
             };
@@ -302,10 +313,21 @@ pub fn spawn_cage(
                 );
             }
         }
+        tower_height_tiles += size;
+        last_room_size = size;
     }
 }
 
-fn add_creatures(cage: &mut [char], creatures_amount: usize) {
+fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) {
+    if spawn_snake {
+        cage[20] = 'E';
+        cage[21] = 't';
+        cage[22] = 't';
+        cage[23] = 't';
+        cage[24] = 't';
+        return;
+    }
+
     let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
 
     let floor_positions: Vec<usize> = cage
@@ -327,6 +349,7 @@ fn add_creatures(cage: &mut [char], creatures_amount: usize) {
 pub fn generate_cage(
     floor: usize,
     spawn_player: bool,
+    spawn_walls: bool,
     size: usize,
     connections: &[OrdDir],
 ) -> Vec<char> {
@@ -353,7 +376,7 @@ pub fn generate_cage(
             // Edges get walls 100% of the time, other tiles, 30% of the time.
             } else if is_edge(i, size) {
                 cage.push('#');
-            } else if rng.gen::<f32>() < 0.3 {
+            } else if rng.gen::<f32>() < 0.3 && spawn_walls {
                 cage.push('W');
             // Everything else is a floor.
             } else {

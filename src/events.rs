@@ -10,16 +10,17 @@ use crate::{
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration, FlagEntity,
-        Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Meleeproof,
-        NoDropSoul, Player, PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, Spellbook,
-        Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Magnetic,
+        Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random, Sleeping, Soul,
+        Species, Speed, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned,
+        Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         Screenshake, SlideAnimation, SpriteSheetAtlas,
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
-    spells::{Axiom, CastSpell, TriggerContingency},
+    spells::{walk_grid, Axiom, CastSpell, TriggerContingency},
     ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, SoulSlot},
     OrdDir, TILE_SIZE,
 };
@@ -360,14 +361,14 @@ pub fn summon_creature(
                 },
                 soul: match &event.species {
                     Species::Player => Soul::Saintly,
-                    Species::Wall => Soul::Ordered,
-                    Species::WeakWall => Soul::Ordered,
+                    Species::Wall | Species::WeakWall => Soul::Ordered,
                     Species::Hunter => Soul::Saintly,
                     Species::Shrike => Soul::Feral,
                     Species::Apiarist => Soul::Ordered,
                     Species::Tinker => Soul::Artistic,
                     Species::Second => Soul::Vile,
                     Species::Oracle => Soul::Unhinged,
+                    Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
                     _ => Soul::Unhinged,
                 },
                 spellbook: event
@@ -412,6 +413,7 @@ pub fn summon_creature(
                     Species::Second,
                     Species::Hunter,
                     Species::Apiarist,
+                    Species::EpsilonHead,
                 ]
                 .contains(&event.species)
             {
@@ -423,6 +425,7 @@ pub fn summon_creature(
                 Species::Second,
                 Species::Hunter,
                 Species::Apiarist,
+                Species::EpsilonHead,
             ]
             .contains(&event.species)
             {
@@ -524,6 +527,15 @@ pub fn assign_species_components(
             Species::Abazon => {
                 new_creature.insert((Immobile, Hunt));
             }
+            Species::EpsilonHead => {
+                new_creature.insert((
+                    Magnetic {
+                        species: Species::EpsilonTail,
+                        conductor: None,
+                    },
+                    Hunt,
+                ));
+            }
             Species::Apiarist => {
                 new_creature.insert((Speed::Slow { wait_turns: 1 }, Hunt));
             }
@@ -592,6 +604,60 @@ pub fn creature_step(
             entity: event.entity,
             direction: event.direction,
         });
+    }
+}
+
+#[derive(Event)]
+pub struct MagnetFollow {
+    pub old_pos: Position,
+    pub conductor: Entity,
+}
+
+/// All creatures with a tail following them (magnetized entities)
+/// will have their "train" follow along with their moves.
+pub fn magnet_follow(
+    mut magnets: Query<&mut Magnetized>,
+    position: Query<&Position>,
+    mut teleport: EventWriter<TeleportEntity>,
+    mut events: EventReader<MagnetFollow>,
+) {
+    for event in events.read() {
+        // Get all train conductors (first in line)
+        for magnet in magnets.iter_mut() {
+            let mut train_idx = 0;
+            // new_pos is the position the conductor currently occupies,
+            // and old_pos was before their last move.
+            let mut new_pos = *position.get(event.conductor).unwrap();
+            let mut old_pos = event.old_pos;
+            // Every tail segment must be processed, stop when no more remain.
+            loop {
+                // Predict the snake's movement to get to its new position.
+                // Reversed as the snake starts at the new position.
+                // TODO: This currently disregards walls, check if this is a problem,
+                // otherwise, replace with an actual pathfinding function.
+                let mut walk = walk_grid(new_pos, old_pos);
+                // If the snake didn't move, do not proceed.
+                if walk.is_empty() {
+                    return;
+                }
+                // Teleport each tail segment on the positions behind the
+                // conductor, following the line of "walk".
+                for tile in walk.iter().skip(1) {
+                    teleport.send(TeleportEntity {
+                        destination: *tile,
+                        entity: magnet.train[train_idx],
+                    });
+                    train_idx += 1;
+                    if train_idx >= magnet.train.len() {
+                        return;
+                    }
+                }
+                // If the snake's movement wasn't big enough to fit in all
+                // the segments, make the last moved segment into the new conductor.
+                new_pos = walk.pop().unwrap();
+                old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
+            }
+        }
     }
 }
 

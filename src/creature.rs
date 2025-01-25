@@ -182,9 +182,22 @@ pub struct Awake;
 #[derive(Component)]
 pub struct Random;
 
+// Vulnerable to Abjuration.
 #[derive(Component)]
 pub struct Summoned {
     pub summoner: Entity,
+}
+
+// Will start dragging along creatures of this species.
+#[derive(Component)]
+pub struct Magnetic {
+    pub species: Species,
+    pub conductor: Option<Entity>,
+}
+
+#[derive(Component)]
+pub struct Magnetized {
+    pub train: Vec<Entity>,
 }
 
 #[derive(Component)]
@@ -236,6 +249,8 @@ pub enum Species {
     Trap,
     Oracle,
     Abazon,
+    EpsilonHead,
+    EpsilonTail,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -254,6 +269,8 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Trap => 12,
         Species::Oracle => 40,
         Species::Abazon => 28,
+        Species::EpsilonHead => 67,
+        Species::EpsilonTail => 68,
     }
 }
 
