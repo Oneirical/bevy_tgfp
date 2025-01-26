@@ -1193,6 +1193,8 @@ pub fn match_species_with_string(species: &Species) -> String {
         Species::WeakWall => "[a]Rampart of Nacre[w]",
         Species::Airlock => "[a]Quicksilver Curtains[w]",
         Species::Player => "[p]Reality Anchor[w]",
+        Species::EpsilonTail => "[y]Rubberized Mecha-Segment[w]",
+        Species::EpsilonHead => "[y]Epsilon, Crowned by Truth[w]",
         _ => &format!("{:?}", species),
     };
     string.to_owned()
