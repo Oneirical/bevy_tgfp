@@ -794,60 +794,52 @@ pub struct MagnetFollow {
 /// All creatures with a tail following them (magnetized entities)
 /// will have their "train" follow along with their moves.
 pub fn magnet_follow(
-    mut magnets: Query<&mut Magnetized>,
+    mut magnet_set: ParamSet<(Query<Entity, With<Magnetized>>, Query<&mut Magnetized>)>,
+    species: Query<&Species>,
     position: Query<&Position>,
     mut teleport: EventWriter<TeleportEntity>,
     mut events: EventReader<MagnetFollow>,
     mut commands: Commands,
     flags_query: Query<&CreatureFlags>,
-    tail_magnet: Query<&Magnetic>,
 ) {
     for event in events.read() {
         // Get all train conductors (first in line)
-        for mut magnet in magnets.iter_mut() {
-            let mut train_idx = 0;
-            // new_pos is the position the conductor currently occupies,
-            // and old_pos was before their last move.
-            let mut new_pos = *position.get(event.conductor).unwrap();
-            let mut old_pos = event.old_pos;
-            // Every tail segment must be processed, stop when no more remain.
-            loop {
-                // Predict the snake's movement to get to its new position.
-                // Reversed as the snake starts at the new position.
-                // TODO: This currently disregards walls, check if this is a problem,
-                // otherwise, replace with an actual pathfinding function.
-                let mut walk = walk_grid(new_pos, old_pos);
-                // If the snake didn't move, do not proceed.
-                if walk.len() <= 1 {
-                    return;
-                }
-                // Teleport each tail segment on the positions behind the
-                // conductor, following the line of "walk".
-                for tile in walk.iter().skip(1) {
-                    if magnet.train.is_empty() {
-                        // No tail panic prevention.
-                        return;
-                    }
-                    if match magnet.train.get(train_idx) {
-                        Some(segment) => position.get(*segment).is_err(),
-                        None => true,
-                    } {
-                        // Do not allow non-existent tail segments to continue the train.
-                        // Cut off the tail.
-                        // HACK: Cutting off the first or last segment of a tail
-                        // will make it impossible for a tail to grow back.
-                        if train_idx == magnet.train.len() - 1 {
-                            // Last segment panic prevention.
-                            break;
-                        }
-                        let magnetic = tail_magnet
-                            .get(
-                                flags_query
-                                    .get(magnet.train[magnet.train.len() - 1])
-                                    .unwrap()
-                                    .effects_flags,
-                            )
-                            .unwrap();
+        let conductor_flags = flags_query.get(event.conductor).unwrap();
+        let magnet_finder = magnet_set.p0();
+        let flags_with_magnetized = magnet_finder
+            .get(conductor_flags.species_flags)
+            .or(magnet_finder.get(conductor_flags.effects_flags))
+            .unwrap();
+        let mut magnet = magnet_set.p1();
+        let mut magnet = magnet.get_mut(flags_with_magnetized).unwrap();
+        let species = species.get(event.conductor).unwrap();
+        let mut train_idx = 0;
+        // new_pos is the position the conductor currently occupies,
+        // and old_pos was before their last move.
+        let mut new_pos = *position.get(event.conductor).unwrap();
+        let mut old_pos = event.old_pos;
+        // Every tail segment must be processed, stop when no more remain.
+        loop {
+            // Predict the snake's movement to get to its new position.
+            // Reversed as the snake starts at the new position.
+            // TODO: This currently disregards walls, check if this is a problem,
+            // otherwise, replace with an actual pathfinding function.
+            let mut walk = walk_grid(new_pos, old_pos);
+            // If the snake didn't move or has no tail, do not proceed.
+            if walk.len() <= 1 || magnet.train.is_empty() {
+                return;
+            }
+            // Teleport each tail segment on the positions behind the
+            // conductor, following the line of "walk".
+            for tile in walk.iter().skip(1) {
+                if position.get(magnet.train[train_idx]).is_err() {
+                    // Do not allow non-existent tail segments to continue the train.
+
+                    // If it wasn't the last tail segment, remove Magnetic
+                    // from the last tail segment.
+                    // If it was the last tail segment, then Magnetic is already
+                    // removed as a result.
+                    if train_idx != magnet.train.len() - 1 {
                         commands
                             .entity(
                                 flags_query
@@ -856,39 +848,41 @@ pub fn magnet_follow(
                                     .effects_flags,
                             )
                             .remove::<Magnetic>();
-                        magnet.train.truncate(train_idx);
-                        let (new_magnetic_entity, new_conductor) = if magnet.train.is_empty() {
-                            (event.conductor, None)
-                        } else {
-                            (
-                                flags_query
-                                    .get(magnet.train[magnet.train.len() - 1])
-                                    .unwrap()
-                                    .effects_flags,
-                                magnetic.conductor,
-                            )
-                        };
-                        commands.entity(new_magnetic_entity).insert(Magnetic {
-                            species: magnetic.species,
-                            conductor: new_conductor,
-                        });
+                    }
+                    // Cut off the tail.
+                    magnet.train.truncate(train_idx);
 
-                        return;
-                    }
-                    teleport.send(TeleportEntity {
-                        destination: *tile,
-                        entity: magnet.train[train_idx],
+                    let new_magnetic_entity = if magnet.train.is_empty() {
+                        event.conductor
+                    } else {
+                        flags_query
+                            .get(magnet.train[magnet.train.len() - 1])
+                            .unwrap()
+                            .effects_flags
+                    };
+                    commands.entity(new_magnetic_entity).insert(Magnetic {
+                        species: *species,
+                        conductor: if magnet.train.is_empty() {
+                            None
+                        } else {
+                            Some(event.conductor)
+                        },
                     });
-                    train_idx += 1;
-                    if train_idx >= magnet.train.len() {
-                        return;
-                    }
+                    return;
                 }
-                // If the snake's movement wasn't big enough to fit in all
-                // the segments, make the last moved segment into the new conductor.
-                new_pos = walk.pop().unwrap();
-                old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
+                teleport.send(TeleportEntity {
+                    destination: *tile,
+                    entity: magnet.train[train_idx],
+                });
+                train_idx += 1;
+                if train_idx >= magnet.train.len() {
+                    return;
+                }
             }
+            // If the snake's movement wasn't big enough to fit in all
+            // the segments, make the last moved segment into the new conductor.
+            new_pos = walk.pop().unwrap();
+            old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
         }
     }
 }
