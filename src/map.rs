@@ -236,9 +236,13 @@ pub fn spawn_cage(
     });
     let tower_height = 1;
     let mut tower_height_tiles = 0;
-    let mut last_room_size = 9;
+    let mut last_room_size = 17;
     for tower_floor in 0..tower_height {
-        let size = if tower_floor == 2 { 17 } else { 9 };
+        let size = if tower_floor == tower_height - 1 {
+            17
+        } else {
+            9
+        };
         let mut cage = generate_cage(
             tower_floor,
             // Spawn the player in the first room

@@ -307,6 +307,28 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             None,
         ]),
+        Species::EpsilonHead => Spellbook::new([
+            None,
+            None,
+            None,
+            Some(Spell {
+                axioms: vec![
+                    Axiom::WhenMoved,
+                    Axiom::IncrementCounter {
+                        amount: 1,
+                        count: 0,
+                    },
+                    Axiom::TerminateIfCounter {
+                        condition: CounterCondition::NotModuloOf { modulo: 5 },
+                        threshold: 0,
+                    },
+                    Axiom::Ego,
+                    Axiom::Dash { max_distance: 8 },
+                ],
+            }),
+            None,
+            None,
+        ]),
         Species::Second => Spellbook::new([
             None,
             None,

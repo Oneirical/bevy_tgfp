@@ -45,6 +45,7 @@ impl Plugin for EventPlugin {
         app.add_event::<AddStatusEffect>();
         app.add_event::<DrawSoul>();
         app.add_event::<UseWheelSoul>();
+        app.add_event::<MagnetFollow>();
         app.init_resource::<Events<CreatureStep>>();
         app.init_resource::<Events<RespawnCage>>();
         app.insert_resource(TurnManager {
@@ -607,55 +608,85 @@ pub fn creature_step(
     }
 }
 
-#[derive(Event)]
-pub struct MagnetFollow {
-    pub old_pos: Position,
-    pub conductor: Entity,
-}
-
-/// All creatures with a tail following them (magnetized entities)
-/// will have their "train" follow along with their moves.
-pub fn magnet_follow(
-    mut magnets: Query<&mut Magnetized>,
-    position: Query<&Position>,
-    mut teleport: EventWriter<TeleportEntity>,
-    mut events: EventReader<MagnetFollow>,
+pub fn magnetize_tail_segments(
+    query: Query<(Entity, &Magnetic)>,
+    conductor_query: Query<(&Position, &CreatureFlags)>,
+    creature_flags: Query<&CreatureFlags>,
+    mut magnetized_set: ParamSet<(Query<&Magnetized>, Query<&mut Magnetized>)>,
+    species_query: Query<&Species>,
+    map: Res<Map>,
+    mut commands: Commands,
 ) {
-    for event in events.read() {
-        // Get all train conductors (first in line)
-        for magnet in magnets.iter_mut() {
-            let mut train_idx = 0;
-            // new_pos is the position the conductor currently occupies,
-            // and old_pos was before their last move.
-            let mut new_pos = *position.get(event.conductor).unwrap();
-            let mut old_pos = event.old_pos;
-            // Every tail segment must be processed, stop when no more remain.
-            loop {
-                // Predict the snake's movement to get to its new position.
-                // Reversed as the snake starts at the new position.
-                // TODO: This currently disregards walls, check if this is a problem,
-                // otherwise, replace with an actual pathfinding function.
-                let mut walk = walk_grid(new_pos, old_pos);
-                // If the snake didn't move, do not proceed.
-                if walk.is_empty() {
-                    return;
+    // Get the species/effects flags...
+    for (pos, flags) in conductor_query.iter() {
+        // of a creature that is considered Magnetic.
+        // species has override on effects.
+        if let Ok((flag_entity, magnet)) = query
+            .get(flags.species_flags)
+            .or(query.get(flags.effects_flags))
+        {
+            let magnetized_query = magnetized_set.p0();
+            let train = if let Some(original_conductor) = magnet.conductor {
+                if let Ok(magnetized_component) = magnetized_query.get(original_conductor) {
+                    Some(magnetized_component.train.clone())
+                } else {
+                    None
                 }
-                // Teleport each tail segment on the positions behind the
-                // conductor, following the line of "walk".
-                for tile in walk.iter().skip(1) {
-                    teleport.send(TeleportEntity {
-                        destination: *tile,
-                        entity: magnet.train[train_idx],
-                    });
-                    train_idx += 1;
-                    if train_idx >= magnet.train.len() {
-                        return;
+            } else {
+                None
+            };
+            // Find adjacent creatures to magnetize.
+            // NOTE: This will ignore intangible creatures.
+            let adjacent_tiles = map.get_adjacent_tiles(*pos);
+            for tile in adjacent_tiles {
+                // If a creature is found...
+                if let Some(adjacent_creature) = map.creatures.get(&tile) {
+                    // Make sure it has the correct species to match with the magnet,
+                    // and that it is not already magnetized.
+                    if *species_query.get(*adjacent_creature).unwrap() == magnet.species && {
+                        if let Some(train) = &train {
+                            !train.contains(adjacent_creature)
+                        } else {
+                            true
+                        }
+                    } {
+                        // If so, enter its effects flags to start editing.
+                        let new_tail_segment_flags =
+                            creature_flags.get(*adjacent_creature).unwrap();
+                        // Remove all instances of Magnetic from the original creature -
+                        // it has found its fellow magnet.
+                        commands.entity(flags.species_flags).remove::<Magnetic>();
+                        commands.entity(flags.effects_flags).remove::<Magnetic>();
+                        // The new tail segment receives Magnetic as it will seek out
+                        // the next magnet.
+                        commands
+                            .entity(new_tail_segment_flags.effects_flags)
+                            .insert(Magnetic {
+                                species: magnet.species,
+                                // If it is not the first to be magnetized, keep the
+                                // conductor the same down the chain.
+                                conductor: if let Some(original_conductor) = magnet.conductor {
+                                    Some(original_conductor)
+                                } else {
+                                    Some(flag_entity)
+                                },
+                            });
+                        // Either add to the conductor's train, or create a new train
+                        // if the original creature is starting a new tail.
+                        if let Some(original_conductor) = magnet.conductor {
+                            let mut magnetized_query = magnetized_set.p1();
+                            let mut magnetized_component =
+                                magnetized_query.get_mut(original_conductor).unwrap();
+                            magnetized_component.train.push(*adjacent_creature);
+                        } else {
+                            commands.entity(flag_entity).insert(Magnetized {
+                                train: vec![*adjacent_creature],
+                            });
+                        }
+                        // TODO: Rerun this system with recursion, or give it a "flood"
+                        // loop to find more segments, as there might still be candidates.
                     }
                 }
-                // If the snake's movement wasn't big enough to fit in all
-                // the segments, make the last moved segment into the new conductor.
-                new_pos = walk.pop().unwrap();
-                old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
             }
         }
     }
@@ -681,11 +712,13 @@ pub fn teleport_entity(
     mut creature: Query<(&mut Position, &CreatureFlags)>,
     intangible_query: Query<&Intangible>,
     immobile_query: Query<&Immobile>,
+    magnet_query: Query<&Magnetized>,
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
     mut stepped: EventWriter<SteppedOnTile>,
     mut contingency: EventWriter<TriggerContingency>,
+    mut magnet: EventWriter<MagnetFollow>,
     is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
@@ -693,12 +726,14 @@ pub fn teleport_entity(
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
-        let (is_intangible, is_immobile) = {
+        let (is_intangible, is_immobile, is_magnetized) = {
             (
                 intangible_query.contains(creature_flags.species_flags)
                     || intangible_query.contains(creature_flags.effects_flags),
                 immobile_query.contains(creature_flags.species_flags)
                     || immobile_query.contains(creature_flags.effects_flags),
+                magnet_query.contains(creature_flags.species_flags)
+                    || magnet_query.contains(creature_flags.effects_flags),
             )
         };
         // If motion is possible...
@@ -708,6 +743,13 @@ pub fn teleport_entity(
             if !is_intangible {
                 // ...update the Map to reflect this...
                 map.move_creature(*creature_position, event.destination);
+            }
+            // Magnetized creatures will have their tail follow them.
+            if is_magnetized {
+                magnet.send(MagnetFollow {
+                    old_pos: *creature_position,
+                    conductor: event.entity,
+                });
             }
             // ...and move that Entity to TeleportEntity's destination tile.
             creature_position.update(event.destination.x, event.destination.y);
@@ -738,6 +780,60 @@ pub fn teleport_entity(
                     culprit: event.entity,
                     collided_with: *collided_with,
                 });
+            }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct MagnetFollow {
+    pub old_pos: Position,
+    pub conductor: Entity,
+}
+
+/// All creatures with a tail following them (magnetized entities)
+/// will have their "train" follow along with their moves.
+pub fn magnet_follow(
+    mut magnets: Query<&mut Magnetized>,
+    position: Query<&Position>,
+    mut teleport: EventWriter<TeleportEntity>,
+    mut events: EventReader<MagnetFollow>,
+) {
+    for event in events.read() {
+        // Get all train conductors (first in line)
+        for magnet in magnets.iter_mut() {
+            let mut train_idx = 0;
+            // new_pos is the position the conductor currently occupies,
+            // and old_pos was before their last move.
+            let mut new_pos = *position.get(event.conductor).unwrap();
+            let mut old_pos = event.old_pos;
+            // Every tail segment must be processed, stop when no more remain.
+            loop {
+                // Predict the snake's movement to get to its new position.
+                // Reversed as the snake starts at the new position.
+                // TODO: This currently disregards walls, check if this is a problem,
+                // otherwise, replace with an actual pathfinding function.
+                let mut walk = walk_grid(new_pos, old_pos);
+                // If the snake didn't move, do not proceed.
+                if walk.len() <= 1 {
+                    return;
+                }
+                // Teleport each tail segment on the positions behind the
+                // conductor, following the line of "walk".
+                for tile in walk.iter().skip(1) {
+                    teleport.send(TeleportEntity {
+                        destination: *tile,
+                        entity: magnet.train[train_idx],
+                    });
+                    train_idx += 1;
+                    if train_idx >= magnet.train.len() {
+                        return;
+                    }
+                }
+                // If the snake's movement wasn't big enough to fit in all
+                // the segments, make the last moved segment into the new conductor.
+                new_pos = walk.pop().unwrap();
+                old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
             }
         }
     }

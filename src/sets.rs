@@ -6,9 +6,9 @@ use crate::{
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
-        open_close_door, remove_creature, remove_designated_creatures, render_closing_doors,
-        respawn_cage, respawn_player, stepped_on_tile, summon_creature, teleport_entity,
-        transform_creature, use_wheel_soul,
+        magnet_follow, magnetize_tail_segments, open_close_door, remove_creature,
+        remove_designated_creatures, render_closing_doors, respawn_cage, respawn_player,
+        stepped_on_tile, summon_creature, teleport_entity, transform_creature, use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -31,6 +31,8 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnExit(ControlState::Cursor), despawn_cursor);
         app.add_systems(OnEnter(ControlState::CasteMenu), show_caste_menu);
         app.add_systems(OnExit(ControlState::CasteMenu), hide_caste_menu);
+        app.add_systems(Update, magnetize_tail_segments.before(teleport_entity));
+        app.add_systems(Update, magnet_follow.after(teleport_entity));
         app.add_systems(
             Update,
             (cursor_step, teleport_cursor, update_cursor_box)
