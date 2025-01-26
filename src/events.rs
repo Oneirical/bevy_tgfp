@@ -80,7 +80,7 @@ impl FromWorld for SoulWheel {
         soul_wheel.draw_pile.insert(Soul::Saintly, 1);
         soul_wheel.draw_pile.insert(Soul::Ordered, 1);
         soul_wheel.draw_pile.insert(Soul::Artistic, 1);
-        soul_wheel.draw_pile.insert(Soul::Unhinged, 1);
+        soul_wheel.draw_pile.insert(Soul::Unhinged, 10);
         soul_wheel.draw_pile.insert(Soul::Feral, 1);
         soul_wheel.draw_pile.insert(Soul::Vile, 1);
         soul_wheel.discard_pile.insert(Soul::Saintly, 0);
@@ -798,10 +798,13 @@ pub fn magnet_follow(
     position: Query<&Position>,
     mut teleport: EventWriter<TeleportEntity>,
     mut events: EventReader<MagnetFollow>,
+    mut commands: Commands,
+    flags_query: Query<&CreatureFlags>,
+    tail_magnet: Query<&Magnetic>,
 ) {
     for event in events.read() {
         // Get all train conductors (first in line)
-        for magnet in magnets.iter_mut() {
+        for mut magnet in magnets.iter_mut() {
             let mut train_idx = 0;
             // new_pos is the position the conductor currently occupies,
             // and old_pos was before their last move.
@@ -821,6 +824,57 @@ pub fn magnet_follow(
                 // Teleport each tail segment on the positions behind the
                 // conductor, following the line of "walk".
                 for tile in walk.iter().skip(1) {
+                    if magnet.train.is_empty() {
+                        // No tail panic prevention.
+                        return;
+                    }
+                    if match magnet.train.get(train_idx) {
+                        Some(segment) => position.get(*segment).is_err(),
+                        None => true,
+                    } {
+                        // Do not allow non-existent tail segments to continue the train.
+                        // Cut off the tail.
+                        // HACK: Cutting off the first or last segment of a tail
+                        // will make it impossible for a tail to grow back.
+                        if train_idx == magnet.train.len() - 1 {
+                            // Last segment panic prevention.
+                            break;
+                        }
+                        let magnetic = tail_magnet
+                            .get(
+                                flags_query
+                                    .get(magnet.train[magnet.train.len() - 1])
+                                    .unwrap()
+                                    .effects_flags,
+                            )
+                            .unwrap();
+                        commands
+                            .entity(
+                                flags_query
+                                    .get(magnet.train[magnet.train.len() - 1])
+                                    .unwrap()
+                                    .effects_flags,
+                            )
+                            .remove::<Magnetic>();
+                        magnet.train.truncate(train_idx);
+                        let (new_magnetic_entity, new_conductor) = if magnet.train.is_empty() {
+                            (event.conductor, None)
+                        } else {
+                            (
+                                flags_query
+                                    .get(magnet.train[magnet.train.len() - 1])
+                                    .unwrap()
+                                    .effects_flags,
+                                magnetic.conductor,
+                            )
+                        };
+                        commands.entity(new_magnetic_entity).insert(Magnetic {
+                            species: magnetic.species,
+                            conductor: new_conductor,
+                        });
+
+                        return;
+                    }
                     teleport.send(TeleportEntity {
                         destination: *tile,
                         entity: magnet.train[train_idx],

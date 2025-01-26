@@ -236,7 +236,7 @@ pub fn spawn_cage(
     });
     let tower_height = 1;
     let mut tower_height_tiles = 0;
-    let mut last_room_size = 17;
+    let mut last_room_size = 9;
     for tower_floor in 0..tower_height {
         let size = if tower_floor == tower_height - 1 {
             17
@@ -329,6 +329,11 @@ fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) 
         cage[22] = 't';
         cage[23] = 't';
         cage[24] = 't';
+        cage[90] = 't';
+        // cage[91] = 't';
+        cage[92] = 't';
+        // cage[93] = 't';
+        cage[94] = 't';
         return;
     }
 

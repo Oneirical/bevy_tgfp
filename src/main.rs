@@ -10,12 +10,7 @@ mod spells;
 mod text;
 mod ui;
 
-use bevy::{
-    asset::AssetMetaCheck,
-    ecs::schedule::{LogLevel, ScheduleBuildSettings},
-    prelude::*,
-    window::WindowResolution,
-};
+use bevy::{asset::AssetMetaCheck, prelude::*, window::WindowResolution};
 use cursor::CursorPlugin;
 use events::EventPlugin;
 use graphics::GraphicsPlugin;

@@ -323,7 +323,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                         threshold: 0,
                     },
                     Axiom::Ego,
-                    Axiom::Dash { max_distance: 8 },
+                    Axiom::Dash { max_distance: 5 },
                 ],
             }),
             None,
