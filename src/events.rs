@@ -612,7 +612,11 @@ pub fn magnetize_tail_segments(
     query: Query<(Entity, &Magnetic)>,
     conductor_query: Query<(Entity, &Position, &CreatureFlags)>,
     creature_flags: Query<&CreatureFlags>,
-    mut magnetized_set: ParamSet<(Query<(Entity, &Magnetized)>, Query<&mut Magnetized>)>,
+    mut magnetized_set: ParamSet<(
+        Query<Entity, With<Magnetized>>,
+        Query<&Magnetized>,
+        Query<&mut Magnetized>,
+    )>,
     species_query: Query<&Species>,
     map: Res<Map>,
     mut commands: Commands,
@@ -626,22 +630,18 @@ pub fn magnetize_tail_segments(
             .or(query.get(flags.effects_flags))
         {
             let magnetized_finder = magnetized_set.p0();
-            let (train, flags_with_magnetized) = if let Some(original_conductor) = magnet.conductor
-            {
+            let flags_with_magnetized = if let Some(original_conductor) = magnet.conductor {
                 let conductor_flags = creature_flags.get(original_conductor).unwrap();
-                if let Ok((flags_with_magnetized, magnetized_component)) = magnetized_finder
+                if let Ok(flags_with_magnetized) = magnetized_finder
                     .get(conductor_flags.species_flags)
                     .or(magnetized_finder.get(conductor_flags.effects_flags))
                 {
-                    (
-                        Some(magnetized_component.train.clone()),
-                        Some(flags_with_magnetized),
-                    )
+                    Some(flags_with_magnetized)
                 } else {
-                    (None, None)
+                    None
                 }
             } else {
-                (None, None)
+                None
             };
             // Find adjacent creatures to magnetize.
             // NOTE: This will ignore intangible creatures.
@@ -651,13 +651,16 @@ pub fn magnetize_tail_segments(
                 if let Some(adjacent_creature) = map.creatures.get(&tile) {
                     // Make sure it has the correct species to match with the magnet,
                     // and that it is not already magnetized.
-                    if *species_query.get(*adjacent_creature).unwrap() == magnet.species && {
-                        if let Some(train) = &train {
-                            !train.contains(adjacent_creature)
-                        } else {
-                            true
+                    let mut is_part_of_tail = false;
+                    let magnetized_finder = magnetized_set.p1();
+                    for magnetized in magnetized_finder.iter() {
+                        if magnetized.train.contains(adjacent_creature) {
+                            is_part_of_tail = true;
                         }
-                    } {
+                    }
+                    if *species_query.get(*adjacent_creature).unwrap() == magnet.species
+                        && !is_part_of_tail
+                    {
                         // If so, enter its effects flags to start editing.
                         let new_tail_segment_flags =
                             creature_flags.get(*adjacent_creature).unwrap();
@@ -682,7 +685,7 @@ pub fn magnetize_tail_segments(
                         // Either add to the conductor's train, or create a new train
                         // if the original creature is starting a new tail.
                         if let Some(flags_with_magnetized) = flags_with_magnetized {
-                            let mut magnetized_query = magnetized_set.p1();
+                            let mut magnetized_query = magnetized_set.p2();
                             let mut magnetized_component =
                                 magnetized_query.get_mut(flags_with_magnetized).unwrap();
                             if let Some(conductor) = magnet.conductor {
