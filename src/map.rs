@@ -329,10 +329,10 @@ fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) 
         cage[22] = 't';
         cage[23] = 't';
         cage[24] = 't';
-        cage[90] = 't';
-        // cage[91] = 't';
+        cage[90] = 'E';
+        cage[91] = 't';
         cage[92] = 't';
-        // cage[93] = 't';
+        cage[93] = 't';
         cage[94] = 't';
         return;
     }

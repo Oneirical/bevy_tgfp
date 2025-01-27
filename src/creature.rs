@@ -198,6 +198,7 @@ pub struct Magnetic {
 #[derive(Component)]
 pub struct Magnetized {
     pub train: Vec<Entity>,
+    pub species: Species,
 }
 
 #[derive(Component)]

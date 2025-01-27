@@ -610,30 +610,38 @@ pub fn creature_step(
 
 pub fn magnetize_tail_segments(
     query: Query<(Entity, &Magnetic)>,
-    conductor_query: Query<(&Position, &CreatureFlags)>,
+    conductor_query: Query<(Entity, &Position, &CreatureFlags)>,
     creature_flags: Query<&CreatureFlags>,
-    mut magnetized_set: ParamSet<(Query<&Magnetized>, Query<&mut Magnetized>)>,
+    mut magnetized_set: ParamSet<(Query<(Entity, &Magnetized)>, Query<&mut Magnetized>)>,
     species_query: Query<&Species>,
     map: Res<Map>,
     mut commands: Commands,
 ) {
     // Get the species/effects flags...
-    for (pos, flags) in conductor_query.iter() {
+    for (conductor_entity, pos, flags) in conductor_query.iter() {
         // of a creature that is considered Magnetic.
         // species has override on effects.
         if let Ok((flag_entity, magnet)) = query
             .get(flags.species_flags)
             .or(query.get(flags.effects_flags))
         {
-            let magnetized_query = magnetized_set.p0();
-            let train = if let Some(original_conductor) = magnet.conductor {
-                if let Ok(magnetized_component) = magnetized_query.get(original_conductor) {
-                    Some(magnetized_component.train.clone())
+            let magnetized_finder = magnetized_set.p0();
+            let (train, flags_with_magnetized) = if let Some(original_conductor) = magnet.conductor
+            {
+                let conductor_flags = creature_flags.get(original_conductor).unwrap();
+                if let Ok((flags_with_magnetized, magnetized_component)) = magnetized_finder
+                    .get(conductor_flags.species_flags)
+                    .or(magnetized_finder.get(conductor_flags.effects_flags))
+                {
+                    (
+                        Some(magnetized_component.train.clone()),
+                        Some(flags_with_magnetized),
+                    )
                 } else {
-                    None
+                    (None, None)
                 }
             } else {
-                None
+                (None, None)
             };
             // Find adjacent creatures to magnetize.
             // NOTE: This will ignore intangible creatures.
@@ -668,23 +676,31 @@ pub fn magnetize_tail_segments(
                                 conductor: if let Some(original_conductor) = magnet.conductor {
                                     Some(original_conductor)
                                 } else {
-                                    Some(flag_entity)
+                                    Some(conductor_entity)
                                 },
                             });
                         // Either add to the conductor's train, or create a new train
                         // if the original creature is starting a new tail.
-                        if let Some(original_conductor) = magnet.conductor {
+                        if let Some(flags_with_magnetized) = flags_with_magnetized {
                             let mut magnetized_query = magnetized_set.p1();
                             let mut magnetized_component =
-                                magnetized_query.get_mut(original_conductor).unwrap();
+                                magnetized_query.get_mut(flags_with_magnetized).unwrap();
+                            if let Some(conductor) = magnet.conductor {
+                                if *adjacent_creature == conductor {
+                                    // HACK: Prevent a conductor from becoming a part of its own train.
+                                    continue;
+                                }
+                            }
                             magnetized_component.train.push(*adjacent_creature);
                         } else {
                             commands.entity(flag_entity).insert(Magnetized {
                                 train: vec![*adjacent_creature],
+                                species: magnet.species,
                             });
                         }
                         // TODO: Rerun this system with recursion, or give it a "flood"
                         // loop to find more segments, as there might still be candidates.
+                        // This currently runs every frame, so it might be barely noticeable.
                     }
                 }
             }
@@ -825,8 +841,8 @@ pub fn magnet_follow(
             // TODO: This currently disregards walls, check if this is a problem,
             // otherwise, replace with an actual pathfinding function.
             let mut walk = walk_grid(new_pos, old_pos);
-            // If the snake didn't move or has no tail, do not proceed.
-            if walk.len() <= 1 || magnet.train.is_empty() {
+            // If the snake didn't move, do not proceed.
+            if walk.len() <= 1 {
                 return;
             }
             // Teleport each tail segment on the positions behind the
@@ -852,21 +868,25 @@ pub fn magnet_follow(
                     // Cut off the tail.
                     magnet.train.truncate(train_idx);
 
-                    let new_magnetic_entity = if magnet.train.is_empty() {
-                        event.conductor
-                    } else {
-                        flags_query
-                            .get(magnet.train[magnet.train.len() - 1])
-                            .unwrap()
-                            .effects_flags
-                    };
+                    // If the snake no longer has a tail, do not proceed.
+                    if magnet.train.is_empty() {
+                        commands
+                            .entity(flags_with_magnetized)
+                            .remove::<Magnetized>();
+                        commands.entity(flags_with_magnetized).insert(Magnetic {
+                            species: magnet.species,
+                            conductor: None,
+                        });
+                        return;
+                    }
+
+                    let new_magnetic_entity = flags_query
+                        .get(magnet.train[magnet.train.len() - 1])
+                        .unwrap()
+                        .effects_flags;
                     commands.entity(new_magnetic_entity).insert(Magnetic {
-                        species: *species,
-                        conductor: if magnet.train.is_empty() {
-                            None
-                        } else {
-                            Some(event.conductor)
-                        },
+                        species: magnet.species,
+                        conductor: Some(event.conductor),
                     });
                     return;
                 }
