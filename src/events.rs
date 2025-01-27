@@ -370,6 +370,7 @@ pub fn summon_creature(
                     Species::Second => Soul::Vile,
                     Species::Oracle => Soul::Unhinged,
                     Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
+                    Species::CageSlot => Soul::Empty,
                     _ => Soul::Unhinged,
                 },
                 spellbook: event
@@ -509,6 +510,9 @@ pub fn assign_species_components(
                 new_creature.insert((
                     Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
                 ));
+            }
+            Species::CageBorder | Species::CageSlot => {
+                new_creature.insert((Meleeproof, Spellproof, Intangible, Invincible, NoDropSoul));
             }
             Species::Wall => {
                 new_creature.insert((Meleeproof, Spellproof, Wall, Invincible, Dizzy, NoDropSoul));

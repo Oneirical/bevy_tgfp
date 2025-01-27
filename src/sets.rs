@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 use crate::{
     caste::{hide_caste_menu, show_caste_menu, update_caste_box},
+    crafting::CraftingRecipes,
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
@@ -33,6 +34,7 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnExit(ControlState::CasteMenu), hide_caste_menu);
         app.add_systems(Update, magnetize_tail_segments.before(teleport_entity));
         app.add_systems(Update, magnet_follow.after(teleport_entity));
+        app.init_resource::<CraftingRecipes>();
         app.add_systems(
             Update,
             (cursor_step, teleport_cursor, update_cursor_box)

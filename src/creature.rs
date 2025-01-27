@@ -121,7 +121,7 @@ impl PotencyAndStacks {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EffectDuration {
     Finite { stacks: usize },
     Infinite,
@@ -235,7 +235,7 @@ pub struct Health {
     pub max_hp: usize,
 }
 
-#[derive(Debug, Component, Clone, Copy, PartialEq)]
+#[derive(Debug, Component, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Species {
     Player,
     Wall,
@@ -252,6 +252,8 @@ pub enum Species {
     Abazon,
     EpsilonHead,
     EpsilonTail,
+    CageBorder,
+    CageSlot,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -272,6 +274,8 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Abazon => 28,
         Species::EpsilonHead => 67,
         Species::EpsilonTail => 68,
+        Species::CageBorder => 108,
+        Species::CageSlot => 167,
     }
 }
 

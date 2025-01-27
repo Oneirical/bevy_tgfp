@@ -238,7 +238,7 @@ pub struct Spell {
     pub axioms: Vec<Axiom>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// There are Form axioms, which target certain tiles, and Function axioms, which execute an effect
 /// onto those tiles.
 pub enum Axiom {
@@ -353,7 +353,7 @@ pub enum Axiom {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CounterCondition {
     LessThan,
     NotModuloOf { modulo: i32 },

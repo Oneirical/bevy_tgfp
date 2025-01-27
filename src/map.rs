@@ -282,13 +282,19 @@ pub fn spawn_cage(
                 'O' => Species::Oracle,
                 'E' => Species::EpsilonHead,
                 't' => Species::EpsilonTail,
+                'x' => Species::CageSlot,
                 '^' | '>' | '<' | 'V' => Species::Airlock,
+                'w' | 'n' | 'e' | 's' => Species::CageBorder,
                 _ => continue,
             };
             let momentum = match tile_char {
                 '^' => OrdDir::Up,
                 '>' => OrdDir::Right,
                 '<' => OrdDir::Left,
+                'n' => OrdDir::Up,
+                'e' => OrdDir::Right,
+                'w' => OrdDir::Left,
+                's' => OrdDir::Down,
                 'V' | _ => OrdDir::Down,
             };
             summon.send(SummonCreature {
@@ -334,6 +340,27 @@ fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) 
         // cage[92] = 't';
         // cage[93] = 't';
         // cage[94] = 't';
+        cage[112] = 's';
+        cage[113] = 's';
+        cage[114] = 's';
+        cage[112 + 17 * 4] = 'n';
+        cage[113 + 17 * 4] = 'n';
+        cage[114 + 17 * 4] = 'n';
+        cage[112 + 17 * 1 - 1] = 'e';
+        cage[113 + 17 * 2 - 2] = 'e';
+        cage[114 + 17 * 3 - 3] = 'e';
+        cage[112 + 17 * 1 + 3] = 'w';
+        cage[113 + 17 * 2 + 2] = 'w';
+        cage[114 + 17 * 3 + 1] = 'w';
+        cage[112 + 17 * 1 - 0] = 'x';
+        cage[113 + 17 * 2 - 1] = 'x';
+        cage[114 + 17 * 3 - 2] = 'x';
+        cage[112 + 17 * 1 + 2] = 'x';
+        cage[113 + 17 * 2 + 1] = 'x';
+        cage[114 + 17 * 3 + 0] = 'x';
+        cage[112 + 17 * 1 + 1] = 'x';
+        cage[113 + 17 * 2 + 0] = 'x';
+        cage[114 + 17 * 3 - 1] = 'x';
         return;
     }
 
