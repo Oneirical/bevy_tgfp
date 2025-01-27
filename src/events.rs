@@ -631,14 +631,20 @@ pub fn magnetize_tail_segments(
         {
             let magnetized_finder = magnetized_set.p0();
             let flags_with_magnetized = if let Some(original_conductor) = magnet.conductor {
-                let conductor_flags = creature_flags.get(original_conductor).unwrap();
-                if let Ok(flags_with_magnetized) = magnetized_finder
-                    .get(conductor_flags.species_flags)
-                    .or(magnetized_finder.get(conductor_flags.effects_flags))
-                {
-                    Some(flags_with_magnetized)
+                if let Ok(conductor_flags) = creature_flags.get(original_conductor) {
+                    if let Ok(flags_with_magnetized) = magnetized_finder
+                        .get(conductor_flags.species_flags)
+                        .or(magnetized_finder.get(conductor_flags.effects_flags))
+                    {
+                        Some(flags_with_magnetized)
+                    } else {
+                        None
+                    }
                 } else {
-                    None
+                    // The conductor has been removed, and this segment
+                    // loses its magnetism.
+                    commands.entity(flag_entity).remove::<Magnetic>();
+                    return;
                 }
             } else {
                 None
@@ -654,6 +660,7 @@ pub fn magnetize_tail_segments(
                     let mut is_part_of_tail = false;
                     let magnetized_finder = magnetized_set.p1();
                     for magnetized in magnetized_finder.iter() {
+                        // No stealing from other snakes.
                         if magnetized.train.contains(adjacent_creature) {
                             is_part_of_tail = true;
                         }
@@ -688,12 +695,6 @@ pub fn magnetize_tail_segments(
                             let mut magnetized_query = magnetized_set.p2();
                             let mut magnetized_component =
                                 magnetized_query.get_mut(flags_with_magnetized).unwrap();
-                            if let Some(conductor) = magnet.conductor {
-                                if *adjacent_creature == conductor {
-                                    // HACK: Prevent a conductor from becoming a part of its own train.
-                                    continue;
-                                }
-                            }
                             magnetized_component.train.push(*adjacent_creature);
                         } else {
                             commands.entity(flag_entity).insert(Magnetized {
@@ -1408,18 +1409,17 @@ pub fn respawn_player(
 // NOTE: If dead entities start having their sprite lingering during spell animations,
 // set their visibility to hidden in remove_creature.
 pub fn remove_designated_creatures(
-    remove: Query<Entity, With<DesignatedForRemoval>>,
+    remove: Query<(Entity, &CreatureFlags), With<DesignatedForRemoval>>,
     mut commands: Commands,
     mut map: ResMut<Map>,
     position: Query<&Position>,
-
     awake: Query<&Awake>,
     sleeping: Query<&Sleeping>,
     doors: Query<(Entity, &CreatureFlags)>,
     closed_door_query: Query<&Door, Without<Intangible>>,
     mut open: EventWriter<OpenCloseDoor>,
 ) {
-    for designated in remove.iter() {
+    for (designated, designated_flags) in remove.iter() {
         // Remove the creature from Map
         let position = position.get(designated).unwrap();
         if let Some(preexisting_entity) = map.creatures.get(position) {
@@ -1433,6 +1433,12 @@ pub fn remove_designated_creatures(
         }
         // Remove the creature AND its children (health bar)
         commands.entity(designated).despawn_recursive();
+        commands
+            .entity(designated_flags.species_flags)
+            .despawn_recursive();
+        commands
+            .entity(designated_flags.effects_flags)
+            .despawn_recursive();
     }
 
     // `sleeping` should be empty, or else this will
