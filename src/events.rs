@@ -1338,7 +1338,7 @@ pub fn remove_creature(
                     caster: event.entity,
                     contingency: Axiom::WhenRemoved,
                 });
-                if !cannot_drop_soul {
+                if !cannot_drop_soul && soul != &Soul::Empty {
                     // Add this entity's soul to the soul wheel
                     soul_wheel
                         .draw_pile
