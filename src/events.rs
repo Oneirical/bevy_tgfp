@@ -7,13 +7,14 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
+    crafting::TakeOrDropSoul,
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration, FlagEntity,
-        Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Magnetic,
-        Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random, Sleeping, Soul,
-        Species, Speed, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned,
-        Wall,
+        CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration,
+        FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible,
+        Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random, Sleeping,
+        Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList,
+        Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -189,21 +190,29 @@ pub fn use_wheel_soul(
         if let Some(soul) = soul_wheel.souls.get(event.index).unwrap() {
             // Cast the spell corresponding to this soul type.
             let (player_entity, spellbook) = player.get_single().unwrap();
-            spell.send(CastSpell {
-                caster: player_entity,
-                spell: spellbook.spells.get(soul).unwrap().clone(),
-                starting_step: 0,
-                soul_caste: *soul,
-            });
-            // Discard the soul into the discard pile.
-            newly_discarded = Some(*soul);
-            // Empty this soul slot.
-            soul_wheel.souls[event.index] = None;
-            // Update the UI accordingly.
-            for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
-                if ui_slot_marker.index == event.index {
-                    ui_slot_node.texture_atlas.as_mut().unwrap().index = 167;
+            if let Some(chosen_spell) = spellbook.spells.get(soul) {
+                spell.send(CastSpell {
+                    caster: player_entity,
+                    spell: chosen_spell.clone(),
+                    starting_step: 0,
+                    soul_caste: *soul,
+                });
+                // Discard the soul into the discard pile.
+                newly_discarded = Some(*soul);
+                // Empty this soul slot.
+                soul_wheel.souls[event.index] = None;
+                // Update the UI accordingly.
+                for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
+                    if ui_slot_marker.index == event.index {
+                        ui_slot_node.texture_atlas.as_mut().unwrap().index = 167;
+                    }
                 }
+            } else {
+                // That caste has no spell attached!
+                text.send(AddMessage {
+                    message: Message::InvalidAction(InvalidAction::NoSpellForCaste),
+                });
+                turn_manager.action_this_turn = PlayerAction::Invalid;
             }
         } else {
             // That soul slot is empty!
@@ -370,7 +379,7 @@ pub fn summon_creature(
                     Species::Second => Soul::Vile,
                     Species::Oracle => Soul::Unhinged,
                     Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
-                    Species::CageSlot => Soul::Empty,
+                    Species::CageSlot => Soul::Saintly,
                     _ => Soul::Unhinged,
                 },
                 spellbook: event
@@ -437,7 +446,7 @@ pub fn summon_creature(
 
         // NOTE: This will have to be removed when creating player clones
         // becomes possible.
-        if event.species == Species::Player {
+        if event.species == Species::EpsilonHead {
             new_creature.insert(Player);
         }
 
@@ -511,8 +520,18 @@ pub fn assign_species_components(
                     Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
                 ));
             }
-            Species::CageBorder | Species::CageSlot => {
+            Species::CageBorder => {
                 new_creature.insert((Meleeproof, Spellproof, Intangible, Invincible, NoDropSoul));
+            }
+            Species::CageSlot => {
+                new_creature.insert((
+                    Meleeproof,
+                    Spellproof,
+                    Intangible,
+                    Invincible,
+                    NoDropSoul,
+                    CraftingSlot,
+                ));
             }
             Species::Wall => {
                 new_creature.insert((Meleeproof, Spellproof, Wall, Invincible, Dizzy, NoDropSoul));
@@ -924,16 +943,20 @@ pub struct SteppedOnTile {
 pub fn stepped_on_tile(
     mut events: EventReader<SteppedOnTile>,
     mut contingency: EventWriter<TriggerContingency>,
+    mut drop: EventWriter<TakeOrDropSoul>,
     mut remove: EventWriter<RemoveCreature>,
     stepped_on_creatures: Query<(Entity, &Position, &CreatureFlags)>,
     fragile: Query<&Fragile>,
+    crafting_slot: Query<&CraftingSlot>,
 ) {
     for event in events.read() {
         for (entity, position, flags) in stepped_on_creatures.iter() {
-            let is_fragile =
-                fragile.contains(flags.species_flags) || fragile.contains(flags.effects_flags);
-            // If an entity is at the Position that was stepped on and isn't the creature
-            // responsible for stepping...
+            let (is_fragile, is_crafting_slot) = (
+                fragile.contains(flags.species_flags) || fragile.contains(flags.effects_flags),
+                crafting_slot.contains(flags.species_flags)
+                    || crafting_slot.contains(flags.effects_flags),
+            ); // If an entity is at the Position that was stepped on and isn't the creature
+               // responsible for stepping...
             if event.position == *position && entity != event.entity {
                 // Traps trigger their spell effect when stepped on.
                 contingency.send(TriggerContingency {
@@ -943,6 +966,12 @@ pub fn stepped_on_tile(
                 // Fragile floor entities are destroyed when stepped on.
                 if is_fragile {
                     remove.send(RemoveCreature { entity });
+                }
+                if is_crafting_slot {
+                    drop.send(TakeOrDropSoul {
+                        position: *position,
+                        soul: Some(Soul::Saintly),
+                    });
                 }
             }
         }

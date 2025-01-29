@@ -1,16 +1,156 @@
-use bevy::{prelude::*, utils::HashMap};
+use bevy::{
+    prelude::*,
+    utils::{HashMap, HashSet},
+};
 
 use crate::{
-    creature::{EffectDuration, Soul, StatusEffect},
+    creature::{get_soul_sprite, EffectDuration, Soul, StatusEffect},
+    graphics::SpriteSheetAtlas,
     map::Position,
-    spells::Axiom,
+    spells::{Axiom, Spell},
+    TILE_SIZE,
 };
 
 #[derive(Resource)]
 pub struct CraftingRecipes {
-    pub recipes: HashMap<Axiom, Recipe>,
+    sorted_recipes: Vec<(Recipe, Axiom)>,
 }
 
+#[derive(Component)]
+pub struct DroppedSoul(Soul);
+
+#[derive(Event)]
+pub struct TakeOrDropSoul {
+    pub position: Position,
+    pub soul: Option<Soul>,
+}
+
+pub fn take_or_drop_soul(
+    mut events: EventReader<TakeOrDropSoul>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    dropped_souls: Query<(Entity, &Position), With<DroppedSoul>>,
+) {
+    for event in events.read() {
+        for (soul, pos) in dropped_souls.iter() {
+            if pos == &event.position {
+                commands.entity(soul).despawn();
+            }
+        }
+        if let Some(soul) = event.soul {
+            commands.spawn((
+                event.position,
+                DroppedSoul(soul),
+                Sprite {
+                    image: asset_server.load("spritesheet.png"),
+                    custom_size: Some(Vec2::new(TILE_SIZE - 1., TILE_SIZE - 1.)),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: get_soul_sprite(&soul),
+                    }),
+                    ..default()
+                },
+            ));
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct CraftWithAxioms {
+    pub boundaries: (Position, Position),
+    pub receiver: Entity,
+}
+
+pub fn craft_with_axioms(
+    mut events: EventReader<CraftWithAxioms>,
+    dropped_souls: Query<(Entity, &Position, &DroppedSoul)>,
+    crafting_recipes: Res<CraftingRecipes>,
+) {
+    for event in events.read() {
+        let mut ingredients = HashMap::new();
+        for (soul_entity, pos, soul_type) in dropped_souls.iter() {
+            if pos.is_within_range(&event.boundaries.0, &event.boundaries.1) {
+                ingredients.insert(pos, soul_type.0);
+            }
+        }
+        let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
+        let axioms: Vec<Axiom> = matches
+            .into_iter()
+            .map(|(_positions, axiom)| axiom.clone())
+            .collect();
+
+        let spell = Spell { axioms };
+    }
+}
+
+impl CraftingRecipes {
+    pub fn find_all_matching_axioms(
+        &self,
+        ingredients: &HashMap<&Position, Soul>,
+    ) -> Vec<(Vec<Position>, &Axiom)> {
+        // This will accumulate the discovered axioms
+        let mut matches = Vec::new();
+        // This will ban souls from being used in 2 recipes
+        let mut used_positions = HashSet::new();
+
+        // Sort right-to-left, top-to-bottom (reading order) in the cage.
+        let mut sorted_positions: Vec<&Position> = ingredients.keys().copied().collect();
+        sorted_positions.sort_by(|a, b| a.y.cmp(&b.y).then(a.x.cmp(&b.x)));
+
+        // starting from the most complex recipes...
+        for pos in sorted_positions {
+            // avoid already used souls
+            if used_positions.contains(pos) {
+                continue;
+            }
+
+            let soul = ingredients.get(pos).unwrap();
+
+            for (recipe, axiom) in &self.sorted_recipes {
+                // only scan recipes with this soul type
+                if &recipe.soul_type != soul {
+                    continue;
+                }
+
+                // ban recipes that are too large for this cage
+                let max_x = pos.x + recipe.dimensions.x;
+                let max_y = pos.y + recipe.dimensions.y;
+                if max_x > ingredients.keys().map(|p| p.x).max().unwrap_or(0)
+                    || max_y > ingredients.keys().map(|p| p.y).max().unwrap_or(0)
+                {
+                    continue;
+                }
+
+                // locate potential axioms
+                let mut is_match = true;
+                let mut recipe_positions = Vec::new();
+                for rel_pos in &recipe.souls {
+                    let abs_pos = Position {
+                        x: pos.x + rel_pos.x,
+                        y: pos.y + rel_pos.y,
+                    };
+                    if used_positions.contains(&abs_pos) || ingredients.get(&abs_pos) != Some(soul)
+                    {
+                        is_match = false;
+                        break;
+                    }
+                    recipe_positions.push(abs_pos);
+                }
+
+                if is_match {
+                    matches.push((recipe_positions.clone(), axiom));
+                    used_positions.extend(recipe_positions);
+                    break;
+                }
+            }
+        }
+
+        matches
+    }
+}
+
+#[derive(Hash, PartialEq, Eq)]
 pub struct Recipe {
     pub dimensions: Position,
     pub souls: Vec<Position>,
@@ -57,63 +197,60 @@ impl Recipe {
 
 impl FromWorld for CraftingRecipes {
     fn from_world(_world: &mut World) -> Self {
-        let mut crafting = CraftingRecipes {
-            recipes: HashMap::new(),
-        };
-        crafting.recipes.insert(
-            Axiom::Ego,
+        let mut recipes = HashMap::new();
+        recipes.insert(
             Recipe::from_string(
                 "\
                 S\
                 ",
             ),
+            Axiom::Ego,
         );
-        crafting.recipes.insert(
-            Axiom::MomentumBeam,
+        recipes.insert(
             Recipe::from_string(
                 "\
                 F\n\
                 F\
                 ",
             ),
+            Axiom::MomentumBeam,
         );
-        crafting.recipes.insert(
-            Axiom::XBeam,
+        recipes.insert(
             Recipe::from_string(
                 "\
                 .U\n\
                 U\
                 ",
             ),
+            Axiom::XBeam,
         );
-        crafting.recipes.insert(
-            Axiom::PlusBeam,
+        recipes.insert(
             Recipe::from_string(
                 "\
                 U\n\
                 U\
                 ",
             ),
+            Axiom::PlusBeam,
         );
-        crafting.recipes.insert(
-            Axiom::Plus,
+        recipes.insert(
             Recipe::from_string(
                 "\
                 O\n\
                 O\
                 ",
             ),
+            Axiom::Plus,
         );
-        crafting.recipes.insert(
-            Axiom::Touch,
+        recipes.insert(
             Recipe::from_string(
                 "\
                 V\
                 ",
             ),
+            Axiom::Touch,
         );
-        crafting.recipes.insert(
-            Axiom::Halo { radius: 4 },
+        recipes.insert(
             Recipe::from_string(
                 "\
                 .U.\n\
@@ -121,44 +258,48 @@ impl FromWorld for CraftingRecipes {
                 .U.\
                 ",
             ),
+            Axiom::Halo { radius: 4 },
         );
-        crafting.recipes.insert(
-            Axiom::Dash { max_distance: 5 },
+        recipes.insert(
             Recipe::from_string(
                 "\
                 FF\
                 ",
             ),
+            Axiom::Dash { max_distance: 5 },
         );
-        crafting.recipes.insert(
-            Axiom::HealOrHarm { amount: -1 },
+        recipes.insert(
             Recipe::from_string(
                 "\
                 U\
                 ",
             ),
+            Axiom::HealOrHarm { amount: -1 },
         );
-        crafting.recipes.insert(
-            Axiom::PlaceStepTrap,
+        recipes.insert(
             Recipe::from_string(
                 "\
                 A.A\
                 ",
             ),
+            Axiom::PlaceStepTrap,
         );
-        crafting.recipes.insert(
-            Axiom::StatusEffect {
-                effect: StatusEffect::Stab,
-                potency: 5,
-                stacks: EffectDuration::Finite { stacks: 20 },
-            },
+        recipes.insert(
             Recipe::from_string(
                 "\
                 .V.\n\
                 V.V\
                 ",
             ),
+            Axiom::StatusEffect {
+                effect: StatusEffect::Stab,
+                potency: 5,
+                stacks: EffectDuration::Finite { stacks: 20 },
+            },
         );
-        crafting
+        let mut sorted_recipes: Vec<(Recipe, Axiom)> = recipes.into_iter().collect();
+        sorted_recipes.sort_by(|(a, _), (b, _)| b.souls.len().cmp(&a.souls.len()));
+
+        CraftingRecipes { sorted_recipes }
     }
 }

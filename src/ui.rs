@@ -1037,6 +1037,7 @@ pub enum InvalidAction {
     NoSoulsInPile,
     CannotMelee(Species),
     EmptySlotCast,
+    NoSpellForCaste,
 }
 
 pub enum Message {
@@ -1109,6 +1110,9 @@ pub fn print_message_in_log(
                 }
                 InvalidAction::EmptySlotCast => {
                     "[y]That slot has nothing in it, you cannot cast it as a spell![w]"
+                }
+                InvalidAction::NoSpellForCaste => {
+                    "[y]Souls of this caste have no spell assigned, you cannot use them![w]"
                 }
             },
         };

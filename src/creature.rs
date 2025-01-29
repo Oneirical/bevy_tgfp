@@ -223,6 +223,9 @@ pub struct NoDropSoul;
 pub struct Intangible;
 
 #[derive(Component)]
+pub struct CraftingSlot;
+
+#[derive(Component)]
 pub struct DesignatedForRemoval;
 
 // Breaks when stepped on.
