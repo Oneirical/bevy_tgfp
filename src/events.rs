@@ -78,10 +78,10 @@ impl FromWorld for SoulWheel {
             draw_pile: HashMap::new(),
             discard_pile: HashMap::new(),
         };
-        soul_wheel.draw_pile.insert(Soul::Saintly, 1);
+        soul_wheel.draw_pile.insert(Soul::Saintly, 100);
         soul_wheel.draw_pile.insert(Soul::Ordered, 1);
         soul_wheel.draw_pile.insert(Soul::Artistic, 1);
-        soul_wheel.draw_pile.insert(Soul::Unhinged, 10);
+        soul_wheel.draw_pile.insert(Soul::Unhinged, 1);
         soul_wheel.draw_pile.insert(Soul::Feral, 1);
         soul_wheel.draw_pile.insert(Soul::Vile, 1);
         soul_wheel.discard_pile.insert(Soul::Saintly, 0);
@@ -446,7 +446,7 @@ pub fn summon_creature(
 
         // NOTE: This will have to be removed when creating player clones
         // becomes possible.
-        if event.species == Species::EpsilonHead {
+        if event.species == Species::Player {
             new_creature.insert(Player);
         }
 
@@ -970,7 +970,7 @@ pub fn stepped_on_tile(
                 if is_crafting_slot {
                     drop.send(TakeOrDropSoul {
                         position: *position,
-                        soul: Some(Soul::Saintly),
+                        soul: Some(Soul::Unhinged),
                     });
                 }
             }

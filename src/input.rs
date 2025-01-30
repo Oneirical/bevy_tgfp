@@ -1,11 +1,13 @@
 use bevy::prelude::*;
 
 use crate::{
+    crafting::CraftWithAxioms,
     creature::{Player, Soul},
     cursor::CursorStep,
     events::{
         CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
     },
+    map::Position,
     sets::ControlState,
     ui::LargeCastePanel,
     OrdDir,
@@ -26,6 +28,8 @@ pub fn keyboard_input(
     mut cursor: EventWriter<CursorStep>,
     mut caste_menu: Query<&mut LargeCastePanel>,
     mut scale: ResMut<UiScale>,
+
+    mut craft: EventWriter<CraftWithAxioms>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -162,5 +166,12 @@ pub fn keyboard_input(
     }
     if input.pressed(KeyCode::KeyP) {
         scale.0 -= 0.02;
+    }
+
+    if input.just_pressed(KeyCode::KeyK) {
+        craft.send(CraftWithAxioms {
+            boundaries: (Position::new(6, 7), Position::new(8, 9)),
+            receiver: player.single(),
+        });
     }
 }

@@ -2,9 +2,10 @@ use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
 };
+use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    creature::{get_soul_sprite, EffectDuration, Soul, StatusEffect},
+    creature::{get_soul_sprite, EffectDuration, Soul, Spellbook, StatusEffect},
     graphics::SpriteSheetAtlas,
     map::Position,
     spells::{Axiom, Spell},
@@ -64,24 +65,59 @@ pub struct CraftWithAxioms {
 
 pub fn craft_with_axioms(
     mut events: EventReader<CraftWithAxioms>,
-    dropped_souls: Query<(Entity, &Position, &DroppedSoul)>,
+    dropped_souls: Query<(&Position, &DroppedSoul)>,
     crafting_recipes: Res<CraftingRecipes>,
+    mut spellbook: Query<&mut Spellbook>,
 ) {
     for event in events.read() {
         let mut ingredients = HashMap::new();
-        for (soul_entity, pos, soul_type) in dropped_souls.iter() {
+        let mut soul_types = Vec::new();
+        for (pos, soul_type) in dropped_souls.iter() {
             if pos.is_within_range(&event.boundaries.0, &event.boundaries.1) {
                 ingredients.insert(pos, soul_type.0);
+                soul_types.push(soul_type.0);
             }
         }
         let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
+
+        dbg!(&matches);
+        // Do not create empty spells.
+        if matches.is_empty() {
+            continue;
+        }
         let axioms: Vec<Axiom> = matches
             .into_iter()
             .map(|(_positions, axiom)| axiom.clone())
             .collect();
 
         let spell = Spell { axioms };
+        let mut spellbook = spellbook.get_mut(event.receiver).unwrap();
+        if let Some(caste) = most_common_soul(soul_types) {
+            *spellbook.spells.entry(caste).or_insert(spell) = spell.clone();
+        }
     }
+}
+
+pub fn most_common_soul(souls: Vec<Soul>) -> Option<Soul> {
+    if souls.is_empty() {
+        return None;
+    }
+
+    // count how many souls there are of each type
+    let counts: HashMap<Soul, usize> = souls.into_iter().fold(HashMap::new(), |mut map, soul| {
+        *map.entry(soul).or_insert(0) += 1;
+        map
+    });
+
+    // locate the number of souls in the most numerous castes
+    let max_count = counts.values().max().cloned().unwrap_or(0);
+
+    // if there are multiple candidates, pick one at random
+    let mut rng = thread_rng();
+    counts
+        .into_iter()
+        .filter_map(|(soul, count)| if count == max_count { Some(soul) } else { None })
+        .choose(&mut rng)
 }
 
 impl CraftingRecipes {
@@ -113,14 +149,13 @@ impl CraftingRecipes {
                     continue;
                 }
 
-                // ban recipes that are too large for this cage
-                let max_x = pos.x + recipe.dimensions.x;
-                let max_y = pos.y + recipe.dimensions.y;
-                if max_x > ingredients.keys().map(|p| p.x).max().unwrap_or(0)
-                    || max_y > ingredients.keys().map(|p| p.y).max().unwrap_or(0)
-                {
-                    continue;
-                }
+                // // ban recipes that are too large for this cage
+                // if recipe.dimensions.x > ingredients.keys().map(|p| p.x).max().unwrap_or(0) - pos.x
+                //     || recipe.dimensions.y
+                //         > ingredients.keys().map(|p| p.y).max().unwrap_or(0) - pos.y
+                // {
+                //     continue;
+                // }
 
                 // locate potential axioms
                 let mut is_match = true;
