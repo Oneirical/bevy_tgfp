@@ -169,6 +169,7 @@ pub fn register_creatures(
     flag_query: Query<&FlagEntity>,
     mut tangible_entities: RemovedComponents<Intangible>,
     mut remove: EventWriter<RemoveCreature>,
+    mut transform: Query<&mut Transform>,
 ) {
     for (position, entity, flags) in newly_positioned_creatures.iter() {
         // Intangible creatures are not added to the map.
@@ -196,6 +197,9 @@ pub fn register_creatures(
                 dbg!("A creature recovered its tangibility while on top of another creature!");
             } else {
                 map.creatures.insert(*tangible_position, entity);
+                // Aligning the sprite at 0. once again so that it appears on top
+                // of intangible creatures.
+                transform.get_mut(entity).unwrap().translation.z = 0.;
             }
         }
     }
@@ -214,6 +218,13 @@ pub fn register_creatures(
                 continue;
             }
         }
+        // Lowering the sprite of the intangible creature, ensuring other creatures
+        // appear to be on top of it.
+        transform
+            .get_mut(flag_entity.parent_creature)
+            .unwrap()
+            .translation
+            .z = -5.;
         map.creatures.remove(intangible_position);
     }
 }

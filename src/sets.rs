@@ -9,9 +9,10 @@ use crate::{
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
-        magnet_follow, magnetize_tail_segments, open_close_door, remove_creature,
+        is_painting, magnet_follow, magnetize_tail_segments, open_close_door, remove_creature,
         remove_designated_creatures, render_closing_doors, respawn_cage, respawn_player,
-        stepped_on_tile, summon_creature, teleport_entity, transform_creature, use_wheel_soul,
+        stepped_on_tile, summon_creature, swap_current_paint, teleport_entity, transform_creature,
+        use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -38,6 +39,7 @@ impl Plugin for SetsPlugin {
         app.add_systems(Update, magnet_follow.after(teleport_entity));
         app.add_systems(Update, take_or_drop_soul.after(stepped_on_tile));
         app.add_systems(Update, craft_with_axioms);
+        app.add_systems(Update, swap_current_paint.run_if(is_painting));
         app.add_event::<TakeOrDropSoul>();
         app.add_event::<CraftWithAxioms>();
         app.init_resource::<CraftingRecipes>();
@@ -61,10 +63,10 @@ impl Plugin for SetsPlugin {
                 assign_species_components,
                 keyboard_input.run_if(spell_stack_is_empty),
                 creature_step,
-                use_wheel_soul,
+                use_wheel_soul.run_if(not(is_painting)),
                 process_axiom,
                 cleanup_synapses,
-                draw_soul,
+                draw_soul.run_if(not(is_painting)),
             )
                 .chain())
             .in_set(ActionPhase),

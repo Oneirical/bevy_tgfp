@@ -53,6 +53,10 @@ impl Plugin for EventPlugin {
             turn_count: 0,
             action_this_turn: PlayerAction::Invalid,
         });
+        app.insert_resource(CagePainter {
+            is_painting: false,
+            current_paint: None,
+        });
         app.init_resource::<SoulWheel>();
     }
 }
@@ -62,6 +66,137 @@ pub struct TurnManager {
     pub turn_count: usize,
     /// Whether the player took a step, cast a spell, or did something useless (like step into a wall) this turn.
     pub action_this_turn: PlayerAction,
+}
+
+#[derive(Resource)]
+pub struct CagePainter {
+    pub is_painting: bool,
+    pub current_paint: Option<Soul>,
+}
+
+pub fn is_painting(painter: Res<CagePainter>) -> bool {
+    painter.is_painting
+}
+
+pub fn swap_current_paint(
+    mut events: EventReader<UseWheelSoul>,
+    mut painter: ResMut<CagePainter>,
+    mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
+    mut turn_manager: ResMut<TurnManager>,
+) {
+    for event in events.read() {
+        painter.current_paint = match event.index {
+            0 => None,
+            1 => Some(Soul::Saintly),
+            2 => Some(Soul::Ordered),
+            3 => Some(Soul::Artistic),
+            4 => Some(Soul::Unhinged),
+            5 => Some(Soul::Feral),
+            6 => Some(Soul::Vile),
+            7 => Some(Soul::Serene),
+            _ => panic!("There should only be 8 soul wheel slots!"),
+        };
+        for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
+            if ui_slot_marker.index == event.index {
+                ui_slot_node.color.set_alpha(1.);
+            } else {
+                ui_slot_node.color.set_alpha(0.1);
+            }
+        }
+        // Changing the paint type does not take a turn.
+        turn_manager.action_this_turn = PlayerAction::Skipped;
+    }
+}
+
+pub fn toggle_paint_mode(
+    mut painter: ResMut<CagePainter>,
+    player: Query<&Position, With<Player>>,
+    slots: Query<&FlagEntity, With<CraftingSlot>>,
+    position: Query<&Position>,
+    mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
+    soul_wheel: Res<SoulWheel>,
+) {
+    if painter.is_painting {
+        let player_pos = player.single();
+        let mut out_of_range = true;
+        for slot in slots.iter() {
+            let slot = position.get(slot.parent_creature).unwrap();
+            if player_pos.is_within_range(
+                &Position {
+                    x: slot.x - 1,
+                    y: slot.y - 1,
+                },
+                &Position {
+                    x: slot.x + 1,
+                    y: slot.y + 1,
+                },
+            ) {
+                out_of_range = false;
+            }
+        }
+        if out_of_range {
+            painter.is_painting = false;
+            for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
+                ui_slot_node.texture_atlas.as_mut().unwrap().index =
+                    if let Some(wheel_soul) = soul_wheel.souls.get(ui_slot_marker.index).unwrap() {
+                        get_soul_sprite(&wheel_soul)
+                    } else {
+                        167
+                    };
+                ui_slot_node.color.set_alpha(1.);
+            }
+            return;
+        }
+    } else {
+        let player_pos = player.single();
+        for slot in slots.iter() {
+            let slot = position.get(slot.parent_creature).unwrap();
+            if player_pos.is_within_range(
+                &Position {
+                    x: slot.x - 1,
+                    y: slot.y - 1,
+                },
+                &Position {
+                    x: slot.x + 1,
+                    y: slot.y + 1,
+                },
+            ) {
+                painter.is_painting = true;
+                let full_alpha_index = match painter.current_paint {
+                    None => 0,
+                    Some(Soul::Saintly) => 1,
+                    Some(Soul::Ordered) => 2,
+                    Some(Soul::Artistic) => 3,
+                    Some(Soul::Unhinged) => 4,
+                    Some(Soul::Feral) => 5,
+                    Some(Soul::Vile) => 6,
+                    Some(Soul::Serene) => 7,
+                    _ => panic!("There should only be 8 soul wheel slots!"),
+                };
+                for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
+                    ui_slot_node.texture_atlas.as_mut().unwrap().index = match ui_slot_marker.index
+                    {
+                        0 => 167,
+                        1 => get_soul_sprite(&Soul::Saintly),
+                        2 => get_soul_sprite(&Soul::Ordered),
+                        3 => get_soul_sprite(&Soul::Artistic),
+                        4 => get_soul_sprite(&Soul::Unhinged),
+                        5 => get_soul_sprite(&Soul::Feral),
+                        6 => get_soul_sprite(&Soul::Vile),
+                        7 => get_soul_sprite(&Soul::Serene),
+                        _ => panic!("There should only be 8 soul wheel slots!"),
+                    };
+
+                    if ui_slot_marker.index == full_alpha_index {
+                        ui_slot_node.color.set_alpha(1.);
+                    } else {
+                        ui_slot_node.color.set_alpha(0.1);
+                    }
+                }
+                return;
+            }
+        }
+    }
 }
 
 #[derive(Resource)]
@@ -809,6 +944,9 @@ pub fn teleport_entity(
                 caster: event.entity,
                 contingency: Axiom::WhenMoved,
             });
+            if is_player.get(event.entity).unwrap() {
+                commands.run_system_cached(toggle_paint_mode);
+            }
         } else if let Some(collided_with) =
             map.get_entity_at(event.destination.x, event.destination.y)
         {
@@ -839,7 +977,6 @@ pub struct MagnetFollow {
 /// will have their "train" follow along with their moves.
 pub fn magnet_follow(
     mut magnet_set: ParamSet<(Query<Entity, With<Magnetized>>, Query<&mut Magnetized>)>,
-    species: Query<&Species>,
     position: Query<&Position>,
     mut teleport: EventWriter<TeleportEntity>,
     mut events: EventReader<MagnetFollow>,
@@ -856,7 +993,6 @@ pub fn magnet_follow(
             .unwrap();
         let mut magnet = magnet_set.p1();
         let mut magnet = magnet.get_mut(flags_with_magnetized).unwrap();
-        let species = species.get(event.conductor).unwrap();
         let mut train_idx = 0;
         // new_pos is the position the conductor currently occupies,
         // and old_pos was before their last move.
@@ -949,6 +1085,7 @@ pub fn stepped_on_tile(
     stepped_on_creatures: Query<(Entity, &Position, &CreatureFlags)>,
     fragile: Query<&Fragile>,
     crafting_slot: Query<&CraftingSlot>,
+    paint: Res<CagePainter>,
 ) {
     for event in events.read() {
         for (entity, position, flags) in stepped_on_creatures.iter() {
@@ -971,7 +1108,7 @@ pub fn stepped_on_tile(
                 if is_crafting_slot {
                     drop.send(TakeOrDropSoul {
                         position: *position,
-                        soul: Some(Soul::Unhinged),
+                        soul: paint.current_paint,
                     });
                 }
             }

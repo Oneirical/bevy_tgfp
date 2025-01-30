@@ -54,6 +54,11 @@ pub fn take_or_drop_soul(
                     }),
                     ..default()
                 },
+                Transform::from_translation(Vec3::new(
+                    event.position.x as f32 * TILE_SIZE,
+                    event.position.y as f32 * TILE_SIZE,
+                    -7.,
+                )),
             ));
         }
     }

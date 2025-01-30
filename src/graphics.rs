@@ -65,8 +65,11 @@ pub fn adjust_transforms(
         if is_animated {
             // The sprite approaches its destination.
             let current_translation = trans.translation;
-            let target_translation =
-                Vec3::new(pos.x as f32 * TILE_SIZE, pos.y as f32 * TILE_SIZE, 0.);
+            let target_translation = Vec3::new(
+                pos.x as f32 * TILE_SIZE,
+                pos.y as f32 * TILE_SIZE,
+                trans.translation.z,
+            );
             // The creature is more than 0.5 pixels away from its destination - smooth animation.
             if ((target_translation.x - current_translation.x).abs()
                 + (target_translation.y - current_translation.y).abs())

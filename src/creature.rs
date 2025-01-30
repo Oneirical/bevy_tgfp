@@ -38,6 +38,7 @@ pub enum Soul {
     Unhinged,
     Feral,
     Vile,
+    Serene,
     // Its sole purpose is to display a tutorial tooltip in the Caste UI menu.
     Empty,
 }
@@ -51,6 +52,7 @@ pub fn get_soul_sprite(soul: &Soul) -> usize {
         Soul::Unhinged => 163,
         Soul::Feral => 164,
         Soul::Vile => 165,
+        Soul::Serene => 181,
         Soul::Empty => 166,
     }
 }
