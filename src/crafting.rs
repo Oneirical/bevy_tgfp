@@ -1,3 +1,5 @@
+use std::mem::discriminant;
+
 use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
@@ -80,7 +82,6 @@ pub fn craft_with_axioms(
         }
         let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
 
-        dbg!(&matches);
         // Do not create empty spells.
         if matches.is_empty() {
             continue;
@@ -93,7 +94,7 @@ pub fn craft_with_axioms(
         let spell = Spell { axioms };
         let mut spellbook = spellbook.get_mut(event.receiver).unwrap();
         if let Some(caste) = most_common_soul(soul_types) {
-            *spellbook.spells.entry(caste).or_insert(spell) = spell.clone();
+            spellbook.spells.insert(caste, spell);
         }
     }
 }
@@ -132,30 +133,34 @@ impl CraftingRecipes {
 
         // Sort right-to-left, top-to-bottom (reading order) in the cage.
         let mut sorted_positions: Vec<&Position> = ingredients.keys().copied().collect();
-        sorted_positions.sort_by(|a, b| a.y.cmp(&b.y).then(a.x.cmp(&b.x)));
+        sorted_positions.sort_by(|a, b| b.y.cmp(&a.y).then(a.x.cmp(&b.x)));
 
-        // starting from the most complex recipes...
-        for pos in sorted_positions {
+        let cage_dimension_x = ingredients.keys().map(|p| p.x).max().unwrap_or(0)
+            - ingredients.keys().map(|p| p.x).min().unwrap_or(0)
+            + 1;
+        let cage_dimension_y = ingredients.keys().map(|p| p.y).max().unwrap_or(0)
+            - ingredients.keys().map(|p| p.y).min().unwrap_or(0)
+            + 1;
+
+        for pos in &sorted_positions {
             // avoid already used souls
-            if used_positions.contains(pos) {
+            if used_positions.contains(*pos) {
                 continue;
             }
 
             let soul = ingredients.get(pos).unwrap();
-
+            // starting from the most complex recipes...
             for (recipe, axiom) in &self.sorted_recipes {
                 // only scan recipes with this soul type
                 if &recipe.soul_type != soul {
                     continue;
                 }
 
-                // // ban recipes that are too large for this cage
-                // if recipe.dimensions.x > ingredients.keys().map(|p| p.x).max().unwrap_or(0) - pos.x
-                //     || recipe.dimensions.y
-                //         > ingredients.keys().map(|p| p.y).max().unwrap_or(0) - pos.y
-                // {
-                //     continue;
-                // }
+                // ban recipes that are too large for this cage
+                if recipe.dimensions.x > cage_dimension_x || recipe.dimensions.y > cage_dimension_y
+                {
+                    continue;
+                }
 
                 // locate potential axioms
                 let mut is_match = true;
@@ -165,6 +170,7 @@ impl CraftingRecipes {
                         x: pos.x + rel_pos.x,
                         y: pos.y + rel_pos.y,
                     };
+                    // This soul is incorrect or already used by another recipe
                     if used_positions.contains(&abs_pos) || ingredients.get(&abs_pos) != Some(soul)
                     {
                         is_match = false;
@@ -202,6 +208,7 @@ impl Recipe {
         let mut positions: Vec<Position> = Vec::new();
 
         let mut soul = None;
+        let mut first_encountered = None;
 
         for (y, line) in pattern.lines().enumerate() {
             for (x, ch) in line.chars().enumerate() {
@@ -216,8 +223,12 @@ impl Recipe {
                             'V' => Soul::Vile,
                             _ => panic!("Invalid crafting pattern: {}", ch),
                         });
+                        first_encountered = Some(Position::new(x as i32, y as i32));
                     }
-                    positions.push(Position::new(x as i32, y as i32));
+                    positions.push(Position::new(
+                        x as i32 - first_encountered.unwrap().x,
+                        -(y as i32 - first_encountered.unwrap().y),
+                    ));
                 }
             }
         }

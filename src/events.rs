@@ -558,6 +558,7 @@ pub fn assign_species_components(
                         conductor: None,
                     },
                     Hunt,
+                    Dizzy,
                 ));
             }
             Species::Apiarist => {
