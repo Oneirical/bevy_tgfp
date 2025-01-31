@@ -12,6 +12,7 @@ use crate::{
     graphics::SpriteSheetAtlas,
     map::Position,
     spells::{Axiom, Spell},
+    ui::SpellLibraryUI,
     TILE_SIZE,
 };
 
@@ -77,6 +78,10 @@ pub fn craft_with_axioms(
     crafting_recipes: Res<CraftingRecipes>,
     mut spell_library: ResMut<SpellLibrary>,
     mut spellbook: Query<(&mut Spellbook, Has<Player>)>,
+    mut commands: Commands,
+    ui: Query<Entity, With<SpellLibraryUI>>,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
 ) {
     for event in events.read() {
         let mut ingredients = HashMap::new();
@@ -99,10 +104,30 @@ pub fn craft_with_axioms(
             .collect();
 
         if let Some(caste) = most_common_soul(soul_types) {
-            let spell = Spell { axioms, caste };
+            let icon = 170;
+            let spell = Spell {
+                axioms,
+                caste,
+                icon,
+            };
             let (mut book, is_player) = spellbook.get_mut(event.receiver).unwrap();
             if is_player {
                 spell_library.library.push(spell);
+                commands.entity(ui.single()).with_child((
+                    ImageNode {
+                        image: asset_server.load("spritesheet.png"),
+                        texture_atlas: Some(TextureAtlas {
+                            layout: atlas_layout.handle.clone(),
+                            index: icon,
+                        }),
+                        ..Default::default()
+                    },
+                    Node {
+                        width: Val::Px(3.),
+                        height: Val::Px(3.),
+                        ..default()
+                    },
+                ));
             } else {
                 book.spells.insert(caste, spell);
             }

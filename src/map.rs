@@ -357,20 +357,20 @@ fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) 
         cage[112 + 17 * 4] = 'n';
         cage[113 + 17 * 4] = 'n';
         cage[114 + 17 * 4] = 'n';
-        cage[112 + 17 * 1 - 1] = 'e';
+        cage[112 + 17 - 1] = 'e';
         cage[113 + 17 * 2 - 2] = 'e';
         cage[114 + 17 * 3 - 3] = 'e';
-        cage[112 + 17 * 1 + 3] = 'w';
+        cage[112 + 17 + 3] = 'w';
         cage[113 + 17 * 2 + 2] = 'w';
         cage[114 + 17 * 3 + 1] = 'w';
-        cage[112 + 17 * 1 - 0] = 'x';
+        cage[112 + 17] = 'x';
         cage[113 + 17 * 2 - 1] = 'x';
         cage[114 + 17 * 3 - 2] = 'x';
-        cage[112 + 17 * 1 + 2] = 'x';
+        cage[112 + 17 + 2] = 'x';
         cage[113 + 17 * 2 + 1] = 'x';
-        cage[114 + 17 * 3 + 0] = 'x';
-        cage[112 + 17 * 1 + 1] = 'x';
-        cage[113 + 17 * 2 + 0] = 'x';
+        cage[114 + 17 * 3] = 'x';
+        cage[112 + 17 + 1] = 'x';
+        cage[113 + 17 * 2] = 'x';
         cage[114 + 17 * 3 - 1] = 'x';
         return;
     }

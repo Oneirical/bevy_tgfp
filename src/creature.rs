@@ -85,6 +85,7 @@ impl Spellbook {
                     Spell {
                         axioms: spell.to_vec(),
                         caste: *soul,
+                        icon: 170,
                     },
                 );
             }

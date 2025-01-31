@@ -67,7 +67,7 @@ pub fn update_caste_box(
         commands.entity(caste_box).with_children(|parent| {
             caste_name = spawn_split_text(&match_soul_with_string(&caste), parent, &asset_server);
             caste_description =
-                spawn_split_text(&match_soul_with_description(&caste), parent, &asset_server);
+                spawn_split_text(match_soul_with_description(&caste), parent, &asset_server);
             parent.spawn((
                 ImageNode {
                     image: asset_server.load("spritesheet.png"),

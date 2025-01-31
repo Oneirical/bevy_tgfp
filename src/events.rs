@@ -139,13 +139,12 @@ pub fn toggle_paint_mode(
             for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
                 ui_slot_node.texture_atlas.as_mut().unwrap().index =
                     if let Some(wheel_soul) = soul_wheel.souls.get(ui_slot_marker.index).unwrap() {
-                        get_soul_sprite(&wheel_soul)
+                        get_soul_sprite(wheel_soul)
                     } else {
                         167
                     };
                 ui_slot_node.color.set_alpha(1.);
             }
-            return;
         }
     } else {
         let player_pos = player.single();

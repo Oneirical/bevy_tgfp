@@ -237,6 +237,7 @@ pub struct CastSpell {
 pub struct Spell {
     pub axioms: Vec<Axiom>,
     pub caste: Soul,
+    pub icon: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1186,6 +1187,7 @@ fn axiom_function_force_cast(
             spell: Spell {
                 axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
                 caste: Soul::Saintly,
+                icon: 170,
             },
             soul_caste: synapse_data.soul_caste,
             starting_step: 0,

@@ -120,7 +120,7 @@ pub fn update_cursor_box(
             species_name =
                 spawn_split_text(&match_species_with_string(species), parent, &asset_server);
             species_description = spawn_split_text(
-                &match_species_with_description(species),
+                match_species_with_description(species),
                 parent,
                 &asset_server,
             );
@@ -129,7 +129,7 @@ pub fn update_cursor_box(
                     image: asset_server.load("spritesheet.png"),
                     texture_atlas: Some(TextureAtlas {
                         layout: atlas_layout.handle.clone(),
-                        index: get_species_sprite(&species),
+                        index: get_species_sprite(species),
                     }),
                     ..Default::default()
                 },

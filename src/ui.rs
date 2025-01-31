@@ -639,6 +639,21 @@ fn setup(
                                         },
                                     ));
                             }
+                            parent.spawn((
+                                Node {
+                                    width: Val::Px(7.),
+                                    height: Val::Px(31.),
+                                    left: Val::Px(28.),
+                                    top: Val::Px(16.),
+                                    row_gap: Val::Px(1.),
+                                    column_gap: Val::Px(1.),
+                                    position_type: PositionType::Absolute,
+                                    flex_wrap: FlexWrap::Wrap,
+                                    align_content: AlignContent::FlexStart,
+                                    ..default()
+                                },
+                                SpellLibraryUI,
+                            ));
                         });
                 });
         });
@@ -650,6 +665,9 @@ struct ChainBox;
 
 #[derive(Component)]
 struct ChainUI;
+
+#[derive(Component)]
+pub struct SpellLibraryUI;
 
 fn decorate_with_chains(
     query: Query<(Entity, &Node), With<ChainBox>>,
@@ -854,16 +872,16 @@ pub fn print_message_in_log(
             Message::Tutorial => LORE[18],
             Message::HostileAttack(species, damage) => &format!(
                 "The {} hits you for [r]{}[w] damage.",
-                match_species_with_string(&species),
+                match_species_with_string(species),
                 damage
             ),
             Message::PlayerIsInvincible(species) => &format!(
                 "The {} fails to hit you.",
-                match_species_with_string(&species)
+                match_species_with_string(species)
             ),
             Message::PlayerAttack(species, damage) => &format!(
                 "You hit the {} for [r]{}[w] damage.",
-                match_species_with_string(&species),
+                match_species_with_string(species),
                 damage
             ),
             Message::HealSelf(damage) => {
@@ -871,18 +889,18 @@ pub fn print_message_in_log(
             }
             Message::HealOther(species, damage) => &format!(
                 "You heal the {} for [l]{}[w] health points.",
-                match_species_with_string(&species),
+                match_species_with_string(species),
                 damage
             ),
             Message::CreatureHealsItself(species, damage) => &format!(
                 "The {} heals itself for [l]{}[w] health points.",
-                match_species_with_string(&species),
+                match_species_with_string(species),
                 damage
             ),
             Message::NoPlayerAttack(culprit_species, victim_species, damage) => &format!(
                 "The {} hits the {} for [r]{}[w] damage.",
-                match_species_with_string(&culprit_species),
-                match_species_with_string(&victim_species),
+                match_species_with_string(culprit_species),
+                match_species_with_string(victim_species),
                 damage
             ),
             Message::InvalidAction(action) => match action {
@@ -895,7 +913,7 @@ pub fn print_message_in_log(
                 InvalidAction::CannotMelee(species) => {
                     &format!(
                     "[y]You cannot hope to breach the {}[y]'s defenses![w]",
-                    match_species_with_string(&species)
+                    match_species_with_string(species)
                     )
                 }
                 InvalidAction::EmptySlotCast => {
