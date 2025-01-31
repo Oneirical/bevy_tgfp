@@ -236,6 +236,7 @@ pub struct CastSpell {
 /// those tiles, in the order they are listed.
 pub struct Spell {
     pub axioms: Vec<Axiom>,
+    pub caste: Soul,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -803,12 +804,10 @@ fn axiom_function_place_step_trap(
             spellbook: Some(Spellbook::new([
                 None,
                 None,
-                Some(Spell {
-                    axioms: {
-                        let mut step_trigger = vec![Axiom::WhenSteppedOn];
-                        step_trigger.extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
-                        step_trigger
-                    },
+                Some({
+                    let mut step_trigger = vec![Axiom::WhenSteppedOn];
+                    step_trigger.extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
+                    step_trigger
                 }),
                 None,
                 None,
@@ -1186,6 +1185,7 @@ fn axiom_function_force_cast(
             caster: entity,
             spell: Spell {
                 axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
+                caste: Soul::Saintly,
             },
             soul_caste: synapse_data.soul_caste,
             starting_step: 0,

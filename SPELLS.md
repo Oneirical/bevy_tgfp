@@ -11,6 +11,7 @@ JOLTZAZON: Targets spread into adjacent entities
 TRAIL: also target everything in the way of the moving marked entities
 SPREAD: every entity spreads orthogonally
 REPEAT: the following praxes are executed 5 times in a row
+DELAY: The effect only happens after X turns
 
 PARACEON: Invincibility for 1 turn
 GYVJI: Bash into walls in direction of last move

@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 
 use crate::{
-    caste::{hide_caste_menu, show_caste_menu, update_caste_box},
+    caste::{equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell},
     crafting::{
         craft_with_axioms, take_or_drop_soul, CraftWithAxioms, CraftingRecipes, TakeOrDropSoul,
     },
+    creature::SpellLibrary,
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
@@ -42,7 +43,12 @@ impl Plugin for SetsPlugin {
         app.add_systems(Update, swap_current_paint.run_if(is_painting));
         app.add_event::<TakeOrDropSoul>();
         app.add_event::<CraftWithAxioms>();
+        app.add_event::<EquipSpell>();
+        app.add_systems(Update, equip_spell);
         app.init_resource::<CraftingRecipes>();
+        app.insert_resource(SpellLibrary {
+            library: Vec::new(),
+        });
         app.add_systems(
             Update,
             (cursor_step, teleport_cursor, update_cursor_box)

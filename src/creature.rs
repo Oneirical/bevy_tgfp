@@ -30,6 +30,11 @@ pub struct FlagEntity {
     pub parent_creature: Entity,
 }
 
+#[derive(Resource)]
+pub struct SpellLibrary {
+    pub library: Vec<Spell>,
+}
+
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Soul {
     Saintly,
@@ -63,7 +68,7 @@ pub struct Spellbook {
 }
 
 impl Spellbook {
-    pub fn new(slots: [Option<Spell>; 6]) -> Self {
+    pub fn new(slots: [Option<Vec<Axiom>>; 6]) -> Self {
         let mut book = HashMap::new();
         let souls = [
             Soul::Saintly,
@@ -75,7 +80,13 @@ impl Spellbook {
         ];
         for (i, soul) in souls.iter().enumerate() {
             if let Some(spell) = &slots[i] {
-                book.insert(*soul, spell.clone());
+                book.insert(
+                    *soul,
+                    Spell {
+                        axioms: spell.to_vec(),
+                        caste: *soul,
+                    },
+                );
             }
         }
         Spellbook { spells: book }
@@ -290,30 +301,28 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             None,
             None,
-            Some(Spell {
-                axioms: vec![
-                    Axiom::WhenMoved,
-                    Axiom::IncrementCounter {
-                        amount: 1,
-                        count: 0,
-                    },
-                    Axiom::TerminateIfCounter {
-                        condition: CounterCondition::NotModuloOf { modulo: 5 },
-                        threshold: 0,
-                    },
-                    Axiom::Ego,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Stab,
-                        potency: 0,
-                        stacks: EffectDuration::Infinite,
-                    },
-                    Axiom::UpgradeStatusEffect {
-                        effect: StatusEffect::Stab,
-                        potency: 1,
-                        stacks: EffectDuration::Infinite,
-                    },
-                ],
-            }),
+            Some(vec![
+                Axiom::WhenMoved,
+                Axiom::IncrementCounter {
+                    amount: 1,
+                    count: 0,
+                },
+                Axiom::TerminateIfCounter {
+                    condition: CounterCondition::NotModuloOf { modulo: 5 },
+                    threshold: 0,
+                },
+                Axiom::Ego,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Stab,
+                    potency: 0,
+                    stacks: EffectDuration::Infinite,
+                },
+                Axiom::UpgradeStatusEffect {
+                    effect: StatusEffect::Stab,
+                    potency: 1,
+                    stacks: EffectDuration::Infinite,
+                },
+            ]),
             None,
             None,
         ]),
@@ -321,21 +330,19 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             None,
             None,
-            Some(Spell {
-                axioms: vec![
-                    Axiom::WhenMoved,
-                    Axiom::IncrementCounter {
-                        amount: 1,
-                        count: 0,
-                    },
-                    Axiom::TerminateIfCounter {
-                        condition: CounterCondition::NotModuloOf { modulo: 5 },
-                        threshold: 0,
-                    },
-                    Axiom::Ego,
-                    Axiom::Dash { max_distance: 5 },
-                ],
-            }),
+            Some(vec![
+                Axiom::WhenMoved,
+                Axiom::IncrementCounter {
+                    amount: 1,
+                    count: 0,
+                },
+                Axiom::TerminateIfCounter {
+                    condition: CounterCondition::NotModuloOf { modulo: 5 },
+                    threshold: 0,
+                },
+                Axiom::Ego,
+                Axiom::Dash { max_distance: 5 },
+            ]),
             None,
             None,
         ]),
@@ -345,18 +352,14 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             None,
             None,
-            Some(Spell {
-                axioms: vec![Axiom::Plus, Axiom::DevourWall],
-            }),
+            Some(vec![Axiom::Plus, Axiom::DevourWall]),
         ]),
         Species::Hunter => Spellbook::new([
-            Some(Spell {
-                axioms: vec![
-                    Axiom::WhenDealingDamage,
-                    Axiom::Ego,
-                    Axiom::HealOrHarm { amount: 1 },
-                ],
-            }),
+            Some(vec![
+                Axiom::WhenDealingDamage,
+                Axiom::Ego,
+                Axiom::HealOrHarm { amount: 1 },
+            ]),
             None,
             None,
             None,
@@ -366,98 +369,88 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         Species::Tinker => Spellbook::new([
             None,
             None,
-            Some(Spell {
-                axioms: vec![
-                    Axiom::WhenMoved,
-                    Axiom::IncrementCounter {
-                        amount: 1,
-                        count: 0,
-                    },
-                    Axiom::TerminateIfCounter {
-                        condition: CounterCondition::NotModuloOf { modulo: 5 },
-                        threshold: 0,
-                    },
-                    Axiom::Plus,
-                    Axiom::FilterBySpecies {
-                        species: Species::WeakWall,
-                    },
-                    Axiom::Transform {
-                        species: Species::Abazon,
-                    },
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::DimensionBond,
-                        potency: 1,
-                        stacks: EffectDuration::Infinite,
-                    },
-                    Axiom::Terminate,
-                    Axiom::WhenRemoved,
-                    Axiom::Ego,
-                    Axiom::Abjuration,
-                ],
-            }),
+            Some(vec![
+                Axiom::WhenMoved,
+                Axiom::IncrementCounter {
+                    amount: 1,
+                    count: 0,
+                },
+                Axiom::TerminateIfCounter {
+                    condition: CounterCondition::NotModuloOf { modulo: 5 },
+                    threshold: 0,
+                },
+                Axiom::Plus,
+                Axiom::FilterBySpecies {
+                    species: Species::WeakWall,
+                },
+                Axiom::Transform {
+                    species: Species::Abazon,
+                },
+                Axiom::StatusEffect {
+                    effect: StatusEffect::DimensionBond,
+                    potency: 1,
+                    stacks: EffectDuration::Infinite,
+                },
+                Axiom::Terminate,
+                Axiom::WhenRemoved,
+                Axiom::Ego,
+                Axiom::Abjuration,
+            ]),
             None,
             None,
             None,
         ]),
         Species::Player => Spellbook::new([
-            Some(Spell {
-                axioms: vec![Axiom::Ego, Axiom::Plus, Axiom::HealOrHarm { amount: 2 }],
-            }),
-            Some(Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Invincible,
-                        potency: 1,
-                        stacks: EffectDuration::Finite { stacks: 2 },
-                    },
-                ],
-            }),
-            Some(Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::PlaceStepTrap,
-                    Axiom::PiercingBeams,
-                    Axiom::PlusBeam,
-                    Axiom::Ego,
-                    Axiom::HealOrHarm { amount: -2 },
-                ],
-            }),
-            Some(Spell {
-                axioms: vec![
-                    Axiom::PiercingBeams,
-                    Axiom::XBeam,
-                    Axiom::HealOrHarm { amount: -2 },
-                ],
-            }),
-            Some(Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::Trace,
-                    Axiom::Dash { max_distance: 5 },
-                    Axiom::Spread,
-                    Axiom::UntargetCaster,
-                    Axiom::HealOrHarm { amount: -1 },
-                    Axiom::PurgeTargets,
-                    Axiom::Touch,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Dizzy,
-                        potency: 1,
-                        stacks: EffectDuration::Finite { stacks: 2 },
-                    },
-                    Axiom::Dash { max_distance: 1 },
-                ],
-            }),
-            Some(Spell {
-                axioms: vec![
-                    Axiom::Ego,
-                    Axiom::StatusEffect {
-                        effect: StatusEffect::Stab,
-                        potency: 5,
-                        stacks: EffectDuration::Infinite,
-                    },
-                ],
-            }),
+            Some(vec![
+                Axiom::Ego,
+                Axiom::Plus,
+                Axiom::HealOrHarm { amount: 2 },
+            ]),
+            Some(vec![
+                Axiom::Ego,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Invincible,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 2 },
+                },
+            ]),
+            Some(vec![
+                Axiom::Ego,
+                Axiom::PlaceStepTrap,
+                Axiom::PiercingBeams,
+                Axiom::PlusBeam,
+                Axiom::Ego,
+                Axiom::HealOrHarm { amount: -2 },
+            ]),
+            Some(vec![
+                Axiom::PiercingBeams,
+                Axiom::XBeam,
+                Axiom::HealOrHarm { amount: -2 },
+            ]),
+            Some(vec![
+                Axiom::Ego,
+                Axiom::Trace,
+                Axiom::Dash { max_distance: 5 },
+                Axiom::Spread,
+                Axiom::UntargetCaster,
+                Axiom::HealOrHarm { amount: -1 },
+                Axiom::PurgeTargets,
+                Axiom::Touch,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Dizzy,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 2 },
+                },
+                Axiom::Dash { max_distance: 1 },
+            ]),
+            Some(vec![
+                Axiom::Ego,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Stab,
+                    potency: 5,
+                    stacks: EffectDuration::Infinite,
+                },
+            ]),
         ]),
         _ => Spellbook::empty(),
     }

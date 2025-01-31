@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-    creature::{get_soul_sprite, Soul},
+    creature::{get_soul_sprite, Player, Soul, SpellLibrary, Spellbook},
     graphics::SpriteSheetAtlas,
     text::match_soul_with_description,
     ui::{spawn_split_text, CasteBox, LargeCastePanel, MessageLog},
@@ -24,6 +24,28 @@ pub fn hide_caste_menu(
     *message.single_mut() = Visibility::Inherited;
     for mut vis in caste_box.iter_mut() {
         *vis = Visibility::Hidden;
+    }
+}
+
+#[derive(Event)]
+pub struct EquipSpell {
+    index: usize,
+}
+
+pub fn equip_spell(
+    mut events: EventReader<EquipSpell>,
+    mut spell_library: ResMut<SpellLibrary>,
+    mut spellbook: Query<&mut Spellbook, With<Player>>,
+) {
+    for event in events.read() {
+        let equipped_spell = spell_library.library.remove(event.index);
+        let mut spellbook = spellbook.single_mut();
+        if let Some(old_spell) = spellbook.spells.remove(&equipped_spell.caste) {
+            spell_library.library.push(old_spell);
+        }
+        spellbook
+            .spells
+            .insert(equipped_spell.caste, equipped_spell);
     }
 }
 

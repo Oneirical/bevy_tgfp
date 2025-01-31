@@ -18,7 +18,7 @@ use crate::{
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
-        Screenshake, SlideAnimation, SpriteSheetAtlas,
+        SlideAnimation, SpriteSheetAtlas,
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{walk_grid, Axiom, CastSpell, TriggerContingency},
@@ -1647,7 +1647,6 @@ pub fn end_turn(
     mut open: EventWriter<OpenCloseDoor>,
     mut respawn: EventWriter<RespawnPlayer>,
     mut status_effect: EventWriter<AddStatusEffect>,
-    mut screenshake: ResMut<Screenshake>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.

@@ -1,5 +1,3 @@
-use std::mem::discriminant;
-
 use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
@@ -7,7 +5,10 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    creature::{get_soul_sprite, EffectDuration, Soul, Spellbook, StatusEffect},
+    creature::{
+        get_soul_sprite, EffectDuration, Player, Soul, Species, SpellLibrary, Spellbook,
+        StatusEffect,
+    },
     graphics::SpriteSheetAtlas,
     map::Position,
     spells::{Axiom, Spell},
@@ -74,7 +75,8 @@ pub fn craft_with_axioms(
     mut events: EventReader<CraftWithAxioms>,
     dropped_souls: Query<(&Position, &DroppedSoul)>,
     crafting_recipes: Res<CraftingRecipes>,
-    mut spellbook: Query<&mut Spellbook>,
+    mut spell_library: ResMut<SpellLibrary>,
+    mut spellbook: Query<(&mut Spellbook, Has<Player>)>,
 ) {
     for event in events.read() {
         let mut ingredients = HashMap::new();
@@ -96,10 +98,14 @@ pub fn craft_with_axioms(
             .map(|(_positions, axiom)| axiom.clone())
             .collect();
 
-        let spell = Spell { axioms };
-        let mut spellbook = spellbook.get_mut(event.receiver).unwrap();
         if let Some(caste) = most_common_soul(soul_types) {
-            spellbook.spells.insert(caste, spell);
+            let spell = Spell { axioms, caste };
+            let (mut book, is_player) = spellbook.get_mut(event.receiver).unwrap();
+            if is_player {
+                spell_library.library.push(spell);
+            } else {
+                book.spells.insert(caste, spell);
+            }
         }
     }
 }
@@ -260,6 +266,34 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
+                O\
+                ",
+            ),
+            Axiom::StatusEffect {
+                effect: StatusEffect::Invincible,
+                potency: 1,
+                stacks: EffectDuration::Finite { stacks: 3 },
+            },
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
+                U\
+                ",
+            ),
+            Axiom::HealOrHarm { amount: -1 },
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
+                V\
+                ",
+            ),
+            Axiom::Touch,
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
                 F\n\
                 F\
                 ",
@@ -296,10 +330,52 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
-                V\
+                FF\
                 ",
             ),
-            Axiom::Touch,
+            Axiom::Dash { max_distance: 5 },
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
+                A.A\
+                ",
+            ),
+            Axiom::PlaceStepTrap,
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
+                SS\n\
+                S.\
+                ",
+            ),
+            Axiom::ForceCast,
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
+                .V.\n\
+                V.V\
+                ",
+            ),
+            Axiom::StatusEffect {
+                effect: StatusEffect::Stab,
+                potency: 5,
+                stacks: EffectDuration::Finite { stacks: 20 },
+            },
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
+                AA\n\
+                ..\n\
+                A.\
+                ",
+            ),
+            Axiom::Transform {
+                species: Species::Abazon,
+            },
         );
         recipes.insert(
             Recipe::from_string(
@@ -314,39 +390,32 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
-                FF\
+                F.F\n\
+                .F.\n\
+                .F.\
                 ",
             ),
-            Axiom::Dash { max_distance: 5 },
+            Axiom::Trace,
         );
         recipes.insert(
             Recipe::from_string(
                 "\
-                U\
+                V..\n\
+                ...\n\
+                VVV\
                 ",
             ),
-            Axiom::HealOrHarm { amount: -1 },
+            Axiom::WhenDealingDamage,
         );
         recipes.insert(
             Recipe::from_string(
                 "\
-                A.A\
+                O..\n\
+                ...\n\
+                OOO\
                 ",
             ),
-            Axiom::PlaceStepTrap,
-        );
-        recipes.insert(
-            Recipe::from_string(
-                "\
-                .V.\n\
-                V.V\
-                ",
-            ),
-            Axiom::StatusEffect {
-                effect: StatusEffect::Stab,
-                potency: 5,
-                stacks: EffectDuration::Finite { stacks: 20 },
-            },
+            Axiom::WhenTakingDamage,
         );
         let mut sorted_recipes: Vec<(Recipe, Axiom)> = recipes.into_iter().collect();
         sorted_recipes.sort_by(|(a, _), (b, _)| b.souls.len().cmp(&a.souls.len()));
