@@ -185,21 +185,26 @@ pub fn register_creatures(
 
     // A creature recovering its tangibility is added to the map.
     for flag_entity in tangible_entities.read() {
-        let entity = flag_query.get(flag_entity).unwrap().parent_creature;
-        if let Ok(tangible_position) = tangible_creatures.get(entity) {
-            if map.creatures.get(tangible_position).is_some() {
-                // NOTE: This is kind of like Caves of Qud's death by phasing
-                // ("the pauli principle"). Creatures recovering tangibility
-                // on top of another die. I am mostly adding this so I can
-                // debug the occasional door issue.
-                remove.send(RemoveCreature { entity });
-                dbg!(tangible_position);
-                dbg!("A creature recovered its tangibility while on top of another creature!");
-            } else {
-                map.creatures.insert(*tangible_position, entity);
-                // Aligning the sprite at 0. once again so that it appears on top
-                // of intangible creatures.
-                transform.get_mut(entity).unwrap().translation.z = 0.;
+        // NOTE: This started occasionally panicking (such as when stepping on an Artistic
+        // trap) due to unwrapping flag_query. This hack makes the errors silent, which seems okay
+        // since these creatures are despawned and aren't in the map anymore anyways.
+        if let Ok(entity) = flag_query.get(flag_entity) {
+            let entity = entity.parent_creature;
+            if let Ok(tangible_position) = tangible_creatures.get(entity) {
+                if map.creatures.get(tangible_position).is_some() {
+                    // NOTE: This is kind of like Caves of Qud's death by phasing
+                    // ("the pauli principle"). Creatures recovering tangibility
+                    // on top of another die. I am mostly adding this so I can
+                    // debug the occasional door issue.
+                    remove.send(RemoveCreature { entity });
+                    dbg!(tangible_position);
+                    dbg!("A creature recovered its tangibility while on top of another creature!");
+                } else {
+                    map.creatures.insert(*tangible_position, entity);
+                    // Aligning the sprite at 0. once again so that it appears on top
+                    // of intangible creatures.
+                    transform.get_mut(entity).unwrap().translation.z = 0.;
+                }
             }
         }
     }
