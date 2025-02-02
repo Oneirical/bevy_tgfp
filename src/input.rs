@@ -9,7 +9,7 @@ use crate::{
     },
     map::Position,
     sets::ControlState,
-    ui::LargeCastePanel,
+    ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
     OrdDir,
 };
 
@@ -50,19 +50,6 @@ pub fn keyboard_input(
                         turn_manager.action_this_turn = PlayerAction::Spell;
                         turn_end.send(EndTurn);
                     }
-                    ControlState::CasteMenu => {
-                        let mut caste_menu = caste_menu.single_mut();
-                        let current_soul = caste_menu.0;
-                        caste_menu.0 = match i {
-                            0 => Soul::Saintly,
-                            1 => Soul::Ordered,
-                            2 => Soul::Artistic,
-                            3 => Soul::Unhinged,
-                            4 => Soul::Feral,
-                            5 => Soul::Vile,
-                            _ => current_soul,
-                        }
-                    }
                     _ => (),
                 }
             }
@@ -88,7 +75,11 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
-            ControlState::CasteMenu => todo!(),
+            ControlState::CasteMenu => {
+                let mut caste_menu = caste_menu.single_mut();
+                let column = caste_menu.selected_column;
+                caste_menu.selected_row.shift(-1, &column);
+            }
         }
     }
     if input.just_pressed(KeyCode::ArrowRight) || input.just_pressed(KeyCode::KeyD) {
@@ -106,7 +97,22 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
-            ControlState::CasteMenu => todo!(),
+            ControlState::CasteMenu => {
+                let mut caste_menu = caste_menu.single_mut();
+                caste_menu.selected_column.shift(1);
+                if matches!(
+                    caste_menu.selected_column,
+                    CastePanelColumn::LibraryLeft | CastePanelColumn::LibraryRight,
+                ) && !matches!(caste_menu.selected_row, CastePanelRow::Library(_))
+                {
+                    caste_menu.selected_row = CastePanelRow::Library(0);
+                } else if !matches!(
+                    caste_menu.selected_column,
+                    CastePanelColumn::LibraryLeft | CastePanelColumn::LibraryRight,
+                ) {
+                    caste_menu.selected_row = CastePanelRow::Top;
+                }
+            }
         }
     }
     if input.just_pressed(KeyCode::ArrowLeft) || input.just_pressed(KeyCode::KeyA) {
@@ -124,7 +130,22 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
-            ControlState::CasteMenu => todo!(),
+            ControlState::CasteMenu => {
+                let mut caste_menu = caste_menu.single_mut();
+                caste_menu.selected_column.shift(-1);
+                if matches!(
+                    caste_menu.selected_column,
+                    CastePanelColumn::LibraryLeft | CastePanelColumn::LibraryRight,
+                ) && !matches!(caste_menu.selected_row, CastePanelRow::Library(_))
+                {
+                    caste_menu.selected_row = CastePanelRow::Library(0);
+                } else if !matches!(
+                    caste_menu.selected_column,
+                    CastePanelColumn::LibraryLeft | CastePanelColumn::LibraryRight,
+                ) {
+                    caste_menu.selected_row = CastePanelRow::Top;
+                }
+            }
         }
     }
     if input.just_pressed(KeyCode::ArrowDown) || input.just_pressed(KeyCode::KeyS) {
@@ -142,7 +163,11 @@ pub fn keyboard_input(
                 turn_manager.action_this_turn = PlayerAction::Step;
                 turn_end.send(EndTurn);
             }
-            ControlState::CasteMenu => todo!(),
+            ControlState::CasteMenu => {
+                let mut caste_menu = caste_menu.single_mut();
+                let column = caste_menu.selected_column;
+                caste_menu.selected_row.shift(1, &column);
+            }
         }
     }
     if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {

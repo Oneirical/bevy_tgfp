@@ -104,7 +104,7 @@ pub fn craft_with_axioms(
             .collect();
 
         if let Some(caste) = most_common_soul(soul_types) {
-            let icon = 170;
+            let icon = 160;
             let spell = Spell {
                 axioms,
                 caste,

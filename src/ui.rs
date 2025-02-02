@@ -524,7 +524,10 @@ fn setup(
                     parent
                         .spawn((
                             ChainBox,
-                            LargeCastePanel(Soul::Empty),
+                            LargeCastePanel {
+                                selected_column: CastePanelColumn::Left,
+                                selected_row: CastePanelRow::Top,
+                            },
                             CasteBox,
                             Visibility::Hidden,
                             Node {
@@ -562,6 +565,27 @@ fn setup(
                                     width: Val::Px(64.),
                                     height: Val::Px(64.),
                                     right: Val::Px(0.5),
+                                    ..default()
+                                },
+                            ));
+
+                            // Cursor
+                            parent.spawn((
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: 18,
+                                    }),
+                                    ..Default::default()
+                                },
+                                CasteCursor,
+                                Node {
+                                    width: Val::Px(11.),
+                                    height: Val::Px(11.),
+                                    left: Val::Px(14.),
+                                    top: Val::Px(6.),
+                                    position_type: PositionType::Absolute,
                                     ..default()
                                 },
                             ));
@@ -820,7 +844,76 @@ pub struct CursorBox;
 pub struct CasteBox;
 
 #[derive(Component)]
-pub struct LargeCastePanel(pub Soul);
+pub struct CasteCursor;
+
+#[derive(Component)]
+pub struct LargeCastePanel {
+    pub selected_column: CastePanelColumn,
+    pub selected_row: CastePanelRow,
+}
+
+#[derive(PartialEq, Clone, Copy)]
+pub enum CastePanelColumn {
+    Left,
+    LibraryLeft,
+    LibraryRight,
+    Right,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum CastePanelRow {
+    Top,
+    Middle,
+    Bottom,
+    Library(usize),
+}
+
+const ROWS: [CastePanelRow; 3] = [
+    CastePanelRow::Top,
+    CastePanelRow::Middle,
+    CastePanelRow::Bottom,
+];
+
+impl CastePanelRow {
+    pub fn shift(&mut self, dir: i8, column: &CastePanelColumn) {
+        if column == &CastePanelColumn::Left || column == &CastePanelColumn::Right {
+            let index = ROWS.iter().position(|c| c == self).unwrap() as i8 + dir;
+            let index = match index {
+                -1 => 2,
+                3 => 0,
+                _ => index,
+            } as usize;
+            *self = ROWS[index];
+        } else if let CastePanelRow::Library(index) = self {
+            let index = *index as i8 + dir;
+            let index = match index {
+                -1 => 7,
+                8 => 0,
+                _ => index,
+            } as usize;
+            *self = CastePanelRow::Library(index);
+        }
+    }
+}
+
+const COLUMNS: [CastePanelColumn; 4] = [
+    CastePanelColumn::Left,
+    CastePanelColumn::LibraryLeft,
+    CastePanelColumn::LibraryRight,
+    CastePanelColumn::Right,
+];
+
+impl CastePanelColumn {
+    pub fn shift(&mut self, dir: i8) {
+        let index = COLUMNS.iter().position(|c| c == self).unwrap() as i8 + dir;
+        let index = match index {
+            -1 => 3,
+            4 => 0,
+            _ => index,
+        } as usize;
+        *self = COLUMNS[index];
+    }
+}
 
 #[derive(Component)]
 pub struct LogEntry;
