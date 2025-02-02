@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 
 use crate::{
-    caste::{equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell},
+    caste::{
+        equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell, UnequipSpell,
+    },
     crafting::{
         craft_with_axioms, take_or_drop_soul, CraftWithAxioms, CraftingRecipes, TakeOrDropSoul,
     },
@@ -44,6 +46,7 @@ impl Plugin for SetsPlugin {
         app.add_event::<TakeOrDropSoul>();
         app.add_event::<CraftWithAxioms>();
         app.add_event::<EquipSpell>();
+        app.add_event::<UnequipSpell>();
         app.add_systems(Update, equip_spell);
         app.init_resource::<CraftingRecipes>();
         app.insert_resource(SpellLibrary {

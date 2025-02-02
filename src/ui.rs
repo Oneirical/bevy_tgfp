@@ -589,9 +589,11 @@ fn setup(
                                     ..default()
                                 },
                             ));
+                            let castes = [Soul::Saintly, Soul::Artistic, Soul::Feral];
                             for i in 0..3 {
                                 parent
                                     .spawn((
+                                        EquipSlot(castes[i]),
                                         ImageNode {
                                             image: asset_server.load("spritesheet.png"),
                                             texture_atlas: Some(TextureAtlas {
@@ -626,9 +628,11 @@ fn setup(
                                         },
                                     ));
                             }
+                            let castes = [Soul::Ordered, Soul::Unhinged, Soul::Vile];
                             for i in 0..3 {
                                 parent
                                     .spawn((
+                                        EquipSlot(castes[i]),
                                         ImageNode {
                                             image: asset_server.load("spritesheet.png"),
                                             texture_atlas: Some(TextureAtlas {
@@ -845,6 +849,12 @@ pub struct CasteBox;
 
 #[derive(Component)]
 pub struct CasteCursor;
+
+#[derive(Component)]
+pub struct EquipSlot(pub Soul);
+
+#[derive(Component)]
+pub struct LibrarySlot;
 
 #[derive(Component)]
 pub struct LargeCastePanel {

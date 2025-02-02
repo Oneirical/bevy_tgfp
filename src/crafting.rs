@@ -12,7 +12,7 @@ use crate::{
     graphics::SpriteSheetAtlas,
     map::Position,
     spells::{Axiom, Spell},
-    ui::SpellLibraryUI,
+    ui::{LibrarySlot, SpellLibraryUI},
     TILE_SIZE,
 };
 
@@ -104,7 +104,7 @@ pub fn craft_with_axioms(
             .collect();
 
         if let Some(caste) = most_common_soul(soul_types) {
-            let icon = 160;
+            let icon = 172;
             let spell = Spell {
                 axioms,
                 caste,
@@ -114,6 +114,7 @@ pub fn craft_with_axioms(
             if is_player {
                 spell_library.library.push(spell);
                 commands.entity(ui.single()).with_child((
+                    LibrarySlot,
                     ImageNode {
                         image: asset_server.load("spritesheet.png"),
                         texture_atlas: Some(TextureAtlas {

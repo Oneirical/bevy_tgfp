@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
+    caste::{EquipSpell, UnequipSpell},
     crafting::CraftWithAxioms,
     creature::{Player, Soul},
     cursor::CursorStep,
@@ -30,6 +31,8 @@ pub fn keyboard_input(
     mut scale: ResMut<UiScale>,
 
     mut craft: EventWriter<CraftWithAxioms>,
+    mut equip: EventWriter<EquipSpell>,
+    mut unequip: EventWriter<UnequipSpell>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -198,5 +201,30 @@ pub fn keyboard_input(
             boundaries: (Position::new(6, 7), Position::new(8, 9)),
             receiver: player.single(),
         });
+    }
+
+    if input.just_pressed(KeyCode::Enter) {
+        let caste_menu = caste_menu.single();
+        if let CastePanelRow::Library(depth) = caste_menu.selected_row {
+            equip.send(EquipSpell {
+                index: match caste_menu.selected_column {
+                    CastePanelColumn::LibraryLeft => depth * 2,
+                    CastePanelColumn::LibraryRight => depth * 2 + 1,
+                    _ => panic!(),
+                },
+            });
+        } else {
+            unequip.send(UnequipSpell {
+                caste: match (caste_menu.selected_column, caste_menu.selected_row) {
+                    (CastePanelColumn::Left, CastePanelRow::Top) => Soul::Saintly,
+                    (CastePanelColumn::Left, CastePanelRow::Middle) => Soul::Artistic,
+                    (CastePanelColumn::Left, CastePanelRow::Bottom) => Soul::Feral,
+                    (CastePanelColumn::Right, CastePanelRow::Top) => Soul::Ordered,
+                    (CastePanelColumn::Right, CastePanelRow::Middle) => Soul::Unhinged,
+                    (CastePanelColumn::Right, CastePanelRow::Bottom) => Soul::Vile,
+                    _ => panic!(),
+                },
+            });
+        }
     }
 }

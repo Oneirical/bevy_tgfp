@@ -5,8 +5,8 @@ use crate::{
     graphics::SpriteSheetAtlas,
     text::match_soul_with_description,
     ui::{
-        spawn_split_text, CasteBox, CasteCursor, CastePanelColumn, CastePanelRow, LargeCastePanel,
-        MessageLog,
+        spawn_split_text, CasteBox, CasteCursor, CastePanelColumn, CastePanelRow, EquipSlot,
+        LargeCastePanel, LibrarySlot, MessageLog, SpellLibraryUI,
     },
 };
 
@@ -32,23 +32,94 @@ pub fn hide_caste_menu(
 
 #[derive(Event)]
 pub struct EquipSpell {
-    index: usize,
+    pub index: usize,
+}
+
+#[derive(Event)]
+pub struct UnequipSpell {
+    pub caste: Soul,
 }
 
 pub fn equip_spell(
     mut events: EventReader<EquipSpell>,
+    mut unequips: EventReader<UnequipSpell>,
     mut spell_library: ResMut<SpellLibrary>,
     mut spellbook: Query<&mut Spellbook, With<Player>>,
+    mut slots: Query<(&mut ImageNode, &EquipSlot), Without<LibrarySlot>>,
+    mut ui_library: Query<&mut ImageNode, (With<LibrarySlot>, Without<EquipSlot>)>,
+    ui_library_entities: Query<Entity, (With<LibrarySlot>, Without<EquipSlot>)>,
+    mut commands: Commands,
+    ui: Query<Entity, With<SpellLibraryUI>>,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
 ) {
+    // TODO: Figure out why the icons swapping has some strange behaviours.
     for event in events.read() {
+        // Do not equip empty slots in the library.
+        if spell_library.library.get(event.index).is_none() {
+            continue;
+        }
         let equipped_spell = spell_library.library.remove(event.index);
         let mut spellbook = spellbook.single_mut();
+        // If a spell was in the equipped slot before, remove it and add it
+        // back to the library.
         if let Some(old_spell) = spellbook.spells.remove(&equipped_spell.caste) {
-            spell_library.library.push(old_spell);
+            for (i, mut node) in ui_library.iter_mut().enumerate() {
+                if i == event.index {
+                    node.texture_atlas.as_mut().unwrap().index = old_spell.icon;
+                }
+            }
+            spell_library.library.insert(event.index, old_spell);
+        // If there was no spell in the equipped slot, despawn the library
+        // icon (which will go into the equipment slot).
+        } else {
+            for (i, entity) in ui_library_entities.iter().enumerate() {
+                if i == event.index {
+                    commands.entity(entity).despawn();
+                }
+            }
+        }
+        // Add the new spell on its equipment slot.
+        for (mut node, slot) in slots.iter_mut() {
+            if slot.0 == equipped_spell.caste {
+                node.texture_atlas.as_mut().unwrap().index = equipped_spell.icon;
+                node.color.set_alpha(1.);
+            }
         }
         spellbook
             .spells
             .insert(equipped_spell.caste, equipped_spell);
+    }
+    for unequip in unequips.read() {
+        let mut spellbook = spellbook.single_mut();
+        if let Some(old_spell) = spellbook.spells.remove(&unequip.caste) {
+            // Add the unequipped spell back into the library.
+            commands.entity(ui.single()).with_child((
+                LibrarySlot,
+                ImageNode {
+                    image: asset_server.load("spritesheet.png"),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: old_spell.icon,
+                    }),
+                    ..Default::default()
+                },
+                Node {
+                    width: Val::Px(3.),
+                    height: Val::Px(3.),
+                    ..default()
+                },
+            ));
+            spell_library.library.push(old_spell);
+        }
+        // Revert the old equip slot back to the default caste icon,
+        // slightly transparent.
+        for (mut node, slot) in slots.iter_mut() {
+            if slot.0 == unequip.caste {
+                node.texture_atlas.as_mut().unwrap().index = get_soul_sprite(&unequip.caste);
+                node.color.set_alpha(0.1);
+            }
+        }
     }
 }
 
