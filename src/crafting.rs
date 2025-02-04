@@ -18,7 +18,7 @@ use crate::{
     spells::{Axiom, Spell},
     ui::{
         spawn_split_text, AxiomBox, CraftingPatterns, CraftingPredictor, LibrarySlot, MessageLog,
-        PatternBox, SoulWheelBox, SpellLibraryUI,
+        PatternBox, SoulWheelBox, SpellLibraryUI, SOUL_WHEEL_CONTAINER_SIZE,
     },
     TILE_SIZE,
 };
@@ -419,8 +419,14 @@ fn on_hover_pattern_display(
                         Node {
                             width: Val::Px(3.),
                             height: Val::Px(3.),
-                            left: Val::Px(x as f32 * 3.),
-                            bottom: Val::Px(y as f32 * 3.),
+                            left: Val::Px(
+                                SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                    + (x as f32 - 1.3 - pattern.dimensions.x as f32 / 2.) * 3.,
+                            ),
+                            bottom: Val::Px(
+                                SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                    + (y as f32 - 0.7 - pattern.dimensions.y as f32 / 2.) * 3.,
+                            ),
                             position_type: PositionType::Absolute,
                             ..default()
                         },

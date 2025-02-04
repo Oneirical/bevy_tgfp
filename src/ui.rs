@@ -23,7 +23,7 @@ impl Plugin for UIPlugin {
     }
 }
 
-const SOUL_WHEEL_CONTAINER_SIZE: f32 = 33.;
+pub const SOUL_WHEEL_CONTAINER_SIZE: f32 = 33.;
 const SOUL_WHEEL_RADIUS: f32 = 8.;
 const SOUL_WHEEL_SLOT_SPRITE_SIZE: f32 = 4.;
 const CHAIN_SIZE: f32 = 2.;
@@ -417,12 +417,6 @@ fn setup(
                                     max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                                     min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                                     max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                                    border: UiRect::new(
-                                        Val::Px(0.),
-                                        Val::Px(2.),
-                                        Val::Px(2.),
-                                        Val::Px(0.),
-                                    ),
                                     ..default()
                                 },
                                 Visibility::Hidden,
@@ -438,12 +432,6 @@ fn setup(
                                         max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                                         min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                                         max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                                        border: UiRect::new(
-                                            Val::Px(0.),
-                                            Val::Px(2.),
-                                            Val::Px(2.),
-                                            Val::Px(0.),
-                                        ),
                                         ..default()
                                     },
                                     BackgroundColor(Color::srgb(0., 0., 0.)),
@@ -475,7 +463,7 @@ fn setup(
                                                         * SOUL_WHEEL_RADIUS
                                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE
-                                                        - 1.,
+                                                        + 1.,
                                                 ),
                                                 position_type: PositionType::Absolute,
                                                 width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
@@ -504,7 +492,7 @@ fn setup(
                                                         * ((i + 6) as f32 * rot).sin()
                                                         + SOUL_WHEEL_CONTAINER_SIZE / 2.
                                                         - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
-                                                        - 1.3,
+                                                        + 0.7,
                                                 ),
                                                 position_type: PositionType::Absolute,
                                                 ..default()
