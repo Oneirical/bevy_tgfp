@@ -5,7 +5,8 @@ use crate::{
         equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell, UnequipSpell,
     },
     crafting::{
-        craft_with_axioms, take_or_drop_soul, CraftWithAxioms, CraftingRecipes, TakeOrDropSoul,
+        craft_with_axioms, learn_new_axiom, predict_craft, take_or_drop_soul, CraftWithAxioms,
+        CraftingRecipes, LearnNewAxiom, PredictCraft, TakeOrDropSoul,
     },
     creature::SpellLibrary,
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
@@ -47,6 +48,11 @@ impl Plugin for SetsPlugin {
         // app.add_systems(Update, dispense_sliding_components_caste);
         // app.add_systems(Update, slide_caste_spells);
         // app.add_event::<SlideCastes>();
+
+        app.add_systems(Update, predict_craft);
+        app.add_systems(Update, learn_new_axiom);
+        app.add_event::<PredictCraft>();
+        app.add_event::<LearnNewAxiom>();
 
         app.add_event::<TakeOrDropSoul>();
         app.add_event::<CraftWithAxioms>();

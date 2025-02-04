@@ -13,7 +13,7 @@ use crate::{
     graphics::SpriteSheetAtlas,
     map::Position,
     spells::{Axiom, Spell},
-    ui::{LibrarySlot, SpellLibraryUI},
+    ui::{CraftingPatterns, CraftingPredictor, LibrarySlot, SpellLibraryUI},
     TILE_SIZE,
 };
 
@@ -31,8 +31,96 @@ pub struct TakeOrDropSoul {
     pub soul: Option<Soul>,
 }
 
+pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
+    match axiom {
+        Axiom::Ego => 174,
+        Axiom::MomentumBeam => 175,
+        Axiom::XBeam => 176,
+        Axiom::PlusBeam => 177,
+        Axiom::Transform { species: _ } => 28,
+        _ => 1,
+    }
+}
+
+#[derive(Event)]
+pub struct PredictCraft {
+    pub boundaries: (Position, Position),
+}
+
+pub fn predict_craft(
+    mut events: EventReader<PredictCraft>,
+    dropped_souls: Query<(&Position, &DroppedSoul)>,
+    crafting_recipes: Res<CraftingRecipes>,
+    mut commands: Commands,
+    ui: Query<Entity, With<CraftingPredictor>>,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+) {
+    for event in events.read() {
+        let mut ingredients = HashMap::new();
+        let mut soul_types = Vec::new();
+        for (pos, soul_type) in dropped_souls.iter() {
+            if pos.is_within_range(&event.boundaries.0, &event.boundaries.1) {
+                ingredients.insert(pos, soul_type.0);
+                soul_types.push(soul_type.0);
+            }
+        }
+        let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
+        commands.entity(ui.single()).try_despawn_descendants();
+        for (positions, axiom) in matches {
+            commands.entity(ui.single()).with_child((
+                ImageNode {
+                    image: asset_server.load("spritesheet.png"),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: match_axiom_with_icon(axiom),
+                    }),
+                    ..Default::default()
+                },
+                Node {
+                    width: Val::Px(3.),
+                    height: Val::Px(3.),
+                    ..default()
+                },
+            ));
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct LearnNewAxiom {
+    pub axiom: Axiom,
+}
+
+pub fn learn_new_axiom(
+    ui: Query<Entity, With<CraftingPatterns>>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    mut events: EventReader<LearnNewAxiom>,
+) {
+    for event in events.read() {
+        commands.entity(ui.single()).with_child((
+            ImageNode {
+                image: asset_server.load("spritesheet.png"),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: match_axiom_with_icon(&event.axiom),
+                }),
+                ..Default::default()
+            },
+            Node {
+                width: Val::Px(3.),
+                height: Val::Px(3.),
+                ..default()
+            },
+        ));
+    }
+}
+
 pub fn take_or_drop_soul(
     mut events: EventReader<TakeOrDropSoul>,
+    mut predict: EventWriter<PredictCraft>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
@@ -64,6 +152,9 @@ pub fn take_or_drop_soul(
                 )),
             ));
         }
+        predict.send(PredictCraft {
+            boundaries: (Position::new(6, 7), Position::new(8, 9)),
+        });
     }
 }
 

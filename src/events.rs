@@ -22,7 +22,7 @@ use crate::{
     },
     map::{spawn_cage, FaithsEnd, Map, Position},
     spells::{walk_grid, Axiom, CastSpell, TriggerContingency},
-    ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, SoulSlot},
+    ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, RecipebookUI, SoulSlot},
     OrdDir, TILE_SIZE,
 };
 
@@ -115,6 +115,7 @@ pub fn toggle_paint_mode(
     position: Query<&Position>,
     mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
     soul_wheel: Res<SoulWheel>,
+    mut recipe_book: Query<&mut Visibility, With<RecipebookUI>>,
 ) {
     if painter.is_painting {
         let player_pos = player.single();
@@ -136,6 +137,7 @@ pub fn toggle_paint_mode(
         }
         if out_of_range {
             painter.is_painting = false;
+            *recipe_book.single_mut() = Visibility::Hidden;
             for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
                 ui_slot_node.texture_atlas.as_mut().unwrap().index =
                     if let Some(wheel_soul) = soul_wheel.souls.get(ui_slot_marker.index).unwrap() {
@@ -161,6 +163,7 @@ pub fn toggle_paint_mode(
                 },
             ) {
                 painter.is_painting = true;
+                *recipe_book.single_mut() = Visibility::Inherited;
                 let full_alpha_index = match painter.current_paint {
                     None => 0,
                     Some(Soul::Saintly) => 1,
