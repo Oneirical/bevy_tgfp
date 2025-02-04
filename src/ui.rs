@@ -5,6 +5,7 @@ use uuid::Uuid;
 use bevy::{prelude::*, text::TextLayoutInfo, window::WindowResized};
 
 use crate::{
+    caste::{on_click_equip_unequip, on_hover_move_caste_cursor},
     creature::{Soul, Species},
     graphics::SpriteSheetAtlas,
     text::{split_text, LORE},
@@ -714,6 +715,8 @@ fn setup(
                                             ..default()
                                         },
                                     ))
+                                    .observe(on_hover_move_caste_cursor)
+                                    .observe(on_click_equip_unequip)
                                     .with_child((
                                         Text::new((i * 2 + 1).to_string()),
                                         TextFont {
@@ -753,6 +756,8 @@ fn setup(
                                             ..default()
                                         },
                                     ))
+                                    .observe(on_hover_move_caste_cursor)
+                                    .observe(on_click_equip_unequip)
                                     .with_child((
                                         Text::new((i * 2 + 2).to_string()),
                                         TextFont {

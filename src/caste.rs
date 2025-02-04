@@ -97,22 +97,27 @@ pub fn equip_spell(
         let mut spellbook = spellbook.single_mut();
         if let Some(old_spell) = spellbook.spells.remove(&unequip.caste) {
             // Add the unequipped spell back into the library.
-            commands.entity(ui.single()).with_child((
-                LibrarySlot(old_spell.id),
-                ImageNode {
-                    image: asset_server.load("spritesheet.png"),
-                    texture_atlas: Some(TextureAtlas {
-                        layout: atlas_layout.handle.clone(),
-                        index: old_spell.icon,
-                    }),
-                    ..Default::default()
-                },
-                Node {
-                    width: Val::Px(3.),
-                    height: Val::Px(3.),
-                    ..default()
-                },
-            ));
+            commands.entity(ui.single()).with_children(|parent| {
+                parent
+                    .spawn((
+                        LibrarySlot(old_spell.id),
+                        ImageNode {
+                            image: asset_server.load("spritesheet.png"),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: atlas_layout.handle.clone(),
+                                index: old_spell.icon,
+                            }),
+                            ..Default::default()
+                        },
+                        Node {
+                            width: Val::Px(3.),
+                            height: Val::Px(3.),
+                            ..default()
+                        },
+                    ))
+                    .observe(on_click_equip_unequip)
+                    .observe(on_hover_move_caste_cursor);
+            });
             spell_library.library.push(old_spell);
         }
         // Revert the old equip slot back to the default caste icon,
@@ -236,6 +241,59 @@ pub fn match_soul_with_string(soul: &Soul) -> String {
         _ => &format!("{:?}", soul),
     };
     string.to_owned()
+}
+
+pub fn on_hover_move_caste_cursor(
+    hover: Trigger<Pointer<Over>>,
+    mut caste_menu: Query<&mut LargeCastePanel>,
+    equip: Query<&EquipSlot>,
+    library: Query<&LibrarySlot>,
+    spell_storage: Res<SpellLibrary>,
+) {
+    let mut caste_menu = caste_menu.single_mut();
+    if let Ok(slot) = equip.get(hover.entity()) {
+        (caste_menu.selected_column, caste_menu.selected_row) = match slot.0 {
+            Soul::Saintly => (CastePanelColumn::Left, CastePanelRow::Top),
+            Soul::Artistic => (CastePanelColumn::Left, CastePanelRow::Middle),
+            Soul::Feral => (CastePanelColumn::Left, CastePanelRow::Bottom),
+            Soul::Ordered => (CastePanelColumn::Right, CastePanelRow::Top),
+            Soul::Unhinged => (CastePanelColumn::Right, CastePanelRow::Middle),
+            Soul::Vile => (CastePanelColumn::Right, CastePanelRow::Bottom),
+            _ => panic!(),
+        };
+    } else if let Ok(library) = library.get(hover.entity()) {
+        let index = spell_storage
+            .library
+            .iter()
+            .position(|r| r.id == library.0)
+            .unwrap();
+        caste_menu.selected_row = CastePanelRow::Library(index / 2);
+        caste_menu.selected_column = if index % 2 == 0 {
+            CastePanelColumn::LibraryLeft
+        } else {
+            CastePanelColumn::LibraryRight
+        };
+    }
+}
+
+pub fn on_click_equip_unequip(
+    click: Trigger<Pointer<Click>>,
+    mut equip: EventWriter<EquipSpell>,
+    mut unequip: EventWriter<UnequipSpell>,
+    equip_slot: Query<&EquipSlot>,
+    library: Query<&LibrarySlot>,
+    spell_storage: Res<SpellLibrary>,
+) {
+    if let Ok(slot) = equip_slot.get(click.entity()) {
+        unequip.send(UnequipSpell { caste: slot.0 });
+    } else if let Ok(library) = library.get(click.entity()) {
+        let index = spell_storage
+            .library
+            .iter()
+            .position(|r| r.id == library.0)
+            .unwrap();
+        equip.send(EquipSpell { index });
+    }
 }
 
 // #[derive(Component)]

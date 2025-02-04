@@ -6,6 +6,7 @@ use rand::{seq::IteratorRandom, thread_rng};
 use uuid::Uuid;
 
 use crate::{
+    caste::{on_click_equip_unequip, on_hover_move_caste_cursor},
     creature::{
         get_soul_sprite, EffectDuration, Player, Soul, Species, SpellLibrary, Spellbook,
         StatusEffect,
@@ -33,11 +34,33 @@ pub struct TakeOrDropSoul {
 
 pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
     match axiom {
-        Axiom::Ego => 174,
-        Axiom::MomentumBeam => 175,
-        Axiom::XBeam => 176,
-        Axiom::PlusBeam => 177,
+        Axiom::Ego => 189,
+        Axiom::MomentumBeam => 226,
+        Axiom::XBeam => 198,
+        Axiom::PlusBeam => 180,
         Axiom::Transform { species: _ } => 28,
+        Axiom::WhenMoved => 183,
+        Axiom::PlaceStepTrap => 12,
+        Axiom::StatusEffect {
+            effect,
+            potency: _,
+            stacks: _,
+        } => match effect {
+            StatusEffect::Stab => 40,
+            StatusEffect::Invincible => 201,
+            _ => 1,
+        },
+        Axiom::HealOrHarm { amount } => match amount.signum() {
+            -1 => 188,
+            1 => 184,
+            _ => 1,
+        },
+        Axiom::ForceCast => 200,
+        Axiom::Dash { max_distance: _ } => 187,
+        Axiom::WhenTakingDamage => 173,
+        Axiom::WhenDealingDamage => 174,
+        Axiom::Touch => 177,
+        Axiom::Trace => 231,
         _ => 1,
     }
 }
@@ -207,22 +230,27 @@ pub fn craft_with_axioms(
             let (mut book, is_player) = spellbook.get_mut(event.receiver).unwrap();
             if is_player {
                 spell_library.library.push(spell);
-                commands.entity(ui.single()).with_child((
-                    LibrarySlot(id),
-                    ImageNode {
-                        image: asset_server.load("spritesheet.png"),
-                        texture_atlas: Some(TextureAtlas {
-                            layout: atlas_layout.handle.clone(),
-                            index: icon,
-                        }),
-                        ..Default::default()
-                    },
-                    Node {
-                        width: Val::Px(3.),
-                        height: Val::Px(3.),
-                        ..default()
-                    },
-                ));
+                commands.entity(ui.single()).with_children(|parent| {
+                    parent
+                        .spawn((
+                            LibrarySlot(id),
+                            ImageNode {
+                                image: asset_server.load("spritesheet.png"),
+                                texture_atlas: Some(TextureAtlas {
+                                    layout: atlas_layout.handle.clone(),
+                                    index: icon,
+                                }),
+                                ..Default::default()
+                            },
+                            Node {
+                                width: Val::Px(3.),
+                                height: Val::Px(3.),
+                                ..default()
+                            },
+                        ))
+                        .observe(on_click_equip_unequip)
+                        .observe(on_hover_move_caste_cursor);
+                });
             } else {
                 book.spells.insert(caste, spell);
             }
