@@ -46,8 +46,7 @@ pub fn equip_spell(
     mut spell_library: ResMut<SpellLibrary>,
     mut spellbook: Query<&mut Spellbook, With<Player>>,
     mut slots: Query<(&mut ImageNode, &EquipSlot), Without<LibrarySlot>>,
-    mut ui_library: Query<&mut ImageNode, (With<LibrarySlot>, Without<EquipSlot>)>,
-    ui_library_entities: Query<Entity, (With<LibrarySlot>, Without<EquipSlot>)>,
+    mut ui_library: Query<(Entity, &mut ImageNode, &mut LibrarySlot), Without<EquipSlot>>,
     mut commands: Commands,
     ui: Query<Entity, With<SpellLibraryUI>>,
     asset_server: Res<AssetServer>,
@@ -64,18 +63,21 @@ pub fn equip_spell(
         // If a spell was in the equipped slot before, remove it and add it
         // back to the library.
         if let Some(old_spell) = spellbook.spells.remove(&equipped_spell.caste) {
-            for (i, mut node) in ui_library.iter_mut().enumerate() {
-                if i == event.index {
+            for (_entity, mut node, mut lib_slot) in ui_library.iter_mut() {
+                if lib_slot.0 == equipped_spell.id {
                     node.texture_atlas.as_mut().unwrap().index = old_spell.icon;
+                    lib_slot.0 = old_spell.id;
+                    break;
                 }
             }
             spell_library.library.insert(event.index, old_spell);
         // If there was no spell in the equipped slot, despawn the library
         // icon (which will go into the equipment slot).
         } else {
-            for (i, entity) in ui_library_entities.iter().enumerate() {
-                if i == event.index {
+            for (entity, _node, lib_slot) in ui_library.iter() {
+                if lib_slot.0 == equipped_spell.id {
                     commands.entity(entity).despawn();
+                    break;
                 }
             }
         }
@@ -84,6 +86,7 @@ pub fn equip_spell(
             if slot.0 == equipped_spell.caste {
                 node.texture_atlas.as_mut().unwrap().index = equipped_spell.icon;
                 node.color.set_alpha(1.);
+                break;
             }
         }
         spellbook
@@ -95,7 +98,7 @@ pub fn equip_spell(
         if let Some(old_spell) = spellbook.spells.remove(&unequip.caste) {
             // Add the unequipped spell back into the library.
             commands.entity(ui.single()).with_child((
-                LibrarySlot,
+                LibrarySlot(old_spell.id),
                 ImageNode {
                     image: asset_server.load("spritesheet.png"),
                     texture_atlas: Some(TextureAtlas {
@@ -234,3 +237,83 @@ pub fn match_soul_with_string(soul: &Soul) -> String {
     };
     string.to_owned()
 }
+
+// #[derive(Component)]
+// pub struct CasteSlide {
+//     timer: Timer,
+//     curve: EasingCurve<Vec3>,
+// }
+
+// #[derive(Component)]
+// pub struct AnimatedCasteIcon;
+
+// enum CasteDestination {
+//     Equip(Soul),
+//     Unequip(usize),
+// }
+
+// #[derive(Event)]
+// pub struct SlideCastes {
+//     destination: CasteDestination,
+// }
+
+// pub fn dispense_sliding_components_caste(
+//     mut events: EventReader<SlideCastes>,
+//     mut commands: Commands,
+//     node: Query<(Entity, &Node), With<AnimatedCasteIcon>>,
+// ) {
+//     for event in events.read() {
+//         for (entity, node) in node.iter() {
+//             let curve_start = Vec3::new(
+//                 extract_from_val(node.left),
+//                 extract_from_val(node.top),
+//                 extract_from_val(node.width),
+//             );
+//             let curve_end = match event.destination {
+//                 CasteDestination::Equip(caste) => Vec3::new(
+//                     match caste {
+//                         Soul::Saintly | Soul::Feral => 16.,
+//                         Soul::Artistic => 8.,
+//                         Soul::Unhinged => 57.,
+//                         Soul::Vile | Soul::Ordered => 49.,
+//                         _ => 0.,
+//                     },
+//                     match caste {
+//                         Soul::Ordered | Soul::Saintly => 8.,
+//                         Soul::Unhinged | Soul::Artistic => 28.,
+//                         Soul::Feral | Soul::Vile => 48.,
+//                         _ => 0.,
+//                     },
+//                     7.,
+//                 ),
+//                 CasteDestination::Unequip(library) => Vec3::splat(3.),
+//             };
+
+//             commands.entity(entity).insert(CasteSlide {
+//                 timer: Timer::new(Duration::from_millis(3000), TimerMode::Once),
+//                 curve: EasingCurve::new(curve_start, curve_end, EaseFunction::QuadraticInOut),
+//             });
+//         }
+//     }
+// }
+
+// pub fn slide_caste_spells(mut spells: Query<(&mut Node, &mut CasteSlide)>, time: Res<Time>) {
+//     for (mut node, mut spell) in spells.iter_mut() {
+//         {
+//             spell.timer.tick(time.delta());
+//             let new_dimensions = spell.curve.sample_clamped(spell.timer.fraction());
+//             node.top = Val::Px(new_dimensions.x);
+//             node.left = Val::Px(new_dimensions.y);
+//             node.width = Val::Px(new_dimensions.z);
+//             node.height = Val::Px(new_dimensions.z);
+//         }
+//     }
+// }
+
+// fn extract_from_val(val: Val) -> f32 {
+//     if let Val::Px(val) = val {
+//         val
+//     } else {
+//         panic!();
+//     }
+// }

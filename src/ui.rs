@@ -1,5 +1,7 @@
 use std::{f32::consts::PI, time::Duration};
 
+use uuid::Uuid;
+
 use bevy::{prelude::*, text::TextLayoutInfo, window::WindowResized};
 
 use crate::{
@@ -854,7 +856,7 @@ pub struct CasteCursor;
 pub struct EquipSlot(pub Soul);
 
 #[derive(Component)]
-pub struct LibrarySlot;
+pub struct LibrarySlot(pub Uuid);
 
 #[derive(Component)]
 pub struct LargeCastePanel {
@@ -1046,7 +1048,7 @@ pub fn print_message_in_log(
     }
 }
 
-pub fn dispense_sliding_components(
+pub fn dispense_sliding_components_log(
     mut events: EventReader<SlideMessages>,
     mut commands: Commands,
     new_log: Query<(Entity, &TextLayoutInfo), Added<LogEntry>>,

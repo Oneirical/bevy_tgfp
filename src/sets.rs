@@ -24,7 +24,7 @@ use crate::{
         cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
     },
     ui::{
-        decay_fading_title, despawn_fading_title, dispense_sliding_components,
+        decay_fading_title, despawn_fading_title, dispense_sliding_components_log,
         print_message_in_log, slide_message_log, spawn_fading_title,
     },
 };
@@ -43,6 +43,11 @@ impl Plugin for SetsPlugin {
         app.add_systems(Update, take_or_drop_soul.after(stepped_on_tile));
         app.add_systems(Update, craft_with_axioms);
         app.add_systems(Update, swap_current_paint.run_if(is_painting));
+
+        // app.add_systems(Update, dispense_sliding_components_caste);
+        // app.add_systems(Update, slide_caste_spells);
+        // app.add_event::<SlideCastes>();
+
         app.add_event::<TakeOrDropSoul>();
         app.add_event::<CraftWithAxioms>();
         app.add_event::<EquipSpell>();
@@ -120,7 +125,7 @@ impl Plugin for SetsPlugin {
                 despawn_fading_title,
                 // NOTE: This must go before print_message_in_log,
                 // or else TextLayoutInfo has no time to compute.
-                dispense_sliding_components,
+                dispense_sliding_components_log,
                 print_message_in_log,
                 slide_message_log,
             )

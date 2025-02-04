@@ -3,6 +3,7 @@ use bevy::{
     utils::{HashMap, HashSet},
 };
 use rand::{seq::IteratorRandom, thread_rng};
+use uuid::Uuid;
 
 use crate::{
     creature::{
@@ -105,16 +106,18 @@ pub fn craft_with_axioms(
 
         if let Some(caste) = most_common_soul(soul_types) {
             let icon = 172;
+            let id = Uuid::new_v4();
             let spell = Spell {
                 axioms,
                 caste,
                 icon,
+                id,
             };
             let (mut book, is_player) = spellbook.get_mut(event.receiver).unwrap();
             if is_player {
                 spell_library.library.push(spell);
                 commands.entity(ui.single()).with_child((
-                    LibrarySlot,
+                    LibrarySlot(id),
                     ImageNode {
                         image: asset_server.load("spritesheet.png"),
                         texture_atlas: Some(TextureAtlas {

@@ -9,6 +9,7 @@ bevy = { version = "0.15.1", features = ["dynamic_linking"] }
 rand = "0.8.5"
 regex = "1.11.1"
 log = { version = "*", features = ["max_level_debug", "release_max_level_warn"] }
+uuid = { version = "1.12.1", features = ["v4", "fast-rng", "macro-diagnostics"] }
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

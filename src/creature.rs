@@ -1,5 +1,7 @@
 use bevy::{prelude::*, utils::HashMap};
 
+use uuid::Uuid;
+
 use crate::{
     map::Position,
     spells::{Axiom, CounterCondition, Spell},
@@ -86,6 +88,7 @@ impl Spellbook {
                         axioms: spell.to_vec(),
                         caste: *soul,
                         icon: get_soul_sprite(soul),
+                        id: Uuid::new_v4(),
                     },
                 );
             }

@@ -9,6 +9,8 @@ use bevy::{
     utils::{HashMap, HashSet},
 };
 
+use uuid::Uuid;
+
 use crate::{
     creature::{
         CreatureFlags, EffectDuration, FlagEntity, Player, Soul, Species, Spellbook, Spellproof,
@@ -238,6 +240,7 @@ pub struct Spell {
     pub axioms: Vec<Axiom>,
     pub caste: Soul,
     pub icon: usize,
+    pub id: Uuid,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1188,6 +1191,7 @@ fn axiom_function_force_cast(
                 axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
                 caste: Soul::Saintly,
                 icon: 170,
+                id: Uuid::new_v4(),
             },
             soul_caste: synapse_data.soul_caste,
             starting_step: 0,
