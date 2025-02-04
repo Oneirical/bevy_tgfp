@@ -189,6 +189,11 @@ pub fn keyboard_input(
             _ => next_state.set(ControlState::CasteMenu),
         }
     }
+
+    if input.just_pressed(KeyCode::Escape) {
+        next_state.set(ControlState::Player);
+    }
+
     if input.pressed(KeyCode::KeyO) {
         scale.0 += 0.02;
     }

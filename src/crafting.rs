@@ -70,6 +70,12 @@ pub struct PredictCraft {
     pub boundaries: (Position, Position),
 }
 
+#[derive(Component)]
+pub struct CraftingVeil {
+    pub boundaries: (Position, Position),
+    pub pattern: Vec<Position>,
+}
+
 pub fn predict_craft(
     mut events: EventReader<PredictCraft>,
     dropped_souls: Query<(&Position, &DroppedSoul)>,
@@ -91,22 +97,84 @@ pub fn predict_craft(
         let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
         commands.entity(ui.single()).try_despawn_descendants();
         for (positions, axiom) in matches {
-            commands.entity(ui.single()).with_child((
-                ImageNode {
-                    image: asset_server.load("spritesheet.png"),
-                    texture_atlas: Some(TextureAtlas {
-                        layout: atlas_layout.handle.clone(),
-                        index: match_axiom_with_icon(axiom),
-                    }),
-                    ..Default::default()
-                },
-                Node {
-                    width: Val::Px(3.),
-                    height: Val::Px(3.),
-                    ..default()
-                },
-            ));
+            commands.entity(ui.single()).with_children(|parent| {
+                parent
+                    .spawn((
+                        CraftingVeil {
+                            boundaries: event.boundaries,
+                            pattern: positions,
+                        },
+                        ImageNode {
+                            image: asset_server.load("spritesheet.png"),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: atlas_layout.handle.clone(),
+                                index: match_axiom_with_icon(axiom),
+                            }),
+                            ..Default::default()
+                        },
+                        Node {
+                            width: Val::Px(3.),
+                            height: Val::Px(3.),
+                            ..default()
+                        },
+                    ))
+                    .observe(on_hover_crafting_predictor)
+                    .observe(on_exit_crafting_predictor);
+            });
         }
+    }
+}
+
+#[derive(Component)]
+pub struct BlackVeil;
+
+fn on_hover_crafting_predictor(
+    hover: Trigger<Pointer<Over>>,
+    mut commands: Commands,
+    veil: Query<&CraftingVeil>,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    black: Query<&BlackVeil>,
+) {
+    if !black.is_empty() {
+        return;
+    }
+    let veil = veil.get(hover.entity()).unwrap();
+    for x in veil.boundaries.0.x..=veil.boundaries.1.x {
+        for y in veil.boundaries.0.y..=veil.boundaries.1.y {
+            let position = Position::new(x, y);
+            if !veil.pattern.contains(&position) {
+                commands.spawn((
+                    BlackVeil,
+                    position,
+                    Transform::from_translation(Vec3::new(
+                        position.x as f32 * TILE_SIZE,
+                        position.y as f32 * TILE_SIZE,
+                        -1.,
+                    )),
+                    Sprite {
+                        image: asset_server.load("spritesheet.png"),
+                        custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                        texture_atlas: Some(TextureAtlas {
+                            layout: atlas_layout.handle.clone(),
+                            index: 131,
+                        }),
+                        color: Color::Srgba(Srgba::new(0., 0., 0., 0.95)),
+                        ..default()
+                    },
+                ));
+            }
+        }
+    }
+}
+
+fn on_exit_crafting_predictor(
+    _out: Trigger<Pointer<Out>>,
+    mut commands: Commands,
+    veils: Query<Entity, With<BlackVeil>>,
+) {
+    for veil in veils.iter() {
+        commands.entity(veil).despawn();
     }
 }
 
@@ -148,8 +216,15 @@ pub fn take_or_drop_soul(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
     dropped_souls: Query<(Entity, &Position), With<DroppedSoul>>,
+    veils: Query<Entity, With<BlackVeil>>,
 ) {
     for event in events.read() {
+        // A quick purge of crafting pattern veils to avoid
+        // janky graphics when placing souls while veils
+        // are active.
+        for veil in veils.iter() {
+            commands.entity(veil).despawn();
+        }
         for (soul, pos) in dropped_souls.iter() {
             if pos == &event.position {
                 commands.entity(soul).despawn();

@@ -515,6 +515,20 @@ fn setup(
                                 Visibility::Hidden,
                             ));
                             parent.spawn((
+                                AxiomBox,
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
+                                    height: Val::Px(23.),
+                                    left: Val::Px(0.5),
+                                    min_height: Val::Px(23.),
+                                    max_height: Val::Px(23.),
+                                    overflow: Overflow::clip(),
+                                    position_type: PositionType::Absolute,
+                                    ..default()
+                                },
+                                Visibility::Hidden,
+                            ));
+                            parent.spawn((
                                 CasteBox,
                                 Node {
                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
@@ -716,23 +730,7 @@ fn setup(
                                         },
                                     ))
                                     .observe(on_hover_move_caste_cursor)
-                                    .observe(on_click_equip_unequip)
-                                    .with_child((
-                                        Text::new((i * 2 + 1).to_string()),
-                                        TextFont {
-                                            font: asset_server.load("fonts/Play-Regular.ttf"),
-                                            font_size: 3.,
-                                            ..default()
-                                        },
-                                        TextColor(Color::BLACK),
-                                        Label,
-                                        Node {
-                                            right: Val::Px(8.6),
-                                            top: Val::Px(1.9),
-                                            position_type: PositionType::Absolute,
-                                            ..default()
-                                        },
-                                    ));
+                                    .observe(on_click_equip_unequip);
                             }
                             let castes = [Soul::Ordered, Soul::Unhinged, Soul::Vile];
                             for i in 0..3 {
@@ -757,23 +755,7 @@ fn setup(
                                         },
                                     ))
                                     .observe(on_hover_move_caste_cursor)
-                                    .observe(on_click_equip_unequip)
-                                    .with_child((
-                                        Text::new((i * 2 + 2).to_string()),
-                                        TextFont {
-                                            font: asset_server.load("fonts/Play-Regular.ttf"),
-                                            font_size: 3.,
-                                            ..default()
-                                        },
-                                        TextColor(Color::BLACK),
-                                        Label,
-                                        Node {
-                                            left: Val::Px(8.6),
-                                            top: Val::Px(1.9),
-                                            position_type: PositionType::Absolute,
-                                            ..default()
-                                        },
-                                    ));
+                                    .observe(on_click_equip_unequip);
                             }
                             parent.spawn((
                                 Node {
@@ -954,6 +936,9 @@ pub struct CursorBox;
 
 #[derive(Component)]
 pub struct CasteBox;
+
+#[derive(Component)]
+pub struct AxiomBox;
 
 #[derive(Component)]
 pub struct CraftingPredictor;
