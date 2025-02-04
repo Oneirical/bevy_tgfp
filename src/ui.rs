@@ -386,7 +386,6 @@ fn setup(
                     ..default()
                 })
                 .with_children(|parent| {
-                    // left vertical fill (border)
                     parent
                         .spawn((
                             ChainBox,
@@ -408,64 +407,111 @@ fn setup(
                             BackgroundColor(Color::srgb(0., 0., 0.)),
                         ))
                         .with_children(|parent| {
-                            let rot = PI / 4.;
-                            // Soul slots, arranged in a circle formation.
-                            for i in 0..8 {
-                                parent.spawn((
-                                    SoulSlot { index: i },
-                                    ImageNode {
-                                        image: asset_server.load("spritesheet.png"),
-                                        texture_atlas: Some(TextureAtlas {
-                                            layout: atlas_layout.handle.clone(),
-                                            index: 167,
-                                        }),
-                                        ..Default::default()
-                                    },
+                            parent.spawn((
+                                PatternBox,
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                    height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                    min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                    max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                    min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                    max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                    border: UiRect::new(
+                                        Val::Px(0.),
+                                        Val::Px(2.),
+                                        Val::Px(2.),
+                                        Val::Px(0.),
+                                    ),
+                                    ..default()
+                                },
+                                Visibility::Hidden,
+                            ));
+                            parent
+                                .spawn((
+                                    SoulWheelBox,
                                     Node {
-                                        left: Val::Px(
-                                            ((i + 6) as f32 * rot).cos() * SOUL_WHEEL_RADIUS
-                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE
-                                                + 1.,
-                                        ),
-                                        top: Val::Px(
-                                            ((i + 6) as f32 * rot).sin() * SOUL_WHEEL_RADIUS
-                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE
-                                                + 1.,
-                                        ),
                                         position_type: PositionType::Absolute,
-                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        ..default()
-                                    },
-                                ));
-                                parent.spawn((
-                                    Text::new((i + 1).to_string()),
-                                    TextFont {
-                                        font: asset_server.load("fonts/Play-Regular.ttf"),
-                                        font_size: 1.,
-                                        ..default()
-                                    },
-                                    Label,
-                                    Node {
-                                        left: Val::Px(
-                                            SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).cos()
-                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
-                                                + 1.,
+                                        width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                        height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                        min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                        max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                        min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                        max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                        border: UiRect::new(
+                                            Val::Px(0.),
+                                            Val::Px(2.),
+                                            Val::Px(2.),
+                                            Val::Px(0.),
                                         ),
-                                        top: Val::Px(
-                                            SOUL_WHEEL_RADIUS / 1.9 * ((i + 6) as f32 * rot).sin()
-                                                + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                                - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
-                                                + 0.7,
-                                        ),
-                                        position_type: PositionType::Absolute,
                                         ..default()
                                     },
-                                ));
-                            }
+                                    BackgroundColor(Color::srgb(0., 0., 0.)),
+                                ))
+                                .with_children(|parent| {
+                                    let rot = PI / 4.;
+                                    // Soul slots, arranged in a circle formation.
+                                    for i in 0..8 {
+                                        parent.spawn((
+                                            SoulSlot { index: i },
+                                            ImageNode {
+                                                image: asset_server.load("spritesheet.png"),
+                                                texture_atlas: Some(TextureAtlas {
+                                                    layout: atlas_layout.handle.clone(),
+                                                    index: 167,
+                                                }),
+                                                ..Default::default()
+                                            },
+                                            Node {
+                                                left: Val::Px(
+                                                    ((i + 6) as f32 * rot).cos()
+                                                        * SOUL_WHEEL_RADIUS
+                                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE
+                                                        + 1.,
+                                                ),
+                                                top: Val::Px(
+                                                    ((i + 6) as f32 * rot).sin()
+                                                        * SOUL_WHEEL_RADIUS
+                                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE
+                                                        - 1.,
+                                                ),
+                                                position_type: PositionType::Absolute,
+                                                width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                                height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                                ..default()
+                                            },
+                                        ));
+                                        parent.spawn((
+                                            Text::new((i + 1).to_string()),
+                                            TextFont {
+                                                font: asset_server.load("fonts/Play-Regular.ttf"),
+                                                font_size: 1.,
+                                                ..default()
+                                            },
+                                            Label,
+                                            Node {
+                                                left: Val::Px(
+                                                    SOUL_WHEEL_RADIUS / 1.9
+                                                        * ((i + 6) as f32 * rot).cos()
+                                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
+                                                        + 1.,
+                                                ),
+                                                top: Val::Px(
+                                                    SOUL_WHEEL_RADIUS / 1.9
+                                                        * ((i + 6) as f32 * rot).sin()
+                                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE / 1.7
+                                                        - 1.3,
+                                                ),
+                                                position_type: PositionType::Absolute,
+                                                ..default()
+                                            },
+                                        ));
+                                    }
+                                });
                         });
                     parent
                         .spawn((
@@ -929,27 +975,42 @@ fn decorate_with_chains(
 }
 
 #[derive(Component)]
+/// To list game events in the text box
 pub struct MessageLog;
 
 #[derive(Component)]
+/// To describe what Creatures do in the text box
 pub struct CursorBox;
 
 #[derive(Component)]
+/// To describe what Spells do in the text box
 pub struct CasteBox;
 
 #[derive(Component)]
+/// To describe what Axioms do in the text box
 pub struct AxiomBox;
 
 #[derive(Component)]
+/// To preview crafting recipes in the soul wheel box
+pub struct PatternBox;
+
+#[derive(Component)]
+/// The wheel where the player casts spells
+pub struct SoulWheelBox;
+
+#[derive(Component)]
+/// A preview of the spell that will result from a soul cage
 pub struct CraftingPredictor;
 
 #[derive(Component)]
+/// A list of possible axioms available for crafting
 pub struct CraftingPatterns;
 
 #[derive(Component)]
 pub struct RecipebookUI;
 
 #[derive(Component)]
+/// The blue cursor in the caste equip/unequip menu
 pub struct CasteCursor;
 
 #[derive(Component)]

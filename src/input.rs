@@ -2,14 +2,15 @@ use bevy::prelude::*;
 
 use crate::{
     caste::{EquipSpell, UnequipSpell},
-    crafting::CraftWithAxioms,
-    creature::{Player, Soul},
+    crafting::{CraftWithAxioms, LearnNewAxiom},
+    creature::{Player, Soul, Species},
     cursor::CursorStep,
     events::{
         CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
     },
     map::Position,
     sets::ControlState,
+    spells::Axiom,
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
     OrdDir,
 };

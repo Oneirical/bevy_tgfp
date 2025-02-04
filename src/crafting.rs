@@ -14,7 +14,10 @@ use crate::{
     graphics::SpriteSheetAtlas,
     map::Position,
     spells::{Axiom, Spell},
-    ui::{CraftingPatterns, CraftingPredictor, LibrarySlot, SpellLibraryUI},
+    ui::{
+        spawn_split_text, AxiomBox, CraftingPatterns, CraftingPredictor, LibrarySlot, MessageLog,
+        PatternBox, SoulWheelBox, SpellLibraryUI,
+    },
     TILE_SIZE,
 };
 
@@ -76,6 +79,11 @@ pub struct CraftingVeil {
     pub pattern: Vec<Position>,
 }
 
+#[derive(Component)]
+pub struct AxiomUI {
+    pub axiom: Axiom,
+}
+
 pub fn predict_craft(
     mut events: EventReader<PredictCraft>,
     dropped_souls: Query<(&Position, &DroppedSoul)>,
@@ -104,6 +112,9 @@ pub fn predict_craft(
                             boundaries: event.boundaries,
                             pattern: positions,
                         },
+                        AxiomUI {
+                            axiom: axiom.clone(),
+                        },
                         ImageNode {
                             image: asset_server.load("spritesheet.png"),
                             texture_atlas: Some(TextureAtlas {
@@ -119,10 +130,75 @@ pub fn predict_craft(
                         },
                     ))
                     .observe(on_hover_crafting_predictor)
-                    .observe(on_exit_crafting_predictor);
+                    .observe(on_exit_crafting_predictor)
+                    .observe(on_hover_display_axiom)
+                    .observe(on_exit_hover_axiom);
             });
         }
     }
+}
+
+fn on_exit_hover_axiom(
+    _out: Trigger<Pointer<Out>>,
+    mut message: Query<&mut Visibility, (With<MessageLog>, Without<AxiomBox>)>,
+    mut axiom_box: Query<&mut Visibility, (With<AxiomBox>, Without<MessageLog>)>,
+) {
+    *message.single_mut() = Visibility::Inherited;
+    *axiom_box.single_mut() = Visibility::Hidden;
+}
+
+fn on_hover_display_axiom(
+    hover: Trigger<Pointer<Over>>,
+    mut message: Query<&mut Visibility, (With<MessageLog>, Without<AxiomBox>)>,
+    mut axiom_box: Query<(Entity, &mut Visibility), (With<AxiomBox>, Without<MessageLog>)>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    axiom: Query<&AxiomUI>,
+) {
+    *message.single_mut() = Visibility::Hidden;
+    let (axiom_box_entity, mut vis) = axiom_box.single_mut();
+    *vis = Visibility::Inherited;
+
+    let axiom = axiom.get(hover.entity()).unwrap();
+    let axiom = &axiom.axiom;
+    // TODO: Instead of multiple entities, would it be interesting to
+    // have these merged into a single string with \n to space them out?
+    // This would be good in case there's a ton of "effects flags".
+    let (mut axiom_name, mut axiom_description) = (Entity::PLACEHOLDER, Entity::PLACEHOLDER);
+    commands.entity(axiom_box_entity).despawn_descendants();
+    commands.entity(axiom_box_entity).with_children(|parent| {
+        axiom_name = spawn_split_text("ayo", parent, &asset_server);
+        axiom_description = spawn_split_text("wao", parent, &asset_server);
+        parent.spawn((
+            ImageNode {
+                image: asset_server.load("spritesheet.png"),
+                texture_atlas: Some(TextureAtlas {
+                    layout: atlas_layout.handle.clone(),
+                    index: match_axiom_with_icon(axiom),
+                }),
+                ..Default::default()
+            },
+            Node {
+                width: Val::Px(3.),
+                height: Val::Px(3.),
+                right: Val::Px(0.3),
+                top: Val::Px(0.5),
+                position_type: PositionType::Absolute,
+                ..default()
+            },
+        ));
+    });
+    commands.entity(axiom_name).insert(Node {
+        position_type: PositionType::Absolute,
+        top: Val::Px(0.5),
+        ..default()
+    });
+    commands.entity(axiom_description).insert(Node {
+        position_type: PositionType::Absolute,
+        top: Val::Px(3.5),
+        ..default()
+    });
 }
 
 #[derive(Component)]
@@ -183,30 +259,123 @@ pub struct LearnNewAxiom {
     pub axiom: Axiom,
 }
 
+#[derive(Component)]
+pub struct KnownPattern {
+    pub recipe: Recipe,
+}
+
 pub fn learn_new_axiom(
     ui: Query<Entity, With<CraftingPatterns>>,
+    known_patterns: Query<&AxiomUI, With<KnownPattern>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
+    all_patterns: Res<CraftingRecipes>,
     mut events: EventReader<LearnNewAxiom>,
 ) {
     for event in events.read() {
-        commands.entity(ui.single()).with_child((
-            ImageNode {
-                image: asset_server.load("spritesheet.png"),
-                texture_atlas: Some(TextureAtlas {
-                    layout: atlas_layout.handle.clone(),
-                    index: match_axiom_with_icon(&event.axiom),
-                }),
-                ..Default::default()
-            },
-            Node {
-                width: Val::Px(3.),
-                height: Val::Px(3.),
-                ..default()
-            },
-        ));
+        // Do not learn duplicate axioms.
+        for known in known_patterns.iter() {
+            if known.axiom == event.axiom {
+                continue;
+            }
+        }
+        commands.entity(ui.single()).with_children(|parent| {
+            parent
+                .spawn((
+                    AxiomUI {
+                        axiom: event.axiom.clone(),
+                    },
+                    KnownPattern {
+                        recipe: {
+                            all_patterns
+                                .sorted_recipes
+                                .iter()
+                                .find_map(|(key, value)| {
+                                    if value == &event.axiom {
+                                        Some(key)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .unwrap()
+                                .clone()
+                        },
+                    },
+                    ImageNode {
+                        image: asset_server.load("spritesheet.png"),
+                        texture_atlas: Some(TextureAtlas {
+                            layout: atlas_layout.handle.clone(),
+                            index: match_axiom_with_icon(&event.axiom),
+                        }),
+                        ..Default::default()
+                    },
+                    Node {
+                        width: Val::Px(3.),
+                        height: Val::Px(3.),
+                        ..default()
+                    },
+                ))
+                .observe(on_hover_display_axiom)
+                .observe(on_exit_hover_axiom)
+                .observe(on_hover_pattern_display)
+                .observe(on_exit_pattern_display);
+        });
     }
+}
+
+fn on_exit_pattern_display(
+    _out: Trigger<Pointer<Out>>,
+    mut wheel: Query<&mut Visibility, (With<SoulWheelBox>, Without<PatternBox>)>,
+    mut pattern_box: Query<&mut Visibility, (With<PatternBox>, Without<SoulWheelBox>)>,
+) {
+    *wheel.single_mut() = Visibility::Inherited;
+    *pattern_box.single_mut() = Visibility::Hidden;
+}
+
+fn on_hover_pattern_display(
+    hover: Trigger<Pointer<Over>>,
+    mut wheel: Query<&mut Visibility, (With<SoulWheelBox>, Without<PatternBox>)>,
+    mut pattern_box: Query<(Entity, &mut Visibility), (With<PatternBox>, Without<SoulWheelBox>)>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    atlas_layout: Res<SpriteSheetAtlas>,
+    pattern: Query<&KnownPattern>,
+) {
+    *wheel.single_mut() = Visibility::Hidden;
+    let (pattern_box_entity, mut vis) = pattern_box.single_mut();
+    *vis = Visibility::Inherited;
+
+    let pattern = pattern.get(hover.entity()).unwrap();
+    let pattern = &pattern.recipe;
+    // TODO: Instead of multiple entities, would it be interesting to
+    // have these merged into a single string with \n to space them out?
+    // This would be good in case there's a ton of "effects flags".
+    commands.entity(pattern_box_entity).despawn_descendants();
+    commands.entity(pattern_box_entity).with_children(|parent| {
+        for x in 0..pattern.dimensions.x {
+            for y in 0..pattern.dimensions.y {
+                parent.spawn((
+                    ImageNode {
+                        image: asset_server.load("spritesheet.png"),
+                        texture_atlas: Some(TextureAtlas {
+                            layout: atlas_layout.handle.clone(),
+                            index: 167,
+                        }),
+                        ..Default::default()
+                    },
+                    Node {
+                        width: Val::Px(3.),
+                        height: Val::Px(3.),
+                        left: Val::Px(x as f32 * 3.),
+                        top: Val::Px(y as f32 * 3.),
+                        position_type: PositionType::Absolute,
+                        ..default()
+                    },
+                ));
+            }
+        }
+    });
 }
 
 pub fn take_or_drop_soul(
@@ -425,7 +594,7 @@ impl CraftingRecipes {
     }
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Clone)]
 pub struct Recipe {
     pub dimensions: Position,
     pub souls: Vec<Position>,

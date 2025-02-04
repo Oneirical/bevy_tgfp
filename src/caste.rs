@@ -52,7 +52,9 @@ pub fn equip_spell(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
-    // TODO: Figure out why the icons swapping has some strange behaviours.
+    // NOTE: Instead of this entire charade with matching Uuids, it might
+    // have been better to let the spell library sprite BE the spell library
+    // - no resource, just entities with a sprite and a spell component.
     for event in events.read() {
         // Do not equip empty slots in the library.
         if spell_library.library.get(event.index).is_none() {

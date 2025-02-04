@@ -7,7 +7,7 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    crafting::TakeOrDropSoul,
+    crafting::{LearnNewAxiom, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration,
@@ -752,6 +752,8 @@ pub fn creature_step(
     mut teleporter: EventWriter<TeleportEntity>,
     mut momentum: EventWriter<AlterMomentum>,
     mut creature: Query<&Position>,
+    // TODO REMOVE THIS
+    mut learn: EventWriter<LearnNewAxiom>,
 ) {
     for event in events.read() {
         let creature_pos = creature.get_mut(event.entity).unwrap();
@@ -765,6 +767,12 @@ pub fn creature_step(
         momentum.send(AlterMomentum {
             entity: event.entity,
             direction: event.direction,
+        });
+        // TODO REMOVE THIS
+        learn.send(LearnNewAxiom {
+            axiom: Axiom::Transform {
+                species: Species::Abazon,
+            },
         });
     }
 }
