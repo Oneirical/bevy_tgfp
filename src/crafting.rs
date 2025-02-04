@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
@@ -275,10 +277,15 @@ pub fn learn_new_axiom(
 ) {
     for event in events.read() {
         // Do not learn duplicate axioms.
+        let mut seen_before = false;
         for known in known_patterns.iter() {
             if known.axiom == event.axiom {
-                continue;
+                seen_before = true;
+                break;
             }
+        }
+        if seen_before {
+            continue;
         }
         commands.entity(ui.single()).with_children(|parent| {
             parent
@@ -347,32 +354,102 @@ fn on_hover_pattern_display(
     *vis = Visibility::Inherited;
 
     let pattern = pattern.get(hover.entity()).unwrap();
-    let pattern = &pattern.recipe;
-    // TODO: Instead of multiple entities, would it be interesting to
-    // have these merged into a single string with \n to space them out?
-    // This would be good in case there's a ton of "effects flags".
+    let mut pattern = pattern.recipe.clone();
+
+    let mut min_x = pattern.souls[0].x;
+    let mut min_y = pattern.souls[0].y;
+
+    for pos in pattern.souls.iter() {
+        if pos.x < min_x {
+            min_x = pos.x;
+        }
+        if pos.y < min_y {
+            min_y = pos.y;
+        }
+    }
+
+    for pos in pattern.souls.iter_mut() {
+        pos.x += -min_x;
+        pos.y += -min_y;
+    }
+
     commands.entity(pattern_box_entity).despawn_descendants();
     commands.entity(pattern_box_entity).with_children(|parent| {
-        for x in 0..pattern.dimensions.x {
-            for y in 0..pattern.dimensions.y {
-                parent.spawn((
-                    ImageNode {
-                        image: asset_server.load("spritesheet.png"),
-                        texture_atlas: Some(TextureAtlas {
-                            layout: atlas_layout.handle.clone(),
-                            index: 167,
-                        }),
-                        ..Default::default()
-                    },
-                    Node {
-                        width: Val::Px(3.),
-                        height: Val::Px(3.),
-                        left: Val::Px(x as f32 * 3.),
-                        top: Val::Px(y as f32 * 3.),
-                        position_type: PositionType::Absolute,
-                        ..default()
-                    },
-                ));
+        for x in 0..pattern.dimensions.x + 2 {
+            for y in 0..pattern.dimensions.y + 2 {
+                // Do not display the corners.
+                if (x == 0 && y == 0)
+                    || (x == 0 && y == pattern.dimensions.y + 1)
+                    || (y == 0 && x == pattern.dimensions.x + 1)
+                    || (x == pattern.dimensions.x + 1 && y == pattern.dimensions.y + 1)
+                {
+                    continue;
+                }
+                let icon = if x == 0
+                    || y == 0
+                    || x == pattern.dimensions.x + 1
+                    || y == pattern.dimensions.y + 1
+                {
+                    108
+                } else {
+                    167
+                };
+                let transform = Transform::from_rotation(if y == 0 {
+                    Quat::from_rotation_z(PI)
+                } else if x == pattern.dimensions.x + 1 {
+                    Quat::from_rotation_z(PI / 2.)
+                } else if y == pattern.dimensions.y + 1 {
+                    Quat::from_rotation_z(0.)
+                } else if x == 0 {
+                    Quat::from_rotation_z(3. * PI / 2.)
+                } else {
+                    Quat::from_rotation_z(0.)
+                });
+                parent
+                    .spawn((
+                        transform,
+                        ImageNode {
+                            image: asset_server.load("spritesheet.png"),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: atlas_layout.handle.clone(),
+                                index: icon,
+                            }),
+                            ..Default::default()
+                        },
+                        Node {
+                            width: Val::Px(3.),
+                            height: Val::Px(3.),
+                            left: Val::Px(x as f32 * 3.),
+                            bottom: Val::Px(y as f32 * 3.),
+                            position_type: PositionType::Absolute,
+                            ..default()
+                        },
+                    ))
+                    .with_children(|parent| {
+                        if pattern
+                            .souls
+                            .contains(&Position::new(x.wrapping_sub(1), y.wrapping_sub(1)))
+                        {
+                            parent.spawn((
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: get_soul_sprite(&pattern.soul_type),
+                                    }),
+                                    ..Default::default()
+                                },
+                                Node {
+                                    width: Val::Px(2.),
+                                    height: Val::Px(2.),
+                                    left: Val::Px(0.5),
+                                    top: Val::Px(0.5),
+                                    position_type: PositionType::Absolute,
+                                    ..default()
+                                },
+                            ));
+                        }
+                    });
             }
         }
     });
@@ -594,7 +671,7 @@ impl CraftingRecipes {
     }
 }
 
-#[derive(Hash, PartialEq, Eq, Clone)]
+#[derive(Hash, PartialEq, Eq, Clone, Debug)]
 pub struct Recipe {
     pub dimensions: Position,
     pub souls: Vec<Position>,

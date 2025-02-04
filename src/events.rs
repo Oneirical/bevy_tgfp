@@ -774,6 +774,10 @@ pub fn creature_step(
                 species: Species::Abazon,
             },
         });
+        learn.send(LearnNewAxiom { axiom: Axiom::Ego });
+        learn.send(LearnNewAxiom {
+            axiom: Axiom::Trace,
+        });
     }
 }
 
