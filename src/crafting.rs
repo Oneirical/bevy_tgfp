@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{collections::VecDeque, f32::consts::PI};
 
 use bevy::{
     prelude::*,
@@ -10,12 +10,13 @@ use uuid::Uuid;
 use crate::{
     caste::{on_click_equip_unequip, on_hover_move_caste_cursor},
     creature::{
-        get_soul_sprite, EffectDuration, Player, Soul, Species, SpellLibrary, Spellbook,
-        StatusEffect,
+        get_soul_sprite, CraftingSlot, EffectDuration, FlagEntity, Player, Soul, Species,
+        SpellLibrary, Spellbook, StatusEffect,
     },
     graphics::SpriteSheetAtlas,
-    map::Position,
+    map::{manhattan_distance, Position},
     spells::{Axiom, Spell},
+    text::match_axiom_with_description,
     ui::{
         spawn_split_text, AxiomBox, CraftingPatterns, CraftingPredictor, LibrarySlot, MessageLog,
         PatternBox, SoulWheelBox, SpellLibraryUI, SOUL_WHEEL_CONTAINER_SIZE,
@@ -72,7 +73,7 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
 
 #[derive(Event)]
 pub struct PredictCraft {
-    pub boundaries: (Position, Position),
+    pub impact_point: Position,
 }
 
 #[derive(Component)]
@@ -86,6 +87,73 @@ pub struct AxiomUI {
     pub axiom: Axiom,
 }
 
+fn find_bounds(spread: &[Position]) -> (Position, Position) {
+    let mut min_x = i32::MAX;
+    let mut min_y = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut max_y = i32::MIN;
+
+    for pos in spread {
+        if pos.x < min_x {
+            min_x = pos.x;
+        }
+        if pos.y < min_y {
+            min_y = pos.y;
+        }
+        if pos.x > max_x {
+            max_x = pos.x;
+        }
+        if pos.y > max_y {
+            max_y = pos.y;
+        }
+    }
+
+    let min_position = Position { x: min_x, y: min_y };
+    let max_position = Position { x: max_x, y: max_y };
+
+    (min_position, max_position)
+}
+
+fn locate_crafting_boundaries(
+    slots: &Query<&FlagEntity, With<CraftingSlot>>,
+    position: &Query<&Position>,
+    start_point: Position,
+) -> (Position, Position) {
+    // Find the boundaries of the crafting area.
+    // This uses a breadth-first-search algorithm
+    // Cache the positions of all existing slots so we don't
+    // iterate through them every single time
+    let slot_positions: HashSet<Position> = slots
+        .iter()
+        .filter_map(|slot| position.get(slot.parent_creature).ok())
+        .cloned()
+        .collect();
+
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+    let mut spread = Vec::new();
+
+    queue.push_back(start_point.clone());
+    visited.insert(start_point);
+
+    while let Some(current) = queue.pop_front() {
+        spread.push(current.clone());
+
+        let directions = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        for (dx, dy) in directions.iter() {
+            let next_pos = Position {
+                x: current.x + dx,
+                y: current.y + dy,
+            };
+            if slot_positions.contains(&next_pos) && !visited.contains(&next_pos) {
+                visited.insert(next_pos.clone());
+                queue.push_back(next_pos);
+            }
+        }
+    }
+    find_bounds(&spread)
+}
+
 pub fn predict_craft(
     mut events: EventReader<PredictCraft>,
     dropped_souls: Query<(&Position, &DroppedSoul)>,
@@ -94,12 +162,16 @@ pub fn predict_craft(
     ui: Query<Entity, With<CraftingPredictor>>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
+    slots: Query<&FlagEntity, With<CraftingSlot>>,
+    position: Query<&Position>,
 ) {
     for event in events.read() {
+        let boundaries = locate_crafting_boundaries(&slots, &position, event.impact_point);
+        // The actual prediction starts here.
         let mut ingredients = HashMap::new();
         let mut soul_types = Vec::new();
         for (pos, soul_type) in dropped_souls.iter() {
-            if pos.is_within_range(&event.boundaries.0, &event.boundaries.1) {
+            if pos.is_within_range(&boundaries.0, &boundaries.1) {
                 ingredients.insert(pos, soul_type.0);
                 soul_types.push(soul_type.0);
             }
@@ -111,7 +183,7 @@ pub fn predict_craft(
                 parent
                     .spawn((
                         CraftingVeil {
-                            boundaries: event.boundaries,
+                            boundaries,
                             pattern: positions,
                         },
                         AxiomUI {
@@ -167,11 +239,11 @@ fn on_hover_display_axiom(
     // TODO: Instead of multiple entities, would it be interesting to
     // have these merged into a single string with \n to space them out?
     // This would be good in case there's a ton of "effects flags".
-    let (mut axiom_name, mut axiom_description) = (Entity::PLACEHOLDER, Entity::PLACEHOLDER);
+    let mut axiom_description = Entity::PLACEHOLDER;
     commands.entity(axiom_box_entity).despawn_descendants();
     commands.entity(axiom_box_entity).with_children(|parent| {
-        axiom_name = spawn_split_text("ayo", parent, &asset_server);
-        axiom_description = spawn_split_text("wao", parent, &asset_server);
+        axiom_description =
+            spawn_split_text(match_axiom_with_description(axiom), parent, &asset_server);
         parent.spawn((
             ImageNode {
                 image: asset_server.load("spritesheet.png"),
@@ -191,14 +263,9 @@ fn on_hover_display_axiom(
             },
         ));
     });
-    commands.entity(axiom_name).insert(Node {
-        position_type: PositionType::Absolute,
-        top: Val::Px(0.5),
-        ..default()
-    });
     commands.entity(axiom_description).insert(Node {
         position_type: PositionType::Absolute,
-        top: Val::Px(3.5),
+        top: Val::Px(0.5),
         ..default()
     });
 }
@@ -503,14 +570,13 @@ pub fn take_or_drop_soul(
             ));
         }
         predict.send(PredictCraft {
-            boundaries: (Position::new(6, 7), Position::new(8, 9)),
+            impact_point: event.position,
         });
     }
 }
 
 #[derive(Event)]
 pub struct CraftWithAxioms {
-    pub boundaries: (Position, Position),
     pub receiver: Entity,
 }
 
@@ -524,12 +590,30 @@ pub fn craft_with_axioms(
     ui: Query<Entity, With<SpellLibraryUI>>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
+
+    slots: Query<&FlagEntity, With<CraftingSlot>>,
+    position: Query<&Position>,
 ) {
     for event in events.read() {
+        // Find the closest Soul Cage to the entity receiving the crafted
+        // spell.
+        let receiver_position = position.get(event.receiver).unwrap();
+        let mut closest_slot: Option<Position> = None;
+        let mut min_distance = i32::MAX;
+        for slot in slots.iter() {
+            let slot = position.get(slot.parent_creature).unwrap();
+            let distance = manhattan_distance(receiver_position, slot);
+            if distance < min_distance {
+                min_distance = distance;
+                closest_slot = Some(slot.clone());
+            }
+        }
+        // Locate the boundaries of that Soul Cage.
+        let boundaries = locate_crafting_boundaries(&slots, &position, closest_slot.unwrap());
         let mut ingredients = HashMap::new();
         let mut soul_types = Vec::new();
         for (pos, soul_type) in dropped_souls.iter() {
-            if pos.is_within_range(&event.boundaries.0, &event.boundaries.1) {
+            if pos.is_within_range(&boundaries.0, &boundaries.1) {
                 ingredients.insert(pos, soul_type.0);
                 soul_types.push(soul_type.0);
             }
@@ -855,9 +939,9 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
-                .U.\n\
-                U.U\n\
-                .U.\
+                .O.\n\
+                O.O\n\
+                .O.\
                 ",
             ),
             Axiom::Halo { radius: 4 },

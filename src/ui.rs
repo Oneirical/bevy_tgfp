@@ -1294,12 +1294,20 @@ pub fn spawn_split_text(
         ))
         .with_children(|parent| {
             for (section, color) in split_string.iter().skip(1) {
+                if section.is_empty() {
+                    continue;
+                }
+                let (section, font_size) = if section.chars().next().unwrap() == '@' {
+                    (&section[1..], 1.0)
+                } else {
+                    (&section[0..], 1.5)
+                };
                 parent.spawn((
                     LogEntry,
                     TextSpan::new(section),
                     TextFont {
                         font: asset_server.load("fonts/Play-Regular.ttf"),
-                        font_size: 1.5,
+                        font_size,
                         ..default()
                     },
                     *color,

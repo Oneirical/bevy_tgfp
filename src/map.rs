@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
@@ -63,7 +65,7 @@ impl Position {
     }
 }
 
-fn manhattan_distance(a: Position, b: Position) -> i32 {
+pub fn manhattan_distance(a: &Position, b: &Position) -> i32 {
     (a.x - b.x).abs() + (a.y - b.y).abs()
 }
 
@@ -101,7 +103,7 @@ impl Map {
         destination: Position,
     ) -> Vec<Position> {
         tiles.sort_by(|&a, &b| {
-            manhattan_distance(a, destination).cmp(&manhattan_distance(b, destination))
+            manhattan_distance(&a, &destination).cmp(&manhattan_distance(&b, &destination))
         });
         tiles
     }
@@ -250,7 +252,7 @@ pub fn spawn_cage(
     text.send(AddMessage {
         message: crate::ui::Message::Tutorial,
     });
-    let tower_height = 1;
+    let tower_height = 10;
     let mut tower_height_tiles = 0;
     let mut last_room_size = 9;
     for tower_floor in 0..tower_height {
@@ -264,7 +266,7 @@ pub fn spawn_cage(
             // Spawn the player in the first room
             // (the player must not already exist).
             tower_floor == 0 && player.is_empty(),
-            tower_floor != tower_height - 1,
+            tower_floor != tower_height - 1 && (tower_floor + 1) % 4 != 0,
             size,
             if tower_floor == 0 {
                 &[OrdDir::Up]
@@ -274,7 +276,9 @@ pub fn spawn_cage(
                 &[OrdDir::Up, OrdDir::Down]
             },
         );
-        add_creatures(&mut cage, 2 + tower_floor, tower_floor == tower_height - 1);
+        if (tower_floor + 1) % 4 != 0 {
+            add_creatures(&mut cage, 2 + tower_floor, tower_floor != tower_height - 1);
+        }
 
         for (idx, tile_char) in cage.iter().enumerate() {
             let cage_corner = Position::new(
@@ -345,6 +349,7 @@ pub fn spawn_cage(
 }
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) {
+    let spawn_snake = false;
     if spawn_snake {
         cage[20] = 'E';
         cage[21] = 't';
@@ -437,6 +442,17 @@ pub fn generate_cage(
                 idx_start = i;
             }
         }
+        if (floor + 1) % 4 == 0 {
+            for i in 3..6 {
+                cage[idx_from_xy(i, 2, size)] = 's';
+                cage[idx_from_xy(i, 6, size)] = 'n';
+                cage[idx_from_xy(6, i, size)] = 'w';
+                cage[idx_from_xy(2, i, size)] = 'e';
+                for j in 3..6 {
+                    cage[idx_from_xy(i, j, size)] = 'x';
+                }
+            }
+        }
         for airlock in connections {
             match airlock {
                 OrdDir::Up => {
@@ -466,6 +482,10 @@ pub fn generate_cage(
 
 fn xy_idx(idx: usize, size: usize) -> (usize, usize) {
     (idx % size, idx / size)
+}
+
+fn idx_from_xy(x: usize, y: usize, size: usize) -> usize {
+    y * size + x
 }
 
 fn is_edge(idx: usize, size: usize) -> bool {

@@ -2,15 +2,11 @@ use bevy::prelude::*;
 
 use crate::{
     caste::{EquipSpell, UnequipSpell},
-    crafting::{CraftWithAxioms, LearnNewAxiom},
-    creature::{Player, Soul, Species},
+    crafting::CraftWithAxioms,
+    creature::{Player, Soul},
     cursor::CursorStep,
-    events::{
-        CreatureStep, DrawSoul, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul,
-    },
-    map::Position,
+    events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
     sets::ControlState,
-    spells::Axiom,
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
     OrdDir,
 };
@@ -19,7 +15,7 @@ use crate::{
 pub fn keyboard_input(
     player: Query<Entity, With<Player>>,
     mut use_wheel_soul: EventWriter<UseWheelSoul>,
-    mut draw_soul: EventWriter<DrawSoul>,
+    // mut draw_soul: EventWriter<DrawSoul>,
     mut events: EventWriter<CreatureStep>,
     input: Res<ButtonInput<KeyCode>>,
     mut turn_manager: ResMut<TurnManager>,
@@ -59,11 +55,11 @@ pub fn keyboard_input(
             }
         }
     }
-    if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::KeyQ) {
-        draw_soul.send(DrawSoul { amount: 1 });
-        turn_manager.action_this_turn = PlayerAction::Draw;
-        turn_end.send(EndTurn);
-    }
+    // if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::KeyQ) {
+    //     draw_soul.send(DrawSoul { amount: 1 });
+    //     turn_manager.action_this_turn = PlayerAction::Draw;
+    //     turn_end.send(EndTurn);
+    // }
     if input.just_pressed(KeyCode::ArrowUp) || input.just_pressed(KeyCode::KeyW) {
         match state.get() {
             ControlState::Cursor => {
@@ -204,7 +200,6 @@ pub fn keyboard_input(
 
     if input.just_pressed(KeyCode::KeyK) {
         craft.send(CraftWithAxioms {
-            boundaries: (Position::new(6, 7), Position::new(8, 9)),
             receiver: player.single(),
         });
     }

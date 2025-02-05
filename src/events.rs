@@ -7,7 +7,7 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    crafting::{LearnNewAxiom, TakeOrDropSoul},
+    crafting::{LearnNewAxiom, PredictCraft, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration,
@@ -116,6 +116,7 @@ pub fn toggle_paint_mode(
     mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
     soul_wheel: Res<SoulWheel>,
     mut recipe_book: Query<&mut Visibility, With<RecipebookUI>>,
+    mut predict: EventWriter<PredictCraft>,
 ) {
     if painter.is_painting {
         let player_pos = player.single();
@@ -163,6 +164,9 @@ pub fn toggle_paint_mode(
                 },
             ) {
                 painter.is_painting = true;
+                predict.send(PredictCraft {
+                    impact_point: *slot,
+                });
                 *recipe_book.single_mut() = Visibility::Inherited;
                 let full_alpha_index = match painter.current_paint {
                     None => 0,
@@ -1100,6 +1104,7 @@ pub fn stepped_on_tile(
     fragile: Query<&Fragile>,
     crafting_slot: Query<&CraftingSlot>,
     paint: Res<CagePainter>,
+    is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
         for (entity, position, flags) in stepped_on_creatures.iter() {
@@ -1119,7 +1124,8 @@ pub fn stepped_on_tile(
                 if is_fragile {
                     remove.send(RemoveCreature { entity });
                 }
-                if is_crafting_slot {
+                // If the player steps on a Soul Cage, start painting in it.
+                if is_crafting_slot && is_player.get(event.entity).unwrap() {
                     drop.send(TakeOrDropSoul {
                         position: *position,
                         soul: paint.current_paint,
@@ -1149,6 +1155,7 @@ pub fn creature_collision(
     mut commands: Commands,
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
+    mut draw_soul: EventWriter<DrawSoul>,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
@@ -1193,6 +1200,9 @@ pub fn creature_collision(
                 culprit: event.culprit,
                 hp_mod: damage,
             });
+            if is_player {
+                draw_soul.send(DrawSoul { amount: 1 });
+            }
             // Melee attack animation.
             // This must be calculated and cannot be "momentum", it has not been altered yet.
             let atk_pos = position.get(event.culprit).unwrap();

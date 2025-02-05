@@ -1,8 +1,8 @@
 use bevy::{
     color::{
         palettes::css::{
-            ANTIQUE_WHITE, BURLYWOOD, DARK_SALMON, DARK_SEA_GREEN, LIGHT_BLUE, LIME, MAGENTA,
-            ORANGE_RED, VIOLET, WHITE, YELLOW,
+            ANTIQUE_WHITE, BURLYWOOD, DARK_SALMON, DARK_SEA_GREEN, LIGHT_BLUE, LIGHT_GRAY, LIME,
+            MAGENTA, ORANGE_RED, PINK, VIOLET, WHITE, YELLOW,
         },
         Color,
     },
@@ -10,7 +10,10 @@ use bevy::{
     text::TextColor,
 };
 
-use crate::creature::{Soul, Species};
+use crate::{
+    creature::{Soul, Species},
+    spells::Axiom,
+};
 
 use regex::Regex;
 
@@ -35,6 +38,13 @@ pub const LORE: &[&str] = &[
 "The next time you strike with a melee attack, deal 6 damage.",
 "[y]Arrow Keys[w] or [y]WASD[w]: Move or melee attack one step in the cardinal directions.\n[y]Space[w] or [y]Q[w]: Draw one Soul on the Soul Wheel.\n[y]1-8[w]: Cast a spell corresponding to the chosen slot on the Soul Wheel.\n[y]C[w]: Enter Cursor mode to learn more about the 6 enemy types.\n[y]E[w]: Enter Caste mode to learn more about the 6 available spells.\n[y]Z[w] or [y]X[w]: Reset the game.",
 "Press [y]1-6[w] to learn about the 6 different spells.",
+"[b]Haughty as the Saints Were[w]\n[l]Form[w]\n\n[r]Target[w] the tile on which the caster stands.\n\n[p]@In a realm where sheer belief draws the line between what is and what is not, pride is omnipotence. The Saints guarded fiercely this primordial truth.",
+"[i]Hechaton, Ribbon-Adorned Gardener[w]\n[o]Function[w]\n\nAll [r]Targeted Creatures[w] transform into a [s]Terracotta Sentry[w].\n\n[p]@Finding anything but the sappiest praise for Hechaton's sculptures is difficult. His few critics have become indistinguishable from the art they used to bash, their limbs petrified and their stone eyes keeping watch over the botanical gardens.",
+"[g]Mark History Where One Passes[w]\n[m]Mutator[w]\n\nUntil the end of this spell, all [r]Targeted Creatures[w] will leave behind a linear trail when they [m]Teleport[w]. All tiles in the trail's path become [r]Targets[w].\n\n[p]@As Saints turned the impossible to the always-has-been with each new desire, Old World historians struggled to trace back each ruin, each monument and each ideology to its origin. In the end, they accepted that time is not a line, nor a circle, but a tangled knot of pure chaos.",
+"[y]A Click, Then a Flash[w]\n[o]Function[w]\n\nSkip all remaining Axioms. On all [r]Targets[w], place down a trap, storing all skipped Axioms within. When a creature steps onto the trap, trigger all stored Axioms and remove the trap.\n\n[p]@Where the Artistic galleries do not have guards, they have traps. A careless step, and would-be looters become the looted, their every memory sold to the highest bidder on the hivemind's network.",
+"[^]Aspha, Nemesis of the Unseen[w]\n[l]Form[w]\n\n[r]Target[w] all tiles on the outskirts of a circle centered on the caster. Its radius is [y]4[w] tiles.\n\n[p]@At one point in the history of Old World warfare, use of camouflage and invisibility technology became omnipresent. The solution was, of course, to build a very energy-hungry robot which considered air itself to be its mortal enemy. Overkill? The stealth-bots - or, at the very least, what remains of them - would disagree.",
+"[y]Yearnings Crossed Out[w]\n[l]Form[w]\n\nShoot beams in all four diagonal directions, each stopping when a creature is met. [r]Target[w] all tiles they pass through, as well as the obstacles which stopped them.\n\n[p]@The Unhinged swore away control and domination, living according to whim and impulse. Were they truly free, or controlled by the ideology of freedom?",
+"[g]Terror and Thirst, Focused[w]\n[l]Form[w]\n\nShoot a linear beam in the direction of the caster's last step, which stops upon hitting a creature or solid tile.\n\n[r]Target[w] all tiles traversed by the beam, as well as the obstacle that stopped it.\n\n[p]@All Old World denizens know not to trust the Feral's collars and chains. One twitch, one snap, and their bodies surge out like a bullet, stopped by anything but reason.","[l]Steps Shift The Mind[w]\n[y]Contingency[w]\n\nWhen the caster [m]Teleports[w], cast this spell.\n\nTo walk and let the mind wander is a dangerous thing. A thought pulls harder than the rest, one's gait softens into the grace of a Saint, tears turn to bright smiles, and before one knows it, one is no more.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -70,6 +80,20 @@ pub fn match_soul_with_description(soul: &Soul) -> &str {
         Soul::Feral => 16,
         Soul::Vile => 17,
         Soul::Empty => 19,
+        _ => 0,
+    }]
+}
+
+pub fn match_axiom_with_description(axiom: &Axiom) -> &str {
+    LORE[match axiom {
+        Axiom::Ego => 20,
+        Axiom::Transform { species: _ } => 21,
+        Axiom::Trace => 22,
+        Axiom::PlaceStepTrap => 23,
+        Axiom::Halo { radius: 4 } => 24,
+        Axiom::XBeam => 25,
+        Axiom::MomentumBeam => 26,
+        Axiom::WhenMoved => 27,
         _ => 0,
     }]
 }
@@ -114,6 +138,8 @@ fn match_char_code_with_color(some_char: Option<char>) -> Color {
             'b' => BURLYWOOD.into(),
             's' => DARK_SALMON.into(),
             'a' => ANTIQUE_WHITE.into(),
+            'i' => PINK.into(),
+            '^' => LIGHT_GRAY.into(),
             'o' => Color::srgb(0.94, 0.55, 0.38),
             'g' => Color::srgb(0.66, 0.82, 0.11),
             _ => {
