@@ -274,6 +274,7 @@ pub enum Species {
     EpsilonTail,
     CageBorder,
     CageSlot,
+    AxiomaticSeal,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -296,6 +297,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::EpsilonTail => 68,
         Species::CageBorder => 108,
         Species::CageSlot => 167,
+        Species::AxiomaticSeal => 25,
     }
 }
 

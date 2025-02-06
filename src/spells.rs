@@ -192,6 +192,12 @@ pub struct SpellStack {
     pub spells: Vec<SynapseData>,
 }
 
+#[derive(Resource)]
+/// All contingencies triggered this turn, to prevent infinite loops.
+pub struct AntiContingencyLoop {
+    pub contingencies_this_turn: HashSet<(Entity, Axiom)>,
+}
+
 #[derive(Event, Debug)]
 /// Triggered when a creature performs an action corresponding to a certain Contingency.
 pub struct TriggerContingency {
@@ -202,16 +208,28 @@ pub struct TriggerContingency {
 pub fn trigger_contingency(
     mut events: EventReader<TriggerContingency>,
     spellbook: Query<&Spellbook>,
+    mut loop_protection: ResMut<AntiContingencyLoop>,
     mut cast_spell: EventWriter<CastSpell>,
 ) {
     for event in events.read() {
         if let Ok(spellbook) = spellbook.get(event.caster) {
             for (soul, spell) in spellbook.spells.iter() {
+                if loop_protection
+                    .contingencies_this_turn
+                    .contains(&(event.caster, event.contingency.clone()))
+                {
+                    // Do not allow infinite contingency loops
+                    // (such as, "when dealing damage, deal damage")
+                    break;
+                }
                 if let Some(contingency_index) = spell
                     .axioms
                     .iter()
                     .position(|axiom| axiom == &event.contingency)
                 {
+                    loop_protection
+                        .contingencies_this_turn
+                        .insert((event.caster, event.contingency.clone()));
                     cast_spell.send(CastSpell {
                         caster: event.caster,
                         spell: spell.clone(),

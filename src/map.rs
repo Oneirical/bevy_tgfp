@@ -243,6 +243,10 @@ pub struct FaithsEnd {
     pub current_cage: usize,
 }
 
+pub fn is_soul_cage_room(room: usize) -> bool {
+    (room + 1) % 4 == 0
+}
+
 pub fn spawn_cage(
     mut summon: EventWriter<SummonCreature>,
     mut faiths_end: ResMut<FaithsEnd>,
@@ -266,7 +270,7 @@ pub fn spawn_cage(
             // Spawn the player in the first room
             // (the player must not already exist).
             tower_floor == 0 && player.is_empty(),
-            tower_floor != tower_height - 1 && (tower_floor + 1) % 4 != 0,
+            tower_floor != tower_height - 1 && !is_soul_cage_room(tower_floor),
             size,
             if tower_floor == 0 {
                 &[OrdDir::Up]
@@ -276,7 +280,7 @@ pub fn spawn_cage(
                 &[OrdDir::Up, OrdDir::Down]
             },
         );
-        if (tower_floor + 1) % 4 != 0 {
+        if !is_soul_cage_room(tower_floor) {
             add_creatures(&mut cage, 2 + tower_floor, tower_floor != tower_height - 1);
         }
 
@@ -303,6 +307,7 @@ pub fn spawn_cage(
                 'E' => Species::EpsilonHead,
                 't' => Species::EpsilonTail,
                 'x' => Species::CageSlot,
+                'C' => Species::AxiomaticSeal,
                 '^' | '>' | '<' | 'V' => Species::Airlock,
                 'w' | 'n' | 'e' | 's' => Species::CageBorder,
                 _ => continue,
@@ -442,7 +447,8 @@ pub fn generate_cage(
                 idx_start = i;
             }
         }
-        if (floor + 1) % 4 == 0 {
+        if is_soul_cage_room(floor) {
+            cage[idx_from_xy(4, 1, size)] = 'C';
             for i in 3..6 {
                 cage[idx_from_xy(i, 2, size)] = 's';
                 cage[idx_from_xy(i, 6, size)] = 'n';

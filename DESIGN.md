@@ -1,5 +1,13 @@
 # The Games Foxes Play
 
+# Checklist
+
+- Epsilon rooms and segment walls
+- Descriptions in E menu
+- more axioms
+- fill up more text for existing axioms
+- check weird superposition with E/C menu and soul-painting
+
 ## The redesigned edition
 
 The player starts in the World Seed, Terminal's cage, with 10 active Disgust, and the ability to swap between Introvert and Extrovert modes. 

@@ -1,14 +1,14 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 
 use crate::{
     caste::{
         equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell, UnequipSpell,
     },
     crafting::{
-        craft_with_axioms, learn_new_axiom, predict_craft, take_or_drop_soul, CraftWithAxioms,
-        CraftingRecipes, LearnNewAxiom, PredictCraft, TakeOrDropSoul,
+        craft_with_axioms, learn_new_axiom, predict_craft, take_or_drop_soul, BagOfLoot,
+        CraftWithAxioms, CraftingRecipes, LearnNewAxiom, PredictCraft, TakeOrDropSoul,
     },
-    creature::SpellLibrary,
+    creature::{EffectDuration, Species, SpellLibrary, StatusEffect},
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,
@@ -23,6 +23,7 @@ use crate::{
     map::register_creatures,
     spells::{
         cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
+        AntiContingencyLoop, Axiom,
     },
     ui::{
         decay_fading_title, despawn_fading_title, dispense_sliding_components_log,
@@ -62,6 +63,35 @@ impl Plugin for SetsPlugin {
         app.init_resource::<CraftingRecipes>();
         app.insert_resource(SpellLibrary {
             library: Vec::new(),
+        });
+        app.insert_resource(AntiContingencyLoop {
+            contingencies_this_turn: HashSet::new(),
+        });
+        app.insert_resource(BagOfLoot {
+            starter: vec![Axiom::Ego, Axiom::Touch, Axiom::HealOrHarm { amount: -1 }],
+            forms: vec![
+                Axiom::MomentumBeam,
+                Axiom::XBeam,
+                Axiom::PlusBeam,
+                Axiom::Plus,
+            ],
+            functions: vec![
+                Axiom::PlaceStepTrap,
+                Axiom::Dash { max_distance: 5 },
+                Axiom::ForceCast,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Stab,
+                    potency: 5,
+                    stacks: EffectDuration::Finite { stacks: 20 },
+                },
+            ],
+            rares: vec![
+                Axiom::WhenTakingDamage,
+                Axiom::WhenDealingDamage,
+                Axiom::Transform {
+                    species: Species::Abazon,
+                },
+            ],
         });
         app.add_systems(
             Update,

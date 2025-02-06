@@ -26,8 +26,6 @@ pub fn keyboard_input(
     mut cursor: EventWriter<CursorStep>,
     mut caste_menu: Query<&mut LargeCastePanel>,
     mut scale: ResMut<UiScale>,
-
-    mut craft: EventWriter<CraftWithAxioms>,
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
 ) {
@@ -196,12 +194,6 @@ pub fn keyboard_input(
     }
     if input.pressed(KeyCode::KeyP) {
         scale.0 -= 0.02;
-    }
-
-    if input.just_pressed(KeyCode::KeyK) {
-        craft.send(CraftWithAxioms {
-            receiver: player.single(),
-        });
     }
 
     if input.just_pressed(KeyCode::Enter) {

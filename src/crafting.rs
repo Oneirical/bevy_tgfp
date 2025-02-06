@@ -4,7 +4,10 @@ use bevy::{
     prelude::*,
     utils::{HashMap, HashSet},
 };
-use rand::{seq::IteratorRandom, thread_rng};
+use rand::{
+    seq::{IteratorRandom, SliceRandom},
+    thread_rng,
+};
 use uuid::Uuid;
 
 use crate::{
@@ -27,6 +30,36 @@ use crate::{
 #[derive(Resource)]
 pub struct CraftingRecipes {
     sorted_recipes: Vec<(Recipe, Axiom)>,
+}
+
+#[derive(Resource)]
+pub struct BagOfLoot {
+    pub starter: Vec<Axiom>,
+    pub forms: Vec<Axiom>,
+    pub functions: Vec<Axiom>,
+    pub rares: Vec<Axiom>,
+}
+
+impl BagOfLoot {
+    pub fn extract_axioms(&mut self) -> Vec<Axiom> {
+        let mut rng = thread_rng();
+
+        // Shuffle each vector
+        self.starter.shuffle(&mut rng);
+        self.forms.shuffle(&mut rng);
+        self.functions.shuffle(&mut rng);
+        self.rares.shuffle(&mut rng);
+
+        // Extract the required number of axioms
+        let mut extracted = Vec::new();
+
+        extracted.extend(self.starter.drain(0..3.min(self.starter.len())));
+        extracted.extend(self.forms.drain(0..3.min(self.forms.len())));
+        extracted.extend(self.functions.drain(0..3.min(self.functions.len())));
+        extracted.extend(self.rares.drain(0..1.min(self.rares.len())));
+
+        extracted
+    }
 }
 
 #[derive(Component)]

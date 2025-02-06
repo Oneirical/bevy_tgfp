@@ -7,7 +7,7 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    crafting::{LearnNewAxiom, PredictCraft, TakeOrDropSoul},
+    crafting::{BagOfLoot, CraftWithAxioms, LearnNewAxiom, PredictCraft, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration,
@@ -20,8 +20,8 @@ use crate::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{spawn_cage, FaithsEnd, Map, Position},
-    spells::{walk_grid, Axiom, CastSpell, TriggerContingency},
+    map::{is_soul_cage_room, spawn_cage, FaithsEnd, Map, Position},
+    spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
     ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, RecipebookUI, SoulSlot},
     OrdDir, TILE_SIZE,
 };
@@ -476,6 +476,7 @@ pub fn summon_creature(
             Species::Second => 1,
             Species::Tinker => 1,
             Species::Oracle => 2,
+            Species::AxiomaticSeal => 4,
             // Wall-type creatures just get full HP to avoid displaying
             // their healthbar.
             _ => max_hp,
@@ -521,6 +522,7 @@ pub fn summon_creature(
                     Species::Oracle => Soul::Unhinged,
                     Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
                     Species::CageSlot => Soul::Saintly,
+                    Species::AxiomaticSeal => Soul::Vile,
                     _ => Soul::Unhinged,
                 },
                 spellbook: event
@@ -566,6 +568,7 @@ pub fn summon_creature(
                     Species::Hunter,
                     Species::Apiarist,
                     Species::EpsilonHead,
+                    Species::AxiomaticSeal,
                 ]
                 .contains(&event.species)
             {
@@ -578,6 +581,7 @@ pub fn summon_creature(
                 Species::Hunter,
                 Species::Apiarist,
                 Species::EpsilonHead,
+                Species::AxiomaticSeal,
             ]
             .contains(&event.species)
             {
@@ -692,6 +696,9 @@ pub fn assign_species_components(
             Species::Abazon => {
                 new_creature.insert((Immobile, Hunt));
             }
+            Species::AxiomaticSeal => {
+                new_creature.insert((Immobile, Hunt, Dizzy, NoDropSoul));
+            }
             Species::EpsilonHead => {
                 new_creature.insert((
                     Magnetic {
@@ -756,8 +763,6 @@ pub fn creature_step(
     mut teleporter: EventWriter<TeleportEntity>,
     mut momentum: EventWriter<AlterMomentum>,
     mut creature: Query<&Position>,
-    // TODO REMOVE THIS
-    mut learn: EventWriter<LearnNewAxiom>,
 ) {
     for event in events.read() {
         let creature_pos = creature.get_mut(event.entity).unwrap();
@@ -771,16 +776,6 @@ pub fn creature_step(
         momentum.send(AlterMomentum {
             entity: event.entity,
             direction: event.direction,
-        });
-        // TODO REMOVE THIS
-        learn.send(LearnNewAxiom {
-            axiom: Axiom::Transform {
-                species: Species::Abazon,
-            },
-        });
-        learn.send(LearnNewAxiom { axiom: Axiom::Ego });
-        learn.send(LearnNewAxiom {
-            axiom: Axiom::Trace,
         });
     }
 }
@@ -1613,6 +1608,9 @@ pub fn remove_designated_creatures(
     doors: Query<(Entity, &CreatureFlags)>,
     closed_door_query: Query<&Door, Without<Intangible>>,
     mut open: EventWriter<OpenCloseDoor>,
+    mut craft: EventWriter<CraftWithAxioms>,
+    player: Query<Entity, With<Player>>,
+    faiths_end: Res<FaithsEnd>,
 ) {
     for (designated, designated_flags) in remove.iter() {
         // Remove the creature from Map
@@ -1640,6 +1638,9 @@ pub fn remove_designated_creatures(
     // try to open doors that are in the process of being
     // despawned by the victory check.
     if awake.is_empty() && !sleeping.is_empty() {
+        // HACK: Since this system runs every tick, this variable ensures
+        // the "CraftWithAxioms" happens only once.
+        let mut happened_once = false;
         for (door, flags) in doors.iter() {
             if closed_door_query.contains(flags.species_flags)
                 || closed_door_query.contains(flags.effects_flags)
@@ -1648,6 +1649,12 @@ pub fn remove_designated_creatures(
                     entity: door,
                     open: true,
                 });
+                if is_soul_cage_room(faiths_end.current_cage) && !happened_once {
+                    craft.send(CraftWithAxioms {
+                        receiver: player.single(),
+                    });
+                    happened_once = true;
+                }
             }
         }
     }
@@ -1660,7 +1667,6 @@ pub fn end_turn(
     mut events: EventReader<EndTurn>,
     mut npc_actions: EventWriter<DistributeNpcActions>,
     mut turn_manager: ResMut<TurnManager>,
-    mut effects: Query<(Entity, &mut StatusEffectsList)>,
     mut commands: Commands,
     awake_creatures: Query<&Awake>,
     sleeping_creatures: Query<(Entity, &Sleeping)>,
@@ -1671,6 +1677,9 @@ pub fn end_turn(
     mut open: EventWriter<OpenCloseDoor>,
     mut respawn: EventWriter<RespawnPlayer>,
     mut status_effect: EventWriter<AddStatusEffect>,
+    mut learn: EventWriter<LearnNewAxiom>,
+    mut loot: ResMut<BagOfLoot>,
+    mut loop_protection: ResMut<AntiContingencyLoop>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
@@ -1684,6 +1693,8 @@ pub fn end_turn(
             // }
             return;
         }
+        // Clear the anti-contingency infinite loop filter.
+        loop_protection.contingencies_this_turn.clear();
         // Victory check.
         if sleeping_creatures.is_empty() && awake_creatures.is_empty() {
             respawn.send(RespawnPlayer { victorious: true });
@@ -1703,6 +1714,12 @@ pub fn end_turn(
                     .is_within_range(&boundary_a, &boundary_b)
             {
                 faiths_end.current_cage += 1;
+                if is_soul_cage_room(faiths_end.current_cage) {
+                    let extracted_axioms = loot.extract_axioms();
+                    for axiom in extracted_axioms {
+                        learn.send(LearnNewAxiom { axiom });
+                    }
+                }
                 for (door, flags) in flags_query.iter() {
                     if open_door_query.contains(flags.species_flags)
                         || open_door_query.contains(flags.effects_flags)
@@ -1737,34 +1754,42 @@ pub fn end_turn(
 
         // The turncount increases.
         turn_manager.turn_count += 1;
-        // Tick down status effects.
-        for (entity, mut effect_list) in effects.iter_mut() {
-            for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
-                if let EffectDuration::Finite { stacks } = &mut potency_and_stacks.stacks {
-                    *stacks = stacks.saturating_sub(1);
-                    if *stacks == 0 {
-                        // Disable this effect.
-                        potency_and_stacks.potency = 0;
-                        let effects_flags = flags_query.get(entity).unwrap().1.effects_flags;
-                        match effect {
-                            StatusEffect::Invincible => {
-                                commands.entity(effects_flags).remove::<Invincible>();
-                            }
-                            StatusEffect::Stab => {
-                                commands.entity(effects_flags).remove::<Stab>();
-                            }
-                            StatusEffect::Dizzy => {
-                                commands.entity(effects_flags).remove::<Dizzy>();
-                            }
-                            StatusEffect::DimensionBond => {
-                                commands.entity(effects_flags).remove::<Summoned>();
-                            }
+        commands.run_system_cached(tick_down_status_effects);
+        npc_actions.send(DistributeNpcActions { speed_level: 1 });
+    }
+}
+
+pub fn tick_down_status_effects(
+    mut effects: Query<(Entity, &mut StatusEffectsList)>,
+    flags_query: Query<(Entity, &CreatureFlags)>,
+    mut commands: Commands,
+) {
+    // Tick down status effects.
+    for (entity, mut effect_list) in effects.iter_mut() {
+        for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
+            if let EffectDuration::Finite { stacks } = &mut potency_and_stacks.stacks {
+                *stacks = stacks.saturating_sub(1);
+                if *stacks == 0 {
+                    // Disable this effect.
+                    potency_and_stacks.potency = 0;
+                    let effects_flags = flags_query.get(entity).unwrap().1.effects_flags;
+                    match effect {
+                        StatusEffect::Invincible => {
+                            commands.entity(effects_flags).remove::<Invincible>();
+                        }
+                        StatusEffect::Stab => {
+                            commands.entity(effects_flags).remove::<Stab>();
+                        }
+                        StatusEffect::Dizzy => {
+                            commands.entity(effects_flags).remove::<Dizzy>();
+                        }
+                        StatusEffect::DimensionBond => {
+                            commands.entity(effects_flags).remove::<Summoned>();
                         }
                     }
                 }
             }
         }
-        npc_actions.send(DistributeNpcActions { speed_level: 1 });
     }
 }
 
