@@ -122,6 +122,10 @@ pub enum StatusEffect {
     DimensionBond,
     // The creature gains additional turns.
     Haste,
+    // The creature attacks its allies.
+    Charm,
+    // The creature starts being able to drag walls behind it.
+    Magnetize,
 }
 
 #[derive(Debug)]
@@ -206,6 +210,9 @@ pub struct Random;
 pub struct Summoned {
     pub summoner: Entity,
 }
+
+#[derive(Component)]
+pub struct Charm;
 
 // Will start dragging along creatures of this species.
 #[derive(Component)]
@@ -419,7 +426,12 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                 Axiom::StatusEffect {
                     effect: StatusEffect::Invincible,
                     potency: 1,
-                    stacks: EffectDuration::Finite { stacks: 2 },
+                    stacks: EffectDuration::Finite { stacks: 3 },
+                },
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Haste,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 1 },
                 },
             ]),
             Some(vec![

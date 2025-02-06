@@ -10,17 +10,17 @@ use crate::{
     crafting::{BagOfLoot, CraftWithAxioms, LearnNewAxiom, PredictCraft, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door, EffectDuration,
-        FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible,
-        Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random, Sleeping,
-        Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList,
-        Summoned, Wall,
+        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door,
+        EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
+        Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random,
+        Sleeping, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
+        StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{is_soul_cage_room, spawn_cage, FaithsEnd, Map, Position},
+    map::{is_soul_cage_room, manhattan_distance, spawn_cage, FaithsEnd, Map, Position},
     spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
     ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, RecipebookUI, SoulSlot},
     OrdDir, TILE_SIZE,
@@ -435,6 +435,15 @@ pub fn add_status_effects(
             StatusEffect::Haste => {
                 commands.entity(effects_flags).insert(Speed::Fast {
                     actions_per_turn: event.potency + 1,
+                });
+            }
+            StatusEffect::Charm => {
+                commands.entity(effects_flags).insert(Charm);
+            }
+            StatusEffect::Magnetize => {
+                commands.entity(effects_flags).insert(Magnetic {
+                    species: Species::WeakWall,
+                    conductor: None,
                 });
             }
         }
@@ -906,6 +915,7 @@ pub fn teleport_entity(
     intangible_query: Query<&Intangible>,
     immobile_query: Query<&Immobile>,
     magnet_query: Query<&Magnetized>,
+    charm_query: Query<&Charm>,
     mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
@@ -919,7 +929,7 @@ pub fn teleport_entity(
             // Get the Position of the Entity targeted by TeleportEntity.
             .get_mut(event.entity)
             .expect("A TeleportEntity was given an invalid entity");
-        let (is_intangible, is_immobile, is_magnetized) = {
+        let (is_intangible, is_immobile, is_magnetized, is_charmed) = {
             (
                 intangible_query.contains(creature_flags.species_flags)
                     || intangible_query.contains(creature_flags.effects_flags),
@@ -927,6 +937,8 @@ pub fn teleport_entity(
                     || immobile_query.contains(creature_flags.effects_flags),
                 magnet_query.contains(creature_flags.species_flags)
                     || magnet_query.contains(creature_flags.effects_flags),
+                charm_query.contains(creature_flags.species_flags)
+                    || charm_query.contains(creature_flags.effects_flags),
             )
         };
         // If motion is possible...
@@ -969,9 +981,9 @@ pub fn teleport_entity(
                 is_player.get(event.entity).unwrap(),
                 is_player.get(*collided_with).unwrap(),
             );
-            // Only collide if one of the two creature is the player.
-            // TODO: This will prevent allied creatures from attacking.
-            if culprit_is_player || collided_is_player {
+            // Only collide if one of the two creature is the player, or if the
+            // creature is charmed and is NOT attacking the player.
+            if (culprit_is_player || collided_is_player) || (is_charmed && !collided_is_player) {
                 collision.send(CreatureCollision {
                     culprit: event.entity,
                     collided_with: *collided_with,
@@ -1673,18 +1685,9 @@ pub fn end_turn(
     mut npc_actions: EventWriter<DistributeNpcActions>,
     mut turn_manager: ResMut<TurnManager>,
     mut commands: Commands,
-    awake_creatures: Query<&Awake>,
-    sleeping_creatures: Query<(Entity, &Sleeping)>,
-    mut faiths_end: ResMut<FaithsEnd>,
-    player_position: Query<&Position, With<Player>>,
-    flags_query: Query<(Entity, &CreatureFlags)>,
-    open_door_query: Query<&Door, With<Intangible>>,
-    mut open: EventWriter<OpenCloseDoor>,
-    mut respawn: EventWriter<RespawnPlayer>,
-    mut status_effect: EventWriter<AddStatusEffect>,
-    mut learn: EventWriter<LearnNewAxiom>,
-    mut loot: ResMut<BagOfLoot>,
     mut loop_protection: ResMut<AntiContingencyLoop>,
+    player_flags: Query<&CreatureFlags, With<Player>>,
+    speed_query: Query<&Speed>,
 ) {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
@@ -1698,73 +1701,109 @@ pub fn end_turn(
             // }
             return;
         }
+
+        let flags = player_flags.single();
+        let speed_level = if let Ok(player_speed) = speed_query
+            .get(flags.effects_flags)
+            .or(speed_query.get(flags.species_flags))
+        {
+            match player_speed {
+                // TODO: This is deceptive: if the player is perma-fast,
+                // they don't get "2 actions per turn", they just get to
+                // act while everything BUT creatures with the same or
+                // superior speed level are frozen.
+                Speed::Fast { actions_per_turn } => *actions_per_turn,
+                // TODO: The player being slowed currently has no effect whatsoever.
+                Speed::Slow { wait_turns: _ } => 1,
+            }
+        } else {
+            1
+        };
         // Clear the anti-contingency infinite loop filter.
         loop_protection.contingencies_this_turn.clear();
-        // Victory check.
-        if sleeping_creatures.is_empty() && awake_creatures.is_empty() {
-            respawn.send(RespawnPlayer { victorious: true });
-        }
-        // If the player has cleared a cage inside of faith's end, awaken all the
-        // creatures in the next cage.
-        else if let Some((mut boundary_a, mut boundary_b)) = faiths_end
-            .cage_dimensions
-            .get(&(faiths_end.current_cage + 1))
-        {
-            boundary_a.shift(1, 1);
-            boundary_b.shift(-1, -1);
-            if awake_creatures.is_empty()
-                && player_position
-                    .get_single()
-                    .unwrap()
-                    .is_within_range(&boundary_a, &boundary_b)
-            {
-                faiths_end.current_cage += 1;
-                if is_soul_cage_room(faiths_end.current_cage) {
-                    let extracted_axioms = loot.extract_axioms();
-                    for axiom in extracted_axioms {
-                        learn.send(LearnNewAxiom { axiom });
-                    }
-                }
-                for (door, flags) in flags_query.iter() {
-                    if open_door_query.contains(flags.species_flags)
-                        || open_door_query.contains(flags.effects_flags)
-                    {
-                        open.send(OpenCloseDoor {
-                            entity: door,
-                            open: false,
-                        });
-                    }
-                }
-                for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
-                    if sleeping_component.cage_idx == faiths_end.current_cage {
-                        commands.entity(sleeping_entity).insert(Awake);
-                        commands.entity(sleeping_entity).remove::<Sleeping>();
-                        // Give one turn for the player to act.
-                        // This also prevents them from immediately moving
-                        // inside the closing doors.
-                        commands
-                            .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
-                            .insert(Dizzy);
-                        status_effect.send(AddStatusEffect {
-                            entity: sleeping_entity,
-                            effect: StatusEffect::Dizzy,
-                            potency: 1,
-                            stacks: EffectDuration::Finite { stacks: 1 },
-                            culprit: sleeping_entity,
-                        });
-                    }
-                }
-            }
-        }
 
-        // The turncount increases.
-        turn_manager.turn_count += 1;
         // NOTE: This might have some strange behaviours due to how
         // effects are ticked down between player turn and npc turn.
         // Maybe I should find a way to make this happen after everyone's
         // turn.
+        commands.run_system_cached(room_circulation_check);
         commands.run_system_cached(tick_down_status_effects);
-        npc_actions.send(DistributeNpcActions { speed_level: 1 });
+
+        // The turncount increases.
+        turn_manager.turn_count += 1;
+        npc_actions.send(DistributeNpcActions { speed_level });
+    }
+}
+
+fn room_circulation_check(
+    awake_creatures: Query<&Awake>,
+    sleeping_creatures: Query<(Entity, &Sleeping)>,
+    mut faiths_end: ResMut<FaithsEnd>,
+    player_position: Query<&Position, With<Player>>,
+    flags_query: Query<(Entity, &CreatureFlags)>,
+    open_door_query: Query<&Door, With<Intangible>>,
+    mut open: EventWriter<OpenCloseDoor>,
+    mut respawn: EventWriter<RespawnPlayer>,
+    mut status_effect: EventWriter<AddStatusEffect>,
+    mut learn: EventWriter<LearnNewAxiom>,
+    mut loot: ResMut<BagOfLoot>,
+    mut commands: Commands,
+) {
+    // Victory check.
+    if sleeping_creatures.is_empty() && awake_creatures.is_empty() {
+        respawn.send(RespawnPlayer { victorious: true });
+    }
+    // If the player has cleared a cage inside of faith's end, awaken all the
+    // creatures in the next cage.
+    else if let Some((mut boundary_a, mut boundary_b)) = faiths_end
+        .cage_dimensions
+        .get(&(faiths_end.current_cage + 1))
+    {
+        boundary_a.shift(1, 1);
+        boundary_b.shift(-1, -1);
+        if awake_creatures.is_empty()
+            && player_position
+                .get_single()
+                .unwrap()
+                .is_within_range(&boundary_a, &boundary_b)
+        {
+            faiths_end.current_cage += 1;
+            if is_soul_cage_room(faiths_end.current_cage) {
+                let extracted_axioms = loot.extract_axioms();
+                for axiom in extracted_axioms {
+                    learn.send(LearnNewAxiom { axiom });
+                }
+            }
+            for (door, flags) in flags_query.iter() {
+                if open_door_query.contains(flags.species_flags)
+                    || open_door_query.contains(flags.effects_flags)
+                {
+                    open.send(OpenCloseDoor {
+                        entity: door,
+                        open: false,
+                    });
+                }
+            }
+            for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
+                if sleeping_component.cage_idx == faiths_end.current_cage {
+                    commands.entity(sleeping_entity).insert(Awake);
+                    commands.entity(sleeping_entity).remove::<Sleeping>();
+                    // Give one turn for the player to act.
+                    // This also prevents them from immediately moving
+                    // inside the closing doors.
+                    commands
+                        .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
+                        .insert(Dizzy);
+                    status_effect.send(AddStatusEffect {
+                        entity: sleeping_entity,
+                        effect: StatusEffect::Dizzy,
+                        potency: 1,
+                        stacks: EffectDuration::Finite { stacks: 1 },
+                        culprit: sleeping_entity,
+                    });
+                }
+            }
+        }
     }
 }
 
@@ -1798,6 +1837,13 @@ pub fn tick_down_status_effects(
                         StatusEffect::Haste => {
                             commands.entity(effects_flags).remove::<Speed>();
                         }
+                        StatusEffect::Charm => {
+                            commands.entity(effects_flags).remove::<Charm>();
+                        }
+                        StatusEffect::Magnetize => {
+                            commands.entity(effects_flags).remove::<Magnetic>();
+                            commands.entity(effects_flags).remove::<Magnetized>();
+                        }
                     }
                 }
             }
@@ -1817,6 +1863,9 @@ pub fn distribute_npc_actions(
     mut events: EventReader<DistributeNpcActions>,
     turn_manager: Res<TurnManager>,
     player: Query<&Position, With<Player>>,
+    // TODO: This will break if Awake becomes a flag component
+    // and is no longer stitched directly onto the creature.
+    charm_position_query: Query<&Position, (With<Awake>, Without<Player>)>,
     npcs: Query<(Entity, &Position, &Species, &Spellbook, &CreatureFlags), Without<Player>>,
     species: Query<&Species>,
     map: Res<Map>,
@@ -1824,13 +1873,14 @@ pub fn distribute_npc_actions(
     hunt_query: Query<&Hunt>,
     random_query: Query<&Random>,
     speed_query: Query<&Speed>,
+    charm_query: Query<&Charm>,
     stunned_query: Query<Entity, Or<(With<Dizzy>, With<Sleeping>)>>,
 ) {
     for event in events.read() {
         let player_pos = player.get_single().unwrap();
         let mut send_echo = false;
         for (npc_entity, npc_pos, npc_species, npc_spellbook, flags) in npcs.iter() {
-            let (is_hunter, is_random, is_stunned, speed) = {
+            let (is_hunter, is_random, is_stunned, is_charmed, speed) = {
                 (
                     hunt_query.contains(flags.species_flags)
                         || hunt_query.contains(flags.effects_flags),
@@ -1841,6 +1891,8 @@ pub fn distribute_npc_actions(
                         // HACK: The "Sleeping" component currently appears
                         // on the creature itself and not the effects_flags.
                         || stunned_query.contains(npc_entity),
+                    charm_query.contains(flags.species_flags)
+                        || charm_query.contains(flags.effects_flags),
                     // NOTE: Currently, status effect speed overrides species speed.
                     // Maybe it would be interesting to have them cancel each other out.
                     speed_query
@@ -1900,8 +1952,26 @@ pub fn distribute_npc_actions(
                         continue;
                     }
                 }
-                // Try to find a tile that gets the hunter closer to the player.
-                if let Some(move_direction) = map.best_manhattan_move(*npc_pos, *player_pos) {
+                let destination = if is_charmed {
+                    let mut closest_slot: Option<Position> = None;
+                    let mut min_distance = i32::MAX;
+                    for position in charm_position_query.iter() {
+                        let distance = manhattan_distance(npc_pos, position);
+                        if distance < min_distance {
+                            min_distance = distance;
+                            closest_slot = Some(position.clone());
+                        }
+                    }
+                    if let Some(closest_slot) = closest_slot {
+                        closest_slot
+                    } else {
+                        *npc_pos
+                    }
+                } else {
+                    *player_pos
+                };
+                // Try to find a tile that gets the hunter closer to its target.
+                if let Some(move_direction) = map.best_manhattan_move(*npc_pos, destination) {
                     // If it is found, cause a CreatureStep event.
                     step.send(CreatureStep {
                         direction: move_direction,

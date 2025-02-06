@@ -5,7 +5,6 @@
 - Descriptions in E menu
 - more axioms
 - fill up more text for existing axioms
-- check weird superposition with E/C menu and soul-painting
 - reset the game on failure/success (delete axioms, delete dropped souls etc)
 - Haste status effect player implementation
 
