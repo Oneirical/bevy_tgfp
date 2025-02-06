@@ -120,6 +120,8 @@ pub enum StatusEffect {
     Dizzy,
     // The creature acts as if it was summoned by whoever cursed it.
     DimensionBond,
+    // The creature gains additional turns.
+    Haste,
 }
 
 #[derive(Debug)]

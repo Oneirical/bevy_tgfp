@@ -295,18 +295,20 @@ pub fn draw_soul(
                         }
                     }
                 } else {
+                    // NOTE: Commented out to match the new "draw on melee" rework
                     // There is nothing left in the draw pile!
-                    text.send(AddMessage {
-                        message: Message::InvalidAction(InvalidAction::NoSoulsInPile),
-                    });
-                    turn_manager.action_this_turn = PlayerAction::Invalid;
+                    // text.send(AddMessage {
+                    //     message: Message::InvalidAction(InvalidAction::NoSoulsInPile),
+                    // });
+                    // turn_manager.action_this_turn = PlayerAction::Invalid;
                 }
             } else {
+                // NOTE: Commented out to match the new "draw on melee" rework
                 // There is no empty space in the Wheel!
-                text.send(AddMessage {
-                    message: Message::InvalidAction(InvalidAction::WheelFull),
-                });
-                turn_manager.action_this_turn = PlayerAction::Invalid;
+                // text.send(AddMessage {
+                //     message: Message::InvalidAction(InvalidAction::WheelFull),
+                // });
+                // turn_manager.action_this_turn = PlayerAction::Invalid;
             }
         }
     }
@@ -368,11 +370,6 @@ pub fn use_wheel_soul(
                 .discard_pile
                 .entry(newly_discarded)
                 .and_modify(|amount| *amount += 1);
-            if newly_discarded == Soul::Ordered {
-                // TODO HACK: This makes the shield not take a turn. It should
-                // probably be a "Timeless" axiom instead.
-                turn_manager.action_this_turn = PlayerAction::Skipped;
-            }
         }
     }
 }
@@ -433,6 +430,11 @@ pub fn add_status_effects(
             StatusEffect::DimensionBond => {
                 commands.entity(effects_flags).insert(Summoned {
                     summoner: event.culprit,
+                });
+            }
+            StatusEffect::Haste => {
+                commands.entity(effects_flags).insert(Speed::Fast {
+                    actions_per_turn: event.potency + 1,
                 });
             }
         }
@@ -706,7 +708,6 @@ pub fn assign_species_components(
                         conductor: None,
                     },
                     Hunt,
-                    Dizzy,
                 ));
             }
             Species::Apiarist => {
@@ -1012,7 +1013,8 @@ pub fn magnet_follow(
         let mut new_pos = *position.get(event.conductor).unwrap();
         let mut old_pos = event.old_pos;
         // Every tail segment must be processed, stop when no more remain.
-        loop {
+        let mut should_keep_looping = true;
+        while should_keep_looping {
             // Predict the snake's movement to get to its new position.
             // Reversed as the snake starts at the new position.
             // TODO: This currently disregards walls, check if this is a problem,
@@ -1020,7 +1022,7 @@ pub fn magnet_follow(
             let mut walk = walk_grid(new_pos, old_pos);
             // If the snake didn't move, do not proceed.
             if walk.len() <= 1 {
-                return;
+                break;
             }
             // Teleport each tail segment on the positions behind the
             // conductor, following the line of "walk".
@@ -1054,7 +1056,8 @@ pub fn magnet_follow(
                             species: magnet.species,
                             conductor: None,
                         });
-                        return;
+                        should_keep_looping = false;
+                        break;
                     }
 
                     let new_magnetic_entity = flags_query
@@ -1065,7 +1068,8 @@ pub fn magnet_follow(
                         species: magnet.species,
                         conductor: Some(event.conductor),
                     });
-                    return;
+                    should_keep_looping = false;
+                    break;
                 }
                 teleport.send(TeleportEntity {
                     destination: *tile,
@@ -1073,7 +1077,8 @@ pub fn magnet_follow(
                 });
                 train_idx += 1;
                 if train_idx >= magnet.train.len() {
-                    return;
+                    should_keep_looping = false;
+                    break;
                 }
             }
             // If the snake's movement wasn't big enough to fit in all
@@ -1754,6 +1759,10 @@ pub fn end_turn(
 
         // The turncount increases.
         turn_manager.turn_count += 1;
+        // NOTE: This might have some strange behaviours due to how
+        // effects are ticked down between player turn and npc turn.
+        // Maybe I should find a way to make this happen after everyone's
+        // turn.
         commands.run_system_cached(tick_down_status_effects);
         npc_actions.send(DistributeNpcActions { speed_level: 1 });
     }
@@ -1785,6 +1794,9 @@ pub fn tick_down_status_effects(
                         }
                         StatusEffect::DimensionBond => {
                             commands.entity(effects_flags).remove::<Summoned>();
+                        }
+                        StatusEffect::Haste => {
+                            commands.entity(effects_flags).remove::<Speed>();
                         }
                     }
                 }

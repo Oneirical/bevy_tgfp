@@ -12,7 +12,7 @@ use rand::{
 use crate::{
     creature::{CreatureFlags, FlagEntity, Intangible, Player, Species},
     events::{RemoveCreature, SummonCreature},
-    ui::AddMessage,
+    ui::{AddMessage, Message},
     OrdDir,
 };
 
@@ -254,23 +254,19 @@ pub fn spawn_cage(
     mut text: EventWriter<AddMessage>,
 ) {
     text.send(AddMessage {
-        message: crate::ui::Message::Tutorial,
+        message: Message::Tutorial,
     });
-    let tower_height = 10;
+    let tower_height = 15;
     let mut tower_height_tiles = 0;
-    let mut last_room_size = 9;
+    let first_room_size = 9;
     for tower_floor in 0..tower_height {
-        let size = if tower_floor == tower_height - 1 {
-            17
-        } else {
-            9
-        };
+        let size = if tower_floor > 11 { 17 } else { 9 };
         let mut cage = generate_cage(
             tower_floor,
             // Spawn the player in the first room
             // (the player must not already exist).
             tower_floor == 0 && player.is_empty(),
-            tower_floor != tower_height - 1 && !is_soul_cage_room(tower_floor),
+            !is_soul_cage_room(tower_floor),
             size,
             if tower_floor == 0 {
                 &[OrdDir::Up]
@@ -281,14 +277,14 @@ pub fn spawn_cage(
             },
         );
         if !is_soul_cage_room(tower_floor) {
-            add_creatures(&mut cage, 2 + tower_floor, tower_floor != tower_height - 1);
+            add_creatures(&mut cage, 2 + tower_floor, tower_floor > 11);
         }
 
+        let cage_corner = Position::new(
+            (first_room_size as i32 - size as i32) / 2,
+            tower_height_tiles as i32,
+        );
         for (idx, tile_char) in cage.iter().enumerate() {
-            let cage_corner = Position::new(
-                (last_room_size as i32 - size as i32) / 2,
-                tower_height_tiles as i32,
-            );
             let position = Position::new(
                 cage_corner.x + idx as i32 % size as i32,
                 cage_corner.y + size as i32 - 1 - idx as i32 / size as i32,
@@ -349,48 +345,15 @@ pub fn spawn_cage(
             }
         }
         tower_height_tiles += size;
-        last_room_size = size;
     }
 }
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) {
-    let spawn_snake = false;
-    if spawn_snake {
-        cage[20] = 'E';
-        cage[21] = 't';
-        // cage[22] = 't';
-        // cage[23] = 't';
-        // cage[24] = 't';
-        // cage[90] = 'E';
-        cage[91] = 't';
-        // cage[92] = 't';
-        // cage[93] = 't';
-        // cage[94] = 't';
-        cage[112] = 's';
-        cage[113] = 's';
-        cage[114] = 's';
-        cage[112 + 17 * 4] = 'n';
-        cage[113 + 17 * 4] = 'n';
-        cage[114 + 17 * 4] = 'n';
-        cage[112 + 17 - 1] = 'e';
-        cage[113 + 17 * 2 - 2] = 'e';
-        cage[114 + 17 * 3 - 3] = 'e';
-        cage[112 + 17 + 3] = 'w';
-        cage[113 + 17 * 2 + 2] = 'w';
-        cage[114 + 17 * 3 + 1] = 'w';
-        cage[112 + 17] = 'x';
-        cage[113 + 17 * 2 - 1] = 'x';
-        cage[114 + 17 * 3 - 2] = 'x';
-        cage[112 + 17 + 2] = 'x';
-        cage[113 + 17 * 2 + 1] = 'x';
-        cage[114 + 17 * 3] = 'x';
-        cage[112 + 17 + 1] = 'x';
-        cage[113 + 17 * 2] = 'x';
-        cage[114 + 17 * 3 - 1] = 'x';
-        return;
-    }
-
-    let creature_chars = ['A', 'T', 'F', '2', 'H', 'O'];
+    let creature_chars = if spawn_snake {
+        ['E', 'F', 'H', 'E', 't', 't']
+    } else {
+        ['A', 'T', 'F', '2', 'H', 'O']
+    };
 
     let floor_positions: Vec<usize> = cage
         .iter()
@@ -439,7 +402,17 @@ pub fn generate_cage(
             } else if is_edge(i, size) {
                 cage.push('#');
             } else if rng.gen::<f32>() < 0.3 && spawn_walls {
-                cage.push('W');
+                if floor > 11 {
+                    if rng.gen::<f32>() < 0.1 {
+                        cage.push('t');
+                        passable_tiles += 1;
+                    } else {
+                        cage.push('.');
+                        passable_tiles += 1;
+                    }
+                } else {
+                    cage.push('W');
+                }
             // Everything else is a floor.
             } else {
                 cage.push('.');

@@ -197,6 +197,7 @@ pub fn predict_craft(
     atlas_layout: Res<SpriteSheetAtlas>,
     slots: Query<&FlagEntity, With<CraftingSlot>>,
     position: Query<&Position>,
+    patterns: Query<&KnownPattern>,
 ) {
     for event in events.read() {
         let boundaries = locate_crafting_boundaries(&slots, &position, event.impact_point);
@@ -209,7 +210,11 @@ pub fn predict_craft(
                 soul_types.push(soul_type.0);
             }
         }
-        let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
+        let mut known_recipes = Vec::new();
+        for known_pattern in patterns.iter() {
+            known_recipes.push(&known_pattern.recipe);
+        }
+        let matches = crafting_recipes.find_all_matching_axioms(&ingredients, &known_recipes);
         commands.entity(ui.single()).try_despawn_descendants();
         for (positions, axiom) in matches {
             commands.entity(ui.single()).with_children(|parent| {
@@ -626,6 +631,7 @@ pub fn craft_with_axioms(
 
     slots: Query<&FlagEntity, With<CraftingSlot>>,
     position: Query<&Position>,
+    patterns: Query<&KnownPattern>,
 ) {
     for event in events.read() {
         // Find the closest Soul Cage to the entity receiving the crafted
@@ -651,7 +657,12 @@ pub fn craft_with_axioms(
                 soul_types.push(soul_type.0);
             }
         }
-        let matches = crafting_recipes.find_all_matching_axioms(&ingredients);
+
+        let mut known_recipes = Vec::new();
+        for known_pattern in patterns.iter() {
+            known_recipes.push(&known_pattern.recipe);
+        }
+        let matches = crafting_recipes.find_all_matching_axioms(&ingredients, &known_recipes);
 
         // Do not create empty spells.
         if matches.is_empty() {
@@ -728,6 +739,7 @@ impl CraftingRecipes {
     pub fn find_all_matching_axioms(
         &self,
         ingredients: &HashMap<&Position, Soul>,
+        unlocked: &Vec<&Recipe>,
     ) -> Vec<(Vec<Position>, &Axiom)> {
         // This will accumulate the discovered axioms
         let mut matches = Vec::new();
@@ -755,7 +767,7 @@ impl CraftingRecipes {
             // starting from the most complex recipes...
             for (recipe, axiom) in &self.sorted_recipes {
                 // only scan recipes with this soul type
-                if &recipe.soul_type != soul {
+                if &recipe.soul_type != soul || unlocked.contains(&recipe) {
                     continue;
                 }
 
