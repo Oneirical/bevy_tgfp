@@ -81,6 +81,8 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 - A cave where you must push around a little cart on a railroad, "cold fire" themed
 - A racetrack with many obstacles on the way against an NPC
 
+- Multiple soul cage sizes and shapes, like a donut or a triangle.
+
 # Coding
 
 - For NPC AI, enter a game state where events get routed to systems that don't actually affect the game state but calculate heuristics.

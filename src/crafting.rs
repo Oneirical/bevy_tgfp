@@ -77,6 +77,7 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
         Axiom::Ego => 189,
         Axiom::MomentumBeam => 226,
         Axiom::XBeam => 198,
+        Axiom::Spread => 195,
         Axiom::PlusBeam => 180,
         Axiom::Transform { species: _ } => 28,
         Axiom::WhenMoved => 183,
@@ -88,8 +89,13 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
         } => match effect {
             StatusEffect::Stab => 40,
             StatusEffect::Invincible => 201,
+            StatusEffect::Charm => 168,
+            StatusEffect::Haste => 179,
             _ => 1,
         },
+        Axiom::PurgeTargets => 176,
+        Axiom::Halo { radius: 4 } => 178,
+        Axiom::Plus => 190,
         Axiom::HealOrHarm { amount } => match amount.signum() {
             -1 => 188,
             1 => 184,
@@ -101,6 +107,7 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
         Axiom::WhenDealingDamage => 174,
         Axiom::Touch => 177,
         Axiom::Trace => 231,
+        Axiom::PiercingBeams => 233,
         _ => 1,
     }
 }
@@ -1112,9 +1119,9 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
-                ..F\n\
-                ..F\n\
-                F..\
+                F..\n\
+                F..\n\
+                ..F\
                 ",
             ),
             Axiom::PiercingBeams,
