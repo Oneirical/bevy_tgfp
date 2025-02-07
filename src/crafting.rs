@@ -764,6 +764,7 @@ pub fn craft_with_axioms(
                 caste,
                 icon,
                 id,
+                description: String::from("You crafted this spell."),
             };
             let (mut book, is_player) = spellbook.get_mut(event.receiver).unwrap();
             if is_player {

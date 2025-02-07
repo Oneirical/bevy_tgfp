@@ -259,6 +259,7 @@ pub struct Spell {
     pub caste: Soul,
     pub icon: usize,
     pub id: Uuid,
+    pub description: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1210,6 +1211,7 @@ fn axiom_function_force_cast(
                 caste: Soul::Saintly,
                 icon: 170,
                 id: Uuid::new_v4(),
+                description: String::new(),
             },
             soul_caste: synapse_data.soul_caste,
             starting_step: 0,

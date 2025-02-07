@@ -89,6 +89,15 @@ impl Spellbook {
                         caste: *soul,
                         icon: get_soul_sprite(soul),
                         id: Uuid::new_v4(),
+                        description: String::from(match soul {
+                            Soul::Saintly => "You, and all adjacent creatures, heal for 2 HP.",
+                            Soul::Ordered => "You cannot take damage next turn. Instantaneous.",
+                            Soul::Artistic => "Places a trap at your feet. The next creature to step on it will cause it to fire 2 damage beams in all 4 cardinal directions.",
+                            Soul::Unhinged => "Fires 4 beams in all diagonal directions, dealing 2 damage.",
+                            Soul::Feral => "Dashes 5 tiles in the direction you are facing, attacking all creatures adjacent to your path with 1 damage. Creatures struck at the end are knocked backwards.",
+                            Soul::Vile => "The next time you strike with a melee attack, deal 6 damage.",
+                            _ => panic!()
+                        })
                     },
                 );
             }
