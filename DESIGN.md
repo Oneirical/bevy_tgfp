@@ -3,7 +3,7 @@
 # Checklist
 
 - Descriptions in E menu
-- reset the game on failure/success (delete axioms, delete dropped souls etc)
+- Change the tutorial text
 
 ## The redesigned edition
 

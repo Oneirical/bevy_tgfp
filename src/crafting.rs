@@ -42,6 +42,66 @@ pub struct BagOfLoot {
 }
 
 impl BagOfLoot {
+    pub fn get_initial() -> Self {
+        Self {
+            starter: vec![Axiom::Ego, Axiom::Touch, Axiom::HealOrHarm { amount: -1 }],
+            forms: vec![
+                Axiom::MomentumBeam,
+                Axiom::XBeam,
+                Axiom::PlusBeam,
+                Axiom::Plus,
+                Axiom::Halo { radius: 4 },
+                Axiom::PiercingBeams,
+                Axiom::Spread,
+            ],
+            functions: vec![
+                Axiom::PlaceStepTrap,
+                Axiom::PurgeTargets,
+                Axiom::Dash { max_distance: 5 },
+                Axiom::ForceCast,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Stab,
+                    potency: 5,
+                    stacks: EffectDuration::Finite { stacks: 20 },
+                },
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Invincible,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 3 },
+                },
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Haste,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 1 },
+                },
+                Axiom::HealOrHarm { amount: 1 },
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Charm,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 20 },
+                },
+                Axiom::SummonCreature {
+                    species: Species::Hunter,
+                },
+                Axiom::StatusEffect {
+                    effect: StatusEffect::Magnetize,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 10 },
+                },
+            ],
+            rares: vec![
+                Axiom::WhenTakingDamage,
+                Axiom::WhenDealingDamage,
+                Axiom::Transform {
+                    species: Species::Abazon,
+                },
+                Axiom::WhenMoved,
+            ],
+        }
+    }
+}
+
+impl BagOfLoot {
     pub fn extract_axioms(&mut self) -> Vec<Axiom> {
         let mut rng = thread_rng();
 

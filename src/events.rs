@@ -7,13 +7,16 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    crafting::{BagOfLoot, CraftWithAxioms, LearnNewAxiom, PredictCraft, TakeOrDropSoul},
+    crafting::{
+        BagOfLoot, CraftWithAxioms, DroppedSoul, KnownPattern, LearnNewAxiom, PredictCraft,
+        TakeOrDropSoul,
+    },
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door,
         EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
         Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random,
-        Sleeping, Soul, Species, Speed, Spellbook, Spellproof, Stab, StatusEffect,
+        Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Spellproof, Stab, StatusEffect,
         StatusEffectsList, Summoned, Wall,
     },
     graphics::{
@@ -22,7 +25,10 @@ use crate::{
     },
     map::{is_soul_cage_room, manhattan_distance, spawn_cage, FaithsEnd, Map, Position},
     spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
-    ui::{AddMessage, AnnounceGameOver, InvalidAction, Message, RecipebookUI, SoulSlot},
+    ui::{
+        AddMessage, AnnounceGameOver, EquipSlot, InvalidAction, LibrarySlot, Message, RecipebookUI,
+        SoulSlot,
+    },
     OrdDir, TILE_SIZE,
 };
 
@@ -1573,12 +1579,18 @@ pub fn respawn_player(
             Without<DesignatedForRemoval>,
         ),
     >,
-    player: Query<Entity, With<Player>>,
+    mut player: Query<(Entity, &mut Spellbook), With<Player>>,
+    souls_to_delete: Query<Entity, Or<(With<DroppedSoul>, With<LibrarySlot>, With<KnownPattern>)>>,
+    mut slots: Query<(&mut ImageNode, &EquipSlot), Without<LibrarySlot>>,
+    mut spell_library: ResMut<SpellLibrary>,
+    mut loot: ResMut<BagOfLoot>,
+    mut commands: Commands,
     mut remove: EventWriter<RemoveCreature>,
     mut heal: EventWriter<DamageOrHealCreature>,
     mut teleport: EventWriter<TeleportEntity>,
     mut title: EventWriter<AnnounceGameOver>,
     mut cage: EventWriter<RespawnCage>,
+    mut transform: EventWriter<TransformCreature>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut faiths_end: ResMut<FaithsEnd>,
 ) {
@@ -1586,16 +1598,34 @@ pub fn respawn_player(
         for npc in npcs.iter() {
             remove.send(RemoveCreature { entity: npc });
         }
-        let player = player.get_single().unwrap();
+        for delete in souls_to_delete.iter() {
+            commands.entity(delete).despawn();
+        }
+        spell_library.library.clear();
+        *loot = BagOfLoot::get_initial();
+        let (player, mut spellbook) = player.single_mut();
+        // Reset the player's HP.
         heal.send(DamageOrHealCreature {
             entity: player,
             culprit: player,
             hp_mod: 6,
         });
+        // Return the player to the start.
         teleport.send(TeleportEntity {
             destination: Position::new(4, 4),
             entity: player,
         });
+        // Ensure the player is back to its initial form.
+        transform.send(TransformCreature {
+            entity: player,
+            new_species: Species::Player,
+        });
+        // Reset the player's spellbook.
+        *spellbook = get_species_spellbook(&Species::Player);
+        for (mut node, slot) in slots.iter_mut() {
+            node.texture_atlas.as_mut().unwrap().index = get_soul_sprite(&slot.0);
+            node.color.set_alpha(1.);
+        }
         soul_wheel.draw_pile.insert(Soul::Saintly, 1);
         soul_wheel.draw_pile.insert(Soul::Ordered, 1);
         soul_wheel.draw_pile.insert(Soul::Artistic, 1);

@@ -67,61 +67,7 @@ impl Plugin for SetsPlugin {
         app.insert_resource(AntiContingencyLoop {
             contingencies_this_turn: HashSet::new(),
         });
-        app.insert_resource(BagOfLoot {
-            starter: vec![Axiom::Ego, Axiom::Touch, Axiom::HealOrHarm { amount: -1 }],
-            forms: vec![
-                Axiom::MomentumBeam,
-                Axiom::XBeam,
-                Axiom::PlusBeam,
-                Axiom::Plus,
-                Axiom::Halo { radius: 4 },
-                Axiom::PiercingBeams,
-                Axiom::Spread,
-            ],
-            functions: vec![
-                Axiom::PlaceStepTrap,
-                Axiom::PurgeTargets,
-                Axiom::Dash { max_distance: 5 },
-                Axiom::ForceCast,
-                Axiom::StatusEffect {
-                    effect: StatusEffect::Stab,
-                    potency: 5,
-                    stacks: EffectDuration::Finite { stacks: 20 },
-                },
-                Axiom::StatusEffect {
-                    effect: StatusEffect::Invincible,
-                    potency: 1,
-                    stacks: EffectDuration::Finite { stacks: 3 },
-                },
-                Axiom::StatusEffect {
-                    effect: StatusEffect::Haste,
-                    potency: 1,
-                    stacks: EffectDuration::Finite { stacks: 1 },
-                },
-                Axiom::HealOrHarm { amount: 1 },
-                Axiom::StatusEffect {
-                    effect: StatusEffect::Charm,
-                    potency: 1,
-                    stacks: EffectDuration::Finite { stacks: 20 },
-                },
-                Axiom::SummonCreature {
-                    species: Species::Hunter,
-                },
-                Axiom::StatusEffect {
-                    effect: StatusEffect::Magnetize,
-                    potency: 1,
-                    stacks: EffectDuration::Finite { stacks: 10 },
-                },
-            ],
-            rares: vec![
-                Axiom::WhenTakingDamage,
-                Axiom::WhenDealingDamage,
-                Axiom::Transform {
-                    species: Species::Abazon,
-                },
-                Axiom::WhenMoved,
-            ],
-        });
+        app.insert_resource(BagOfLoot::get_initial());
         app.add_systems(
             Update,
             (cursor_step, teleport_cursor, update_cursor_box)
