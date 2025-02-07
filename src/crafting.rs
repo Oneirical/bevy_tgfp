@@ -55,9 +55,9 @@ impl BagOfLoot {
         let mut extracted = Vec::new();
 
         extracted.extend(self.starter.drain(0..3.min(self.starter.len())));
-        extracted.extend(self.forms.drain(0..3.min(self.forms.len())));
-        extracted.extend(self.functions.drain(0..3.min(self.functions.len())));
-        extracted.extend(self.rares.drain(0..1.min(self.rares.len())));
+        extracted.extend(self.forms.drain(0..7.min(self.forms.len())));
+        extracted.extend(self.functions.drain(0..11.min(self.functions.len())));
+        extracted.extend(self.rares.drain(0..4.min(self.rares.len())));
 
         extracted
     }
@@ -89,6 +89,7 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
         } => match effect {
             StatusEffect::Stab => 40,
             StatusEffect::Invincible => 201,
+            StatusEffect::Magnetize => 203,
             StatusEffect::Charm => 168,
             StatusEffect::Haste => 179,
             _ => 1,
@@ -107,6 +108,9 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
         Axiom::WhenDealingDamage => 174,
         Axiom::Touch => 177,
         Axiom::Trace => 231,
+        Axiom::SummonCreature {
+            species: Species::Hunter,
+        } => 228,
         Axiom::PiercingBeams => 233,
         _ => 1,
     }
