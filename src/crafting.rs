@@ -55,9 +55,9 @@ impl BagOfLoot {
         let mut extracted = Vec::new();
 
         extracted.extend(self.starter.drain(0..3.min(self.starter.len())));
-        extracted.extend(self.forms.drain(0..7.min(self.forms.len())));
-        extracted.extend(self.functions.drain(0..11.min(self.functions.len())));
-        extracted.extend(self.rares.drain(0..4.min(self.rares.len())));
+        extracted.extend(self.forms.drain(0..3.min(self.forms.len())));
+        extracted.extend(self.functions.drain(0..3.min(self.functions.len())));
+        extracted.extend(self.rares.drain(0..1.min(self.rares.len())));
 
         extracted
     }
@@ -696,7 +696,8 @@ pub fn craft_with_axioms(
             .collect();
 
         if let Some(caste) = most_common_soul(soul_types) {
-            let icon = 172;
+            let mut rng = thread_rng();
+            let icon = match_axiom_with_icon(axioms.iter().choose(&mut rng).unwrap());
             let id = Uuid::new_v4();
             let spell = Spell {
                 axioms,
