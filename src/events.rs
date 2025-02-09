@@ -714,7 +714,7 @@ pub fn assign_species_components(
                 new_creature.insert((Immobile, Hunt));
             }
             Species::AxiomaticSeal => {
-                new_creature.insert((Immobile, Hunt, Dizzy, NoDropSoul));
+                new_creature.insert((Immobile, Hunt, Dizzy, NoDropSoul, Spellproof));
             }
             Species::EpsilonHead => {
                 new_creature.insert((
@@ -1053,14 +1053,13 @@ pub fn magnet_follow(
                     // If it was the last tail segment, then Magnetic is already
                     // removed as a result.
                     if train_idx != magnet.train.len() - 1 {
-                        commands
-                            .entity(
-                                flags_query
-                                    .get(magnet.train[magnet.train.len() - 1])
-                                    .unwrap()
-                                    .effects_flags,
-                            )
-                            .remove::<Magnetic>();
+                        if let Ok(magnetic_tail) =
+                            flags_query.get(magnet.train[magnet.train.len() - 1])
+                        {
+                            commands
+                                .entity(magnetic_tail.effects_flags)
+                                .remove::<Magnetic>();
+                        }
                     }
                     // Cut off the tail.
                     magnet.train.truncate(train_idx);
@@ -1099,10 +1098,12 @@ pub fn magnet_follow(
                     break;
                 }
             }
-            // If the snake's movement wasn't big enough to fit in all
-            // the segments, make the last moved segment into the new conductor.
-            new_pos = walk.pop().unwrap();
-            old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
+            if should_keep_looping {
+                // If the snake's movement wasn't big enough to fit in all
+                // the segments, make the last moved segment into the new conductor.
+                new_pos = walk.pop().unwrap();
+                old_pos = *position.get(magnet.train[train_idx - 1]).unwrap();
+            }
         }
     }
 }

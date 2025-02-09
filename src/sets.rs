@@ -75,10 +75,6 @@ impl Plugin for SetsPlugin {
         );
         app.add_systems(
             Update,
-            update_caste_box.run_if(in_state(ControlState::CasteMenu)),
-        );
-        app.add_systems(
-            Update,
             ((
                 // When a creature loses a status effect,
                 // it might lose a component (such as Spellproof)

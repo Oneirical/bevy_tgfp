@@ -1,12 +1,14 @@
 use bevy::prelude::*;
+use uuid::Uuid;
 
 use crate::{
     creature::{get_soul_sprite, Player, Soul, SpellLibrary, Spellbook},
     graphics::SpriteSheetAtlas,
+    spells::Spell,
     text::match_soul_with_description,
     ui::{
         spawn_split_text, CasteBox, CasteCursor, CastePanelColumn, CastePanelRow, EquipSlot,
-        LargeCastePanel, LibrarySlot, MessageLog, SpellLibraryUI,
+        LargeCastePanel, LibrarySlot, MessageLog, SpellLibraryUI, SOUL_WHEEL_CONTAINER_SIZE,
     },
 };
 
@@ -94,6 +96,7 @@ pub fn equip_spell(
         spellbook
             .spells
             .insert(equipped_spell.caste, equipped_spell);
+        commands.run_system_cached(update_caste_box);
     }
     for unequip in unequips.read() {
         let mut spellbook = spellbook.single_mut();
@@ -130,20 +133,29 @@ pub fn equip_spell(
                 node.color.set_alpha(0.1);
             }
         }
+        commands.run_system_cached(update_caste_box);
     }
 }
 
 pub fn update_caste_box(
-    caste_panel: Query<&LargeCastePanel, Changed<LargeCastePanel>>,
+    caste_panel: Query<&LargeCastePanel>,
     caste_box: Query<Entity, (With<CasteBox>, Without<LargeCastePanel>)>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
+    library: Res<SpellLibrary>,
     mut cursor: Query<&mut Node, With<CasteCursor>>,
+    player_spellbook: Query<&Spellbook, With<Player>>,
 ) {
     if let Ok(caste) = caste_panel.get_single() {
+        // TODO Add text to the library souls and display descriptions on slots
         let mut cursor = cursor.single_mut();
-        if matches!(
+        // TODO: Instead of multiple entities, would it be interesting to
+        // have these merged into a single string with \n to space them out?
+        // This would be good in case there's a ton of "effects flags".
+        let mut caste_description = Entity::PLACEHOLDER;
+        let caste_box = caste_box.single();
+        let spell = if matches!(
             caste.selected_column,
             CastePanelColumn::Left | CastePanelColumn::Right,
         ) {
@@ -174,47 +186,17 @@ pub fn update_caste_box(
                 Soul::Feral | Soul::Vile => Val::Px(46.),
                 _ => Val::Auto,
             };
-            let caste_box = caste_box.single();
-            // TODO: Instead of multiple entities, would it be interesting to
-            // have these merged into a single string with \n to space them out?
-            // This would be good in case there's a ton of "effects flags".
-            let (mut caste_name, mut caste_description) =
-                (Entity::PLACEHOLDER, Entity::PLACEHOLDER);
-            commands.entity(caste_box).despawn_descendants();
-            commands.entity(caste_box).with_children(|parent| {
-                caste_name =
-                    spawn_split_text(&match_soul_with_string(&caste), parent, &asset_server);
-                caste_description =
-                    spawn_split_text(match_soul_with_description(&caste), parent, &asset_server);
-                parent.spawn((
-                    ImageNode {
-                        image: asset_server.load("spritesheet.png"),
-                        texture_atlas: Some(TextureAtlas {
-                            layout: atlas_layout.handle.clone(),
-                            index: get_soul_sprite(&caste),
-                        }),
-                        ..Default::default()
-                    },
-                    Node {
-                        width: Val::Px(3.),
-                        height: Val::Px(3.),
-                        right: Val::Px(0.3),
-                        top: Val::Px(0.5),
-                        position_type: PositionType::Absolute,
-                        ..default()
-                    },
-                ));
-            });
-            commands.entity(caste_name).insert(Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(0.5),
-                ..default()
-            });
-            commands.entity(caste_description).insert(Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(3.5),
-                ..default()
-            });
+            if let Some(spell) = player_spellbook.single().spells.get(&caste) {
+                spell
+            } else {
+                &Spell {
+                    axioms: Vec::new(),
+                    caste,
+                    icon: get_soul_sprite(&caste),
+                    id: Uuid::new_v4(),
+                    description: String::from("An empty slot. It can be filled with a new spell."),
+                }
+            }
         } else {
             cursor.width = Val::Px(5.);
             cursor.height = Val::Px(5.);
@@ -227,22 +209,60 @@ pub fn update_caste_box(
                 CastePanelRow::Library(depth) => Val::Px(15. + 4. * depth as f32),
                 _ => Val::Auto,
             };
-        }
-    }
-}
 
-pub fn match_soul_with_string(soul: &Soul) -> String {
-    let string = match soul {
-        Soul::Saintly => "[l]Saintly Soul[w]",
-        Soul::Ordered => "[r]Ordered Soul[w]",
-        Soul::Artistic => "[o]Artistic Soul[w]",
-        Soul::Unhinged => "[y]Unhinged Soul[w]",
-        Soul::Feral => "[g]Feral Soul[w]",
-        Soul::Vile => "[p]Vile Soul[w]",
-        Soul::Empty => "[w]Spell Menu[w]",
-        _ => &format!("{:?}", soul),
-    };
-    string.to_owned()
+            if let CastePanelRow::Library(depth) = caste.selected_row {
+                if let Some(spell) = library.library.get(match caste.selected_column {
+                    CastePanelColumn::LibraryLeft => depth * 2,
+                    CastePanelColumn::LibraryRight => depth * 2 + 1,
+                    _ => panic!(),
+                }) {
+                    spell
+                } else {
+                    // If there are no spells left in the library to replace the
+                    // one you just equipped, do not try to describe the non-existent
+                    // spell.
+                    return;
+                }
+            } else {
+                panic!()
+            }
+        };
+
+        commands.entity(caste_box).despawn_descendants();
+        let text = format!(
+            "{}\n\n{}",
+            spell.description,
+            match_soul_with_description(&spell.caste)
+        );
+        commands.entity(caste_box).with_children(|parent| {
+            caste_description = spawn_split_text(&text, parent, &asset_server);
+            parent.spawn((
+                ImageNode {
+                    image: asset_server.load("spritesheet.png"),
+                    texture_atlas: Some(TextureAtlas {
+                        layout: atlas_layout.handle.clone(),
+                        index: get_soul_sprite(&spell.caste),
+                    }),
+                    ..Default::default()
+                },
+                Node {
+                    width: Val::Px(3.),
+                    height: Val::Px(3.),
+                    right: Val::Px(0.3),
+                    top: Val::Px(0.5),
+                    position_type: PositionType::Absolute,
+                    ..default()
+                },
+            ));
+        });
+
+        commands.entity(caste_description).insert(Node {
+            position_type: PositionType::Absolute,
+            top: Val::Px(0.5),
+            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 8.),
+            ..default()
+        });
+    }
 }
 
 pub fn on_hover_move_caste_cursor(
@@ -251,6 +271,7 @@ pub fn on_hover_move_caste_cursor(
     equip: Query<&EquipSlot>,
     library: Query<&LibrarySlot>,
     spell_storage: Res<SpellLibrary>,
+    mut commands: Commands,
 ) {
     let mut caste_menu = caste_menu.single_mut();
     if let Ok(slot) = equip.get(hover.entity()) {
@@ -276,6 +297,7 @@ pub fn on_hover_move_caste_cursor(
             CastePanelColumn::LibraryRight
         };
     }
+    commands.run_system_cached(update_caste_box);
 }
 
 pub fn on_click_equip_unequip(
