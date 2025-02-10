@@ -24,6 +24,7 @@ use crate::{
         SlideAnimation, SpriteSheetAtlas,
     },
     map::{is_soul_cage_room, manhattan_distance, spawn_cage, FaithsEnd, Map, Position},
+    sets::ControlState,
     spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
     ui::{
         AddMessage, AnnounceGameOver, EquipSlot, InvalidAction, LibrarySlot, Message, RecipebookUI,
@@ -323,6 +324,23 @@ pub fn draw_soul(
 #[derive(Event)]
 pub struct UseWheelSoul {
     pub index: usize,
+}
+
+pub fn mouse_use_wheel_soul(
+    trigger: Trigger<Pointer<Click>>,
+    mut use_wheel_soul: EventWriter<UseWheelSoul>,
+    state: Res<State<ControlState>>,
+    slot: Query<&SoulSlot>,
+    mut turn_manager: ResMut<TurnManager>,
+    mut turn_end: EventWriter<EndTurn>,
+) {
+    if matches!(state.get(), ControlState::Player) {
+        use_wheel_soul.send(UseWheelSoul {
+            index: slot.get(trigger.entity()).unwrap().index,
+        });
+        turn_manager.action_this_turn = PlayerAction::Spell;
+        turn_end.send(EndTurn);
+    }
 }
 
 pub fn use_wheel_soul(

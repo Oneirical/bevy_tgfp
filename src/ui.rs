@@ -7,6 +7,7 @@ use bevy::{prelude::*, text::TextLayoutInfo, window::WindowResized};
 use crate::{
     caste::{on_click_equip_unequip, on_hover_move_caste_cursor},
     creature::{Soul, Species},
+    events::mouse_use_wheel_soul,
     graphics::SpriteSheetAtlas,
     text::{split_text, LORE},
 };
@@ -439,37 +440,39 @@ fn setup(
                                     let rot = PI / 4.;
                                     // Soul slots, arranged in a circle formation.
                                     for i in 0..8 {
-                                        parent.spawn((
-                                            SoulSlot { index: i },
-                                            ImageNode {
-                                                image: asset_server.load("spritesheet.png"),
-                                                texture_atlas: Some(TextureAtlas {
-                                                    layout: atlas_layout.handle.clone(),
-                                                    index: 167,
-                                                }),
-                                                ..Default::default()
-                                            },
-                                            Node {
-                                                left: Val::Px(
-                                                    ((i + 6) as f32 * rot).cos()
-                                                        * SOUL_WHEEL_RADIUS
-                                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE
-                                                        + 1.,
-                                                ),
-                                                top: Val::Px(
-                                                    ((i + 6) as f32 * rot).sin()
-                                                        * SOUL_WHEEL_RADIUS
-                                                        + SOUL_WHEEL_CONTAINER_SIZE / 2.
-                                                        - SOUL_WHEEL_SLOT_SPRITE_SIZE
-                                                        + 1.,
-                                                ),
-                                                position_type: PositionType::Absolute,
-                                                width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                                height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                                ..default()
-                                            },
-                                        ));
+                                        parent
+                                            .spawn((
+                                                SoulSlot { index: i },
+                                                ImageNode {
+                                                    image: asset_server.load("spritesheet.png"),
+                                                    texture_atlas: Some(TextureAtlas {
+                                                        layout: atlas_layout.handle.clone(),
+                                                        index: 167,
+                                                    }),
+                                                    ..Default::default()
+                                                },
+                                                Node {
+                                                    left: Val::Px(
+                                                        ((i + 6) as f32 * rot).cos()
+                                                            * SOUL_WHEEL_RADIUS
+                                                            + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                            - SOUL_WHEEL_SLOT_SPRITE_SIZE
+                                                            + 1.,
+                                                    ),
+                                                    top: Val::Px(
+                                                        ((i + 6) as f32 * rot).sin()
+                                                            * SOUL_WHEEL_RADIUS
+                                                            + SOUL_WHEEL_CONTAINER_SIZE / 2.
+                                                            - SOUL_WHEEL_SLOT_SPRITE_SIZE
+                                                            + 1.,
+                                                    ),
+                                                    position_type: PositionType::Absolute,
+                                                    width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                                    height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                                    ..default()
+                                                },
+                                            ))
+                                            .observe(mouse_use_wheel_soul);
                                         parent.spawn((
                                             Text::new((i + 1).to_string()),
                                             TextFont {

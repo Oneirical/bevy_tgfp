@@ -13,9 +13,10 @@ use uuid::Uuid;
 use crate::{
     caste::{on_click_equip_unequip, on_hover_move_caste_cursor},
     creature::{
-        get_soul_sprite, CraftingSlot, EffectDuration, FlagEntity, Player, Soul, Species,
-        SpellLibrary, Spellbook, StatusEffect,
+        get_soul_sprite, CraftingSlot, CreatureFlags, EffectDuration, FlagEntity, Player, Soul,
+        Species, SpellLibrary, Spellbook, StatusEffect,
     },
+    events::CagePainter,
     graphics::SpriteSheetAtlas,
     map::{manhattan_distance, Position},
     sets::ControlState,
@@ -120,6 +121,36 @@ impl BagOfLoot {
         extracted.extend(self.rares.drain(0..1.min(self.rares.len())));
 
         extracted
+    }
+}
+
+pub fn add_crafting_mouse_interactivity(
+    trigger: Trigger<OnAdd, CraftingSlot>,
+    query: Query<&FlagEntity>,
+    mut commands: Commands,
+) {
+    let entity = query.get(trigger.entity()).unwrap().parent_creature;
+    commands.entity(entity).observe(crafting_mouse_soul_drop);
+}
+
+pub fn crafting_mouse_soul_drop(
+    movement: Trigger<Pointer<Move>>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    position: Query<(&Position, &CreatureFlags)>,
+    slot_query: Query<&CraftingSlot>,
+    mut drop: EventWriter<TakeOrDropSoul>,
+    paint: Res<CagePainter>,
+) {
+    if buttons.pressed(MouseButton::Left) {
+        let (position, flags) = position.get(movement.entity()).unwrap();
+        // If a creature USED to be a crafting slot, it might still have the observer - this extra check
+        // prevents jank where you'd drop souls outside of soul cages.
+        if slot_query.contains(flags.species_flags) || slot_query.contains(flags.effects_flags) {
+            drop.send(TakeOrDropSoul {
+                position: *position,
+                soul: paint.current_paint,
+            });
+        }
     }
 }
 
@@ -666,7 +697,7 @@ pub fn take_or_drop_soul(
         }
         for (soul, pos) in dropped_souls.iter() {
             if pos == &event.position {
-                commands.entity(soul).despawn();
+                commands.entity(soul).try_despawn();
             }
         }
         if let Some(soul) = event.soul {

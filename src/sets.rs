@@ -5,8 +5,9 @@ use crate::{
         equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell, UnequipSpell,
     },
     crafting::{
-        craft_with_axioms, learn_new_axiom, predict_craft, take_or_drop_soul, BagOfLoot,
-        CraftWithAxioms, CraftingRecipes, LearnNewAxiom, PredictCraft, TakeOrDropSoul,
+        add_crafting_mouse_interactivity, craft_with_axioms, learn_new_axiom, predict_craft,
+        take_or_drop_soul, BagOfLoot, CraftWithAxioms, CraftingRecipes, LearnNewAxiom,
+        PredictCraft, TakeOrDropSoul,
     },
     creature::{EffectDuration, Species, SpellLibrary, StatusEffect},
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
@@ -68,6 +69,7 @@ impl Plugin for SetsPlugin {
             contingencies_this_turn: HashSet::new(),
         });
         app.insert_resource(BagOfLoot::get_initial());
+        app.add_observer(add_crafting_mouse_interactivity);
         app.add_systems(
             Update,
             (cursor_step, teleport_cursor, update_cursor_box)
