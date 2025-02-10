@@ -1,9 +1,12 @@
 use crate::{
     creature::{get_species_sprite, Player, Species},
+    events::CagePainter,
     graphics::{SlideAnimation, SpriteSheetAtlas},
     map::{Map, Position},
     text::match_species_with_description,
-    ui::{match_species_with_string, spawn_split_text, CursorBox, MessageLog},
+    ui::{
+        match_species_with_string, spawn_split_text, AxiomBox, CursorBox, MessageLog, RecipebookUI,
+    },
     OrdDir, TILE_SIZE,
 };
 use bevy::prelude::*;
@@ -25,8 +28,13 @@ pub fn spawn_cursor(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
     mut commands: Commands,
-    mut message: Query<&mut Visibility, (With<MessageLog>, Without<CursorBox>)>,
-    mut cursor_box: Query<&mut Visibility, (With<CursorBox>, Without<MessageLog>)>,
+    mut set: ParamSet<(
+        Query<&mut Visibility, With<MessageLog>>,
+        Query<&mut Visibility, With<RecipebookUI>>,
+        Query<&mut Visibility, With<AxiomBox>>,
+        Query<&mut Visibility, With<CursorBox>>,
+    )>,
+    painter: Res<CagePainter>,
 ) {
     let (entity, player_position) = player.single();
     commands.spawn((
@@ -43,19 +51,33 @@ pub fn spawn_cursor(
         },
         Transform::from_translation(Vec3::new(0., 0., 3.)),
     ));
-    *message.single_mut() = Visibility::Hidden;
-    *cursor_box.single_mut() = Visibility::Inherited;
+    if painter.is_painting {
+        *set.p1().single_mut() = Visibility::Hidden;
+        *set.p2().single_mut() = Visibility::Hidden;
+    }
+    *set.p0().single_mut() = Visibility::Hidden;
+    *set.p3().single_mut() = Visibility::Inherited;
 }
 
 pub fn despawn_cursor(
     mut commands: Commands,
     cursor: Query<Entity, With<Cursor>>,
-    mut message: Query<&mut Visibility, (With<MessageLog>, Without<CursorBox>)>,
-    mut cursor_box: Query<&mut Visibility, (With<CursorBox>, Without<MessageLog>)>,
+    mut set: ParamSet<(
+        Query<&mut Visibility, With<MessageLog>>,
+        Query<&mut Visibility, With<RecipebookUI>>,
+        Query<&Visibility, With<AxiomBox>>,
+        Query<&mut Visibility, With<CursorBox>>,
+    )>,
+    painter: Res<CagePainter>,
 ) {
     commands.entity(cursor.single()).despawn();
-    *message.single_mut() = Visibility::Inherited;
-    *cursor_box.single_mut() = Visibility::Hidden;
+    if painter.is_painting {
+        *set.p1().single_mut() = Visibility::Inherited;
+    }
+    if matches!(set.p2().single(), Visibility::Hidden) {
+        *set.p0().single_mut() = Visibility::Inherited;
+    }
+    *set.p3().single_mut() = Visibility::Hidden;
 }
 
 #[derive(Event)]

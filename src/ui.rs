@@ -434,7 +434,6 @@ fn setup(
                                         max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
                                         ..default()
                                     },
-                                    BackgroundColor(Color::srgb(0., 0., 0.)),
                                 ))
                                 .with_children(|parent| {
                                     let rot = PI / 4.;

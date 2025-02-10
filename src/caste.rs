@@ -3,31 +3,52 @@ use uuid::Uuid;
 
 use crate::{
     creature::{get_soul_sprite, Player, Soul, SpellLibrary, Spellbook},
+    events::CagePainter,
     graphics::SpriteSheetAtlas,
     spells::Spell,
     text::match_soul_with_description,
     ui::{
-        spawn_split_text, CasteBox, CasteCursor, CastePanelColumn, CastePanelRow, EquipSlot,
-        LargeCastePanel, LibrarySlot, MessageLog, SpellLibraryUI, SOUL_WHEEL_CONTAINER_SIZE,
+        spawn_split_text, AxiomBox, CasteBox, CasteCursor, CastePanelColumn, CastePanelRow,
+        EquipSlot, LargeCastePanel, LibrarySlot, MessageLog, RecipebookUI, SpellLibraryUI,
+        SOUL_WHEEL_CONTAINER_SIZE,
     },
 };
 
 pub fn show_caste_menu(
-    mut message: Query<&mut Visibility, (With<MessageLog>, Without<CasteBox>)>,
-    mut caste_box: Query<&mut Visibility, (With<CasteBox>, Without<MessageLog>)>,
+    mut set: ParamSet<(
+        Query<&mut Visibility, With<MessageLog>>,
+        Query<&mut Visibility, With<RecipebookUI>>,
+        Query<&mut Visibility, With<AxiomBox>>,
+        Query<&mut Visibility, With<CasteBox>>,
+    )>,
+    painter: Res<CagePainter>,
 ) {
-    *message.single_mut() = Visibility::Hidden;
-    for mut vis in caste_box.iter_mut() {
+    if painter.is_painting {
+        *set.p1().single_mut() = Visibility::Hidden;
+        *set.p2().single_mut() = Visibility::Hidden;
+    }
+    *set.p0().single_mut() = Visibility::Hidden;
+    for mut vis in set.p3().iter_mut() {
         *vis = Visibility::Inherited;
     }
 }
 
 pub fn hide_caste_menu(
-    mut message: Query<&mut Visibility, (With<MessageLog>, Without<CasteBox>)>,
-    mut caste_box: Query<&mut Visibility, (With<CasteBox>, Without<MessageLog>)>,
+    mut set: ParamSet<(
+        Query<&mut Visibility, With<MessageLog>>,
+        Query<&mut Visibility, With<RecipebookUI>>,
+        Query<&Visibility, With<AxiomBox>>,
+        Query<&mut Visibility, With<CasteBox>>,
+    )>,
+    painter: Res<CagePainter>,
 ) {
-    *message.single_mut() = Visibility::Inherited;
-    for mut vis in caste_box.iter_mut() {
+    if painter.is_painting {
+        *set.p1().single_mut() = Visibility::Inherited;
+    }
+    if matches!(set.p2().single(), Visibility::Hidden) {
+        *set.p0().single_mut() = Visibility::Inherited;
+    }
+    for mut vis in set.p3().iter_mut() {
         *vis = Visibility::Hidden;
     }
 }

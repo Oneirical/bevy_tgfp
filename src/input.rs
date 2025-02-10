@@ -1,12 +1,14 @@
 use bevy::prelude::*;
+use uuid::Uuid;
 
 use crate::{
     caste::{EquipSpell, UnequipSpell},
     crafting::CraftWithAxioms,
-    creature::{Player, Soul},
+    creature::{EffectDuration, Player, Soul, StatusEffect},
     cursor::CursorStep,
     events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
     sets::ControlState,
+    spells::{Axiom, CastSpell, Spell},
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
     OrdDir,
 };
@@ -28,6 +30,7 @@ pub fn keyboard_input(
     mut scale: ResMut<UiScale>,
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
+    mut spell: EventWriter<CastSpell>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -194,6 +197,34 @@ pub fn keyboard_input(
     }
     if input.pressed(KeyCode::KeyP) {
         scale.0 -= 0.02;
+    }
+
+    if input.pressed(KeyCode::KeyR) {
+        spell.send(CastSpell {
+            caster: player.single(),
+            spell: Spell {
+                axioms: vec![
+                    Axiom::Ego,
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Invincible,
+                        potency: 1,
+                        stacks: EffectDuration::Finite { stacks: 2 },
+                    },
+                    Axiom::Spread,
+                    Axiom::Spread,
+                    Axiom::Spread,
+                    Axiom::Spread,
+                    Axiom::Spread,
+                    Axiom::HealOrHarm { amount: -6 },
+                ],
+                caste: Soul::Saintly,
+                icon: 10,
+                id: Uuid::new_v4(),
+                description: String::new(),
+            },
+            starting_step: 0,
+            soul_caste: Soul::Saintly,
+        });
     }
 
     if input.just_pressed(KeyCode::Enter) {
