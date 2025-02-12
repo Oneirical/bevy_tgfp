@@ -15,9 +15,9 @@ use crate::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door,
         EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
-        Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, PotencyAndStacks, Random,
-        Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Spellproof, Stab, StatusEffect,
-        StatusEffectsList, Summoned, Wall,
+        Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed, Possessing,
+        PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook,
+        Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -456,6 +456,11 @@ pub fn add_status_effects(
                     summoner: event.culprit,
                 });
             }
+            StatusEffect::Possessed => {
+                commands.entity(effects_flags).insert(Possessed {
+                    original: event.culprit,
+                });
+            }
             StatusEffect::Haste => {
                 commands.entity(effects_flags).insert(Speed::Fast {
                     actions_per_turn: event.potency + 1,
@@ -517,8 +522,18 @@ pub fn summon_creature(
             _ => max_hp,
         };
 
-        let (effects_flags, species_flags) =
-            (commands.spawn_empty().id(), commands.spawn_empty().id());
+        let (effects_flags, species_flags) = (
+            commands
+                .spawn_empty()
+                .observe(start_possessing_creature)
+                .observe(stop_possessing_creature)
+                .id(),
+            commands
+                .spawn_empty()
+                .observe(start_possessing_creature)
+                .observe(stop_possessing_creature)
+                .id(),
+        );
 
         // Summoned creatures are marked with their summoner.
         if let Some(summoner) = event.summoner {
@@ -1427,80 +1442,84 @@ pub fn open_close_door(
 ) {
     for event in events.read() {
         // Gather component values of the door.
-        let (mut visibility, position, orientation, flags) = door.get_mut(event.entity).unwrap();
-        if event.open {
-            // The door becomes intangible, and can be walked through.
-            commands.entity(flags.species_flags).insert(Intangible);
-            // The door is no longer visible, as it is open.
-            *visibility = Visibility::Hidden;
-        } else {
-            commands.entity(flags.species_flags).remove::<Intangible>();
-            commands.entity(event.entity).insert(BecomingVisible {
-                timer: Timer::from_seconds(0.4, TimerMode::Once),
-            });
-        }
-        // Find the direction in which the door was facing to play its animation correctly.
-        let (offset_1, offset_2) = match orientation {
-            OrdDir::Up | OrdDir::Down => (OrdDir::Left.as_offset(), OrdDir::Right.as_offset()),
-            OrdDir::Right | OrdDir::Left => (OrdDir::Down.as_offset(), OrdDir::Up.as_offset()),
-        };
-        // Loop twice: for each pane of the door.
-        for offset in [offset_1, offset_2] {
-            commands.spawn((
-                DoorPanel,
-                // The sliding panes are represented as a MagicEffect with a very slow decay.
-                MagicEffect {
-                    // The panes slide into the adjacent walls to the door, hence the offset.
-                    position: if event.open {
-                        Position::new(position.x + offset.0, position.y + offset.1)
-                    } else {
-                        *position
+        // NOTE: Wrapped in Ok - if the player defeats a room and dies at the same time,
+        // the success check will try to open the door while the failure check is trying
+        // to delete them.
+        if let Ok((mut visibility, position, orientation, flags)) = door.get_mut(event.entity) {
+            if event.open {
+                // The door becomes intangible, and can be walked through.
+                commands.entity(flags.species_flags).insert(Intangible);
+                // The door is no longer visible, as it is open.
+                *visibility = Visibility::Hidden;
+            } else {
+                commands.entity(flags.species_flags).remove::<Intangible>();
+                commands.entity(event.entity).insert(BecomingVisible {
+                    timer: Timer::from_seconds(0.4, TimerMode::Once),
+                });
+            }
+            // Find the direction in which the door was facing to play its animation correctly.
+            let (offset_1, offset_2) = match orientation {
+                OrdDir::Up | OrdDir::Down => (OrdDir::Left.as_offset(), OrdDir::Right.as_offset()),
+                OrdDir::Right | OrdDir::Left => (OrdDir::Down.as_offset(), OrdDir::Up.as_offset()),
+            };
+            // Loop twice: for each pane of the door.
+            for offset in [offset_1, offset_2] {
+                commands.spawn((
+                    DoorPanel,
+                    // The sliding panes are represented as a MagicEffect with a very slow decay.
+                    MagicEffect {
+                        // The panes slide into the adjacent walls to the door, hence the offset.
+                        position: if event.open {
+                            Position::new(position.x + offset.0, position.y + offset.1)
+                        } else {
+                            *position
+                        },
+                        sprite: Sprite {
+                            image: asset_server.load("spritesheet.png"),
+                            custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: atlas_layout.handle.clone(),
+                                index: get_effect_sprite(&EffectType::Airlock),
+                            }),
+                            ..default()
+                        },
+                        visibility: Visibility::Inherited,
+                        vfx: MagicVfx {
+                            appear: Timer::from_seconds(0., TimerMode::Once),
+                            // Very slow decay - the alpha shouldn't be reduced too much
+                            // while the panes are still visible.
+                            decay: Timer::from_seconds(5.0, TimerMode::Once),
+                        },
                     },
-                    sprite: Sprite {
-                        image: asset_server.load("spritesheet.png"),
-                        custom_size: Some(Vec2::new(TILE_SIZE, TILE_SIZE)),
-                        texture_atlas: Some(TextureAtlas {
-                            layout: atlas_layout.handle.clone(),
-                            index: get_effect_sprite(&EffectType::Airlock),
+                    // Ensure the panes are sliding.
+                    SlideAnimation,
+                    Transform {
+                        translation: if event.open {
+                            Vec3 {
+                                x: position.x as f32 * TILE_SIZE,
+                                y: position.y as f32 * TILE_SIZE,
+                                // The pane needs to hide under actual tiles, such as walls.
+                                z: -1.,
+                            }
+                        } else {
+                            Vec3 {
+                                x: (position.x + offset.0) as f32 * TILE_SIZE,
+                                y: (position.y + offset.1) as f32 * TILE_SIZE,
+                                // The pane needs to hide under actual tiles, such as walls.
+                                z: -1.,
+                            }
+                        },
+                        // Adjust the pane's rotation with its door.
+                        rotation: Quat::from_rotation_z(match orientation {
+                            OrdDir::Down => 0.,
+                            OrdDir::Right => PI / 2.,
+                            OrdDir::Up => PI,
+                            OrdDir::Left => 3. * PI / 2.,
                         }),
-                        ..default()
+                        scale: Vec3::new(1., 1., 1.),
                     },
-                    visibility: Visibility::Inherited,
-                    vfx: MagicVfx {
-                        appear: Timer::from_seconds(0., TimerMode::Once),
-                        // Very slow decay - the alpha shouldn't be reduced too much
-                        // while the panes are still visible.
-                        decay: Timer::from_seconds(5.0, TimerMode::Once),
-                    },
-                },
-                // Ensure the panes are sliding.
-                SlideAnimation,
-                Transform {
-                    translation: if event.open {
-                        Vec3 {
-                            x: position.x as f32 * TILE_SIZE,
-                            y: position.y as f32 * TILE_SIZE,
-                            // The pane needs to hide under actual tiles, such as walls.
-                            z: -1.,
-                        }
-                    } else {
-                        Vec3 {
-                            x: (position.x + offset.0) as f32 * TILE_SIZE,
-                            y: (position.y + offset.1) as f32 * TILE_SIZE,
-                            // The pane needs to hide under actual tiles, such as walls.
-                            z: -1.,
-                        }
-                    },
-                    // Adjust the pane's rotation with its door.
-                    rotation: Quat::from_rotation_z(match orientation {
-                        OrdDir::Down => 0.,
-                        OrdDir::Right => PI / 2.,
-                        OrdDir::Up => PI,
-                        OrdDir::Left => 3. * PI / 2.,
-                    }),
-                    scale: Vec3::new(1., 1., 1.),
-                },
-            ));
+                ));
+            }
         }
     }
 }
@@ -1784,6 +1803,52 @@ pub fn end_turn(
     }
 }
 
+fn start_possessing_creature(
+    added: Trigger<OnAdd, Possessed>,
+    possessed: Query<&Possessed>,
+    flag_entity: Query<&FlagEntity>,
+    possessing: Query<Entity, With<Possessing>>,
+    player: Query<Has<Player>>,
+    mut commands: Commands,
+) {
+    // Do not allow possessing multiple creatures at once.
+    // NOTE: It could be fun to "sync" their movements if this
+    // happens instead of just returning.
+    if possessing.get_single().is_ok() {
+        return;
+    }
+    let possessed_creature_flags = added.entity();
+    let possessed_creature = flag_entity
+        .get(possessed_creature_flags)
+        .unwrap()
+        .parent_creature;
+    let culprit = possessed.get(possessed_creature_flags).unwrap().original;
+    if player.get(culprit).unwrap() {
+        commands.entity(culprit).remove::<Player>();
+        commands.entity(possessed_creature).insert(Player);
+        commands.entity(culprit).insert(Possessing);
+    }
+}
+
+fn stop_possessing_creature(
+    removed: Trigger<OnRemove, Possessed>,
+    possessing: Query<Entity, With<Possessing>>,
+    flag_entity: Query<&FlagEntity>,
+    mut commands: Commands,
+) {
+    let possessed_creature_flags = removed.entity();
+    let possessed_creature = flag_entity
+        .get(possessed_creature_flags)
+        .unwrap()
+        .parent_creature;
+    // HACK: Possession "chains" will not be pretty with this, as
+    // it assumes there is only one possession happening at a time.
+    if let Ok(culprit) = possessing.get_single() {
+        commands.entity(possessed_creature).remove::<Player>();
+        commands.entity(culprit).insert(Player);
+    }
+}
+
 fn room_circulation_check(
     awake_creatures: Query<&Awake>,
     sleeping_creatures: Query<(Entity, &Sleeping)>,
@@ -1888,6 +1953,9 @@ pub fn tick_down_status_effects(
                         }
                         StatusEffect::Charm => {
                             commands.entity(effects_flags).remove::<Charm>();
+                        }
+                        StatusEffect::Possessed => {
+                            commands.entity(effects_flags).remove::<Possessed>();
                         }
                         StatusEffect::Magnetize => {
                             commands.entity(effects_flags).remove::<Magnetic>();

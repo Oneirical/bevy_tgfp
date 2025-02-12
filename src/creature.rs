@@ -135,6 +135,8 @@ pub enum StatusEffect {
     Charm,
     // The creature starts being able to drag walls behind it.
     Magnetize,
+    // The creature is controlled by the player.
+    Possessed,
 }
 
 #[derive(Debug)]
@@ -219,6 +221,16 @@ pub struct Random;
 pub struct Summoned {
     pub summoner: Entity,
 }
+
+// Controlled by another creature.
+#[derive(Component)]
+pub struct Possessed {
+    pub original: Entity,
+}
+
+// Currently away, controlling another creature.
+#[derive(Component)]
+pub struct Possessing;
 
 #[derive(Component)]
 pub struct Charm;

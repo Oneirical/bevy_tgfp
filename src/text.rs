@@ -65,6 +65,7 @@ pub const LORE: &[&str] = &[
 "[l]Signals Sever the Skies\n[o]Function[w]\n\nSkip all remaining Axioms. All [r]Targeted Creatures[w] trigger the remaining Axioms in this spell as if they were the caster.\n\n[p]@In a world as connected as ours, quarantine and isolation are but distant memories. Weaker souls remain dazed in place, hypnotized by the flow of discourse, entertainment and strife burning their neurons to a crisp.",
 "[o]Rebuild the Flesh of Old\n[o]Function[w]\n\nOn all passable [r]Targets[w], summon a hostile [l]Scion of the Old World[w].\n\n[p]@A ruin is the final state of an idea - the data has crystallized into matter, latched itself into the material like a tick - and once all the praise has been drained out, it leaves itself at the mercy of passing hours.",
 "[^]Soaked Tails Trail Across The Soil\n[o]Function[w]\n\nAll [r]Targeted Creatures[w] receive [^]Magnetic [y]I[w] for [y]10[w] turns.\n\n[^]Magnetic[w]: This creature attaches [a]Ramparts of Nacre[w] to its tail as it moves.\n\n[p]@An ideology first and foremost has a demographic. Invisible chains unite tribes, and it is by tugging at them that ideas get injected.",
+"[s]Zenorium, Who Dreams of Broken Hierarchies\n[o]Function[w]\n\nThe first [r]Targeted Creature[w] receives [s]Possessed [y]I[w] for [y]10[w] turns. [s]Possessed[w]: You may control this creature while your body stays behind.\n\n[p]@In Zenorium's dream of a truly equal society, each body is but a temporary refuge, and each soul would come to know the pride of commanding an Ordered garrison, the delight in using Vile business tactics, the brutality of Feral infighting and the illumination that comes with Sainthood - all in a single day.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -158,6 +159,11 @@ pub fn match_axiom_with_description(axiom: &Axiom) -> &str {
             potency: 1,
             stacks: EffectDuration::Finite { stacks: 10 },
         } => 46,
+        Axiom::StatusEffect {
+            effect: StatusEffect::Possessed,
+            potency: 1,
+            stacks: EffectDuration::Finite { stacks: 10 },
+        } => 47,
         _ => 0,
     }]
 }

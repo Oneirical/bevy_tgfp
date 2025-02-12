@@ -183,6 +183,7 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
             StatusEffect::Magnetize => 203,
             StatusEffect::Charm => 168,
             StatusEffect::Haste => 179,
+            StatusEffect::Possessed => 229,
             _ => 1,
         },
         Axiom::PurgeTargets => 176,
@@ -1164,6 +1165,20 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
+                .S.\n\
+                S.S\n\
+                .S.\
+                ",
+            ),
+            Axiom::StatusEffect {
+                effect: StatusEffect::Possessed,
+                potency: 1,
+                stacks: EffectDuration::Finite { stacks: 10 },
+            },
+        );
+        recipes.insert(
+            Recipe::from_string(
+                "\
                 O\n\
                 .\n\
                 O\
@@ -1216,7 +1231,6 @@ impl FromWorld for CraftingRecipes {
         recipes.insert(
             Recipe::from_string(
                 "\
-                F..\n\
                 F..\n\
                 ..F\
                 ",
