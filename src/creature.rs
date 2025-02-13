@@ -21,7 +21,7 @@ pub struct Creature {
     pub flags: CreatureFlags,
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Copy)]
 pub struct CreatureFlags {
     pub effects_flags: Entity,
     pub species_flags: Entity,

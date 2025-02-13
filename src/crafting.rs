@@ -130,27 +130,46 @@ pub fn add_crafting_mouse_interactivity(
     mut commands: Commands,
 ) {
     let entity = query.get(trigger.entity()).unwrap().parent_creature;
-    commands.entity(entity).observe(crafting_mouse_soul_drop);
+    commands
+        .entity(entity)
+        .observe(crafting_mouse_soul_drop)
+        .observe(crafting_click_soul_drop);
 }
 
 pub fn crafting_mouse_soul_drop(
     movement: Trigger<Pointer<Move>>,
     buttons: Res<ButtonInput<MouseButton>>,
     position: Query<(&Position, &CreatureFlags)>,
+    mut commands: Commands,
+) {
+    if buttons.pressed(MouseButton::Left) {
+        let (position, flags) = position.get(movement.entity()).unwrap();
+        commands.run_system_cached_with(soul_drop, (*position, *flags));
+    }
+}
+
+pub fn crafting_click_soul_drop(
+    down: Trigger<Pointer<Down>>,
+    position: Query<(&Position, &CreatureFlags)>,
+    mut commands: Commands,
+) {
+    let (position, flags) = position.get(down.entity()).unwrap();
+    commands.run_system_cached_with(soul_drop, (*position, *flags));
+}
+
+pub fn soul_drop(
+    In((position, flags)): In<(Position, CreatureFlags)>,
     slot_query: Query<&CraftingSlot>,
     mut drop: EventWriter<TakeOrDropSoul>,
     paint: Res<CagePainter>,
 ) {
-    if buttons.pressed(MouseButton::Left) {
-        let (position, flags) = position.get(movement.entity()).unwrap();
-        // If a creature USED to be a crafting slot, it might still have the observer - this extra check
-        // prevents jank where you'd drop souls outside of soul cages.
-        if slot_query.contains(flags.species_flags) || slot_query.contains(flags.effects_flags) {
-            drop.send(TakeOrDropSoul {
-                position: *position,
-                soul: paint.current_paint,
-            });
-        }
+    // If a creature USED to be a crafting slot, it might still have the observer - this extra check
+    // prevents jank where you'd drop souls outside of soul cages.
+    if slot_query.contains(flags.species_flags) || slot_query.contains(flags.effects_flags) {
+        drop.send(TakeOrDropSoul {
+            position,
+            soul: paint.current_paint,
+        });
     }
 }
 
