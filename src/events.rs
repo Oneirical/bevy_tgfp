@@ -14,11 +14,11 @@ use crate::{
     },
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door,
-        EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
-        Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed, Possessing,
-        PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook,
-        Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        Charm, ConveyorBelt, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
+        Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile,
+        Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed,
+        Possessing, PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, SpellLibrary,
+        Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -484,10 +484,17 @@ pub fn add_status_effects(
 pub struct SummonCreature {
     pub position: Position,
     pub species: Species,
-    pub momentum: OrdDir,
-    pub summoner_tile: Position,
-    pub summoner: Option<Entity>,
-    pub spellbook: Option<Spellbook>,
+    pub properties: Vec<SummonProperties>,
+}
+
+pub enum SummonProperties {
+    Spellbook(Spellbook),
+    ConveyorBelt,
+    Summoned {
+        summoner_tile: Position,
+        summoner: Entity,
+    },
+    Momentum(OrdDir),
 }
 
 /// Place a new Creature on the map of Species and at Position.
@@ -536,11 +543,6 @@ pub fn summon_creature(
                 .id(),
         );
 
-        // Summoned creatures are marked with their summoner.
-        if let Some(summoner) = event.summoner {
-            commands.entity(effects_flags).insert(Summoned { summoner });
-        }
-
         let mut new_creature = commands.spawn_empty();
         let parent_creature = new_creature.id();
 
@@ -557,7 +559,7 @@ pub fn summon_creature(
                     }),
                     ..default()
                 },
-                momentum: event.momentum,
+                momentum: OrdDir::Down,
                 health: Health { max_hp, hp },
                 effects: StatusEffectsList {
                     effects: HashMap::new(),
@@ -576,31 +578,57 @@ pub fn summon_creature(
                     Species::AxiomaticSeal => Soul::Vile,
                     _ => Soul::Unhinged,
                 },
-                spellbook: event
-                    .spellbook
-                    .clone()
-                    .unwrap_or(get_species_spellbook(&event.species)),
+                spellbook: get_species_spellbook(&event.species),
                 flags: CreatureFlags {
                     effects_flags,
                     species_flags,
                 },
             },
-            Transform {
-                translation: Vec3 {
-                    x: event.summoner_tile.x as f32 * TILE_SIZE,
-                    y: event.summoner_tile.y as f32 * TILE_SIZE,
-                    z: 0.,
-                },
-                rotation: Quat::from_rotation_z(match event.momentum {
-                    OrdDir::Down => 0.,
-                    OrdDir::Right => PI / 2.,
-                    OrdDir::Up => PI,
-                    OrdDir::Left => 3. * PI / 2.,
-                }),
-                ..Default::default()
-            },
             SlideAnimation,
         ));
+
+        let mut transform = Transform {
+            translation: Vec3 {
+                x: event.position.x as f32 * TILE_SIZE,
+                y: event.position.y as f32 * TILE_SIZE,
+                z: 0.,
+            },
+            rotation: Quat::from_rotation_z(0.),
+            ..Default::default()
+        };
+
+        let mut summoner_flag_insertion = None;
+
+        for property in event.properties.iter() {
+            match property {
+                SummonProperties::Spellbook(book) => {
+                    new_creature.insert(book.clone());
+                }
+                SummonProperties::Momentum(momentum) => {
+                    transform.rotation = Quat::from_rotation_z(match momentum {
+                        OrdDir::Down => 0.,
+                        OrdDir::Right => PI / 2.,
+                        OrdDir::Up => PI,
+                        OrdDir::Left => 3. * PI / 2.,
+                    });
+                    new_creature.insert(*momentum);
+                }
+                SummonProperties::Summoned {
+                    summoner_tile,
+                    summoner,
+                } => {
+                    transform.translation.x = summoner_tile.x as f32 * TILE_SIZE;
+                    transform.translation.y = summoner_tile.y as f32 * TILE_SIZE;
+                    // Summoned creatures are marked with their summoner.
+                    summoner_flag_insertion = Some(*summoner);
+                }
+                SummonProperties::ConveyorBelt => {
+                    new_creature.insert(ConveyorBelt);
+                }
+            };
+        }
+
+        new_creature.insert(transform);
 
         // If the map is "faith's end", log the cage address # of this creature.
         if let Some(cage_idx) = faiths_end
@@ -640,7 +668,7 @@ pub fn summon_creature(
             }
         }
 
-        // NOTE: This will have to be removed when creating player clones
+        // TODO: This will have to be removed when creating player clones
         // becomes possible.
         if event.species == Species::Player {
             new_creature.insert(Player);
@@ -660,6 +688,10 @@ pub fn summon_creature(
         commands
             .entity(species_flags)
             .insert(FlagEntity { parent_creature });
+
+        if let Some(summoner) = summoner_flag_insertion {
+            commands.entity(effects_flags).insert(Summoned { summoner });
+        }
 
         let hp_bar = commands
             .spawn(HealthIndicator {

@@ -8,8 +8,8 @@ use rand::{
 };
 
 use crate::{
-    creature::{CreatureFlags, FlagEntity, Intangible, Player, Species},
-    events::{RemoveCreature, SummonCreature},
+    creature::{ConveyorBelt, CreatureFlags, FlagEntity, Intangible, Player, Species},
+    events::{RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
     ui::{AddMessage, Message},
     OrdDir,
 };
@@ -242,7 +242,24 @@ pub struct FaithsEnd {
 }
 
 pub fn is_soul_cage_room(room: usize) -> bool {
-    (room + 1) % 4 == 0
+    false
+}
+
+// TODO: If a creature is transformed into something Immobile,
+// like Abazon, it will get stuck and make other entities
+// bump into it.
+pub fn slide_conveyor_belt(
+    query: Query<(Entity, &Position), With<ConveyorBelt>>,
+    mut teleport: EventWriter<TeleportEntity>,
+) {
+    let mut creatures = query.iter().collect::<Vec<(Entity, &Position)>>();
+    creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
+    for (entity, pos) in creatures {
+        teleport.send(TeleportEntity {
+            destination: Position::new(pos.x, pos.y - 9),
+            entity,
+        });
+    }
 }
 
 pub fn spawn_cage(
@@ -282,21 +299,21 @@ pub fn spawn_cage(
 #..B..+..G........###...#...........#...###........G..+..B..#\
 #.....#.............##..#...........#..##.............#.....#\
 ##...###.............#..#...........#..#....@........###...##\
-.#####.##+####.......##.#...........#.##.......####+##.#####.\
-......##...######.....###...........###.....######sss##......\
-......#.....#...###....##...........##....###...#exxxw#......\
-......#..B..#.....##....#...........#....##.....#exxxw#......\
-......#.....#..#####....#...........#....#####..#exxxw#......\
-......##...##.##'''##...##.........##...##'''##.##nnn##......\
-.......#####..#'''''#....#.........#....#'''''#..#####.......\
-..............#''C''+....>.........<....+''C''#..............\
-.......#####..#'''''#....#.........#....#'''''#..#####.......\
-......##...##.##'''##...##.........##...##'''##.##...##......\
-......#.....#..#####....#...........#....#####..#.....#......\
-......#..B..#.....##....#...........#....##.....#..B..#......\
-......#.....#...###....##...........##....###...#.....#......\
-......##...######.....###...........###.....######...##......\
-.#####.##+####.......##.#...........#.##.......####+##.#####.\
+.#####.##+####.......##.#...........#.##.........##+##.#####.\
+......##...######.....###...........###.........##...##......\
+......#.....#...###....##...........##..........#.....#......\
+......#..B..#.....##....#...........#.......#####.....#......\
+......#.....#..#####....#...........#....####.........#......\
+......##...##.##'''##...##.........##...##'''.sss....##......\
+.......#####..#'''''#....#.........#....#''''exxxw..##.......\
+..............#''C''+....>.........<....+''C'exxxw..#........\
+.......#####..#'''''#....#.........#....#''''exxxw..##.......\
+......##...##.##'''##...##.........##...##'''.nnn....##......\
+......#.....#..#####....#...........#....####.........#......\
+......#..B..#.....##....#...........#.......#####..B..#......\
+......#.....#...###....##...........##..........#.....#......\
+......##...######.....###...........###.........##...##......\
+.#####.##+####.......##.#...........#.##.........##+##.#####.\
 ##...###.............#..#...........#..#.............###...##\
 #.....#.............##..#...........#..##.............#.....#\
 #..B..+..G........###...#...........#...###........G..+..B..#\
@@ -324,11 +341,11 @@ pub fn spawn_cage(
 ........................#...........#........................\
 ........................#...........#........................\
 ";
-    let tower_height = 15;
+    let tower_height = 2;
     let mut tower_height_tiles = 0;
     let first_room_size = 9;
     for tower_floor in 0..tower_height {
-        let size = if tower_floor > 11 { 17 } else { 9 };
+        let size = 9;
         let mut cage = generate_cage(
             tower_floor,
             // Spawn the player in the first room
@@ -336,24 +353,27 @@ pub fn spawn_cage(
             tower_floor == 0 && player.is_empty(),
             !is_soul_cage_room(tower_floor),
             size,
-            if tower_floor == 0 {
-                &[OrdDir::Up]
-            } else if tower_floor == tower_height - 1 {
-                &[OrdDir::Down]
-            } else {
-                &[OrdDir::Up, OrdDir::Down]
-            },
+            &[OrdDir::Left, OrdDir::Right],
         );
         if !is_soul_cage_room(tower_floor) {
             add_creatures(&mut cage, 2 + tower_floor, tower_floor > 11);
         }
 
-        let cage_corner = Position::new(
-            (first_room_size as i32 - size as i32) / 2,
-            tower_height_tiles as i32,
-        );
-        for (idx, tile_char) in quarry.chars().enumerate() {
-            let position = Position::new(idx as i32 % 61, 61 - idx as i32 / 61);
+        let cage_corner = Position::new(26, tower_height_tiles as i32 - 5 + 9 * 4);
+        let iterator = if tower_floor == 0 {
+            quarry.chars().collect::<Vec<char>>()
+        } else {
+            cage
+        };
+        for (idx, tile_char) in iterator.iter().enumerate() {
+            let position = if tower_floor == 0 {
+                Position::new(idx as i32 % 61, 61 - idx as i32 / 61)
+            } else {
+                Position::new(
+                    (idx % size) as i32 + cage_corner.x,
+                    size as i32 - (idx / size) as i32 + cage_corner.y,
+                )
+            };
             let species = match tile_char {
                 '#' => Species::Wall,
                 'H' => Species::Hunter,
@@ -373,7 +393,7 @@ pub fn spawn_cage(
                 'w' | 'n' | 'e' | 's' => Species::CageBorder,
                 _ => continue,
             };
-            let momentum = match tile_char {
+            let mut properties = vec![SummonProperties::Momentum(match tile_char {
                 '^' => OrdDir::Up,
                 '>' => OrdDir::Right,
                 '<' => OrdDir::Left,
@@ -382,14 +402,14 @@ pub fn spawn_cage(
                 'w' => OrdDir::Left,
                 's' => OrdDir::Down,
                 'V' | _ => OrdDir::Down,
-            };
+            })];
+            if tower_floor > 0 {
+                properties.push(SummonProperties::ConveyorBelt);
+            }
             summon.send(SummonCreature {
                 species,
                 position,
-                momentum,
-                summoner_tile: Position::new(0, 0),
-                summoner: None,
-                spellbook: None,
+                properties,
             });
             faiths_end
                 .cage_address_position
@@ -409,8 +429,9 @@ pub fn spawn_cage(
                 );
             }
         }
-        break;
-        tower_height_tiles += size;
+        if tower_floor != 0 {
+            tower_height_tiles += size;
+        }
     }
 }
 

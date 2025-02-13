@@ -3,11 +3,7 @@ use std::f32::consts::PI;
 use bevy::{
     asset::RenderAssetUsages,
     prelude::*,
-    render::{
-        camera::ScalingMode,
-        render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
-        view::RenderLayers,
-    },
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
 };
 use rand::{thread_rng, Rng};
 
@@ -71,7 +67,7 @@ pub fn spawn_portal(mut images: ResMut<Assets<Image>>, mut commands: Commands) {
         ))
         .id();
     commands.spawn((
-        Position::new(0, 0),
+        Position::new(40, 40),
         Portal {
             destination: Position::new(10, 10),
             camera: entity,
@@ -92,7 +88,7 @@ pub fn adjust_portals(
     mut camera: Query<&mut Camera>,
 ) {
     for mut proj in query.iter_mut() {
-        proj.scale = 0.2;
+        proj.scale = -0.053;
     }
     // HACK: This part of the system forcefully disables
     // portal cameras that are too far away, as a quick

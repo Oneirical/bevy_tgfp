@@ -254,6 +254,10 @@ pub struct Door;
 #[derive(Component)]
 pub struct Wall;
 
+/// It slides downwards in the Quarry.
+#[derive(Component)]
+pub struct ConveyorBelt;
+
 #[derive(Component)]
 pub struct Spellproof;
 

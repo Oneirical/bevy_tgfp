@@ -17,8 +17,8 @@ use crate::{
         StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     events::{
-        AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, TeleportEntity,
-        TransformCreature,
+        AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, SummonProperties,
+        TeleportEntity, TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{Map, Position},
@@ -796,10 +796,10 @@ fn axiom_function_summon_creature(
             summon.send(SummonCreature {
                 species,
                 position: *position,
-                momentum: OrdDir::Down,
-                summoner_tile: *caster_position,
-                summoner: Some(synapse_data.caster),
-                spellbook: None,
+                properties: vec![SummonProperties::Summoned {
+                    summoner_tile: *caster_position,
+                    summoner: synapse_data.caster,
+                }],
             });
         }
     } else {
@@ -821,21 +821,24 @@ fn axiom_function_place_step_trap(
         summon.send(SummonCreature {
             species: Species::Trap,
             position: *position,
-            momentum: OrdDir::Down,
-            summoner_tile: *caster_position,
-            summoner: Some(synapse_data.caster),
-            spellbook: Some(Spellbook::new([
-                None,
-                None,
-                Some({
-                    let mut step_trigger = vec![Axiom::WhenSteppedOn];
-                    step_trigger.extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
-                    step_trigger
-                }),
-                None,
-                None,
-                None,
-            ])),
+            properties: vec![
+                SummonProperties::Summoned {
+                    summoner_tile: *caster_position,
+                    summoner: synapse_data.caster,
+                },
+                SummonProperties::Spellbook(Spellbook::new([
+                    None,
+                    None,
+                    Some({
+                        let mut step_trigger = vec![Axiom::WhenSteppedOn];
+                        step_trigger.extend(synapse_data.axioms[synapse_data.step + 1..].to_vec());
+                        step_trigger
+                    }),
+                    None,
+                    None,
+                    None,
+                ])),
+            ],
         });
     }
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);

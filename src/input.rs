@@ -8,6 +8,7 @@ use crate::{
     cursor::CursorStep,
     events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
     graphics::PortalCamera,
+    map::slide_conveyor_belt,
     sets::ControlState,
     spells::{Axiom, CastSpell, Spell},
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
@@ -32,6 +33,7 @@ pub fn keyboard_input(
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
     mut spell: EventWriter<CastSpell>,
+    mut commands: Commands,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -194,10 +196,11 @@ pub fn keyboard_input(
     }
 
     if input.pressed(KeyCode::KeyO) {
-        camera.single_mut().scale += 0.1;
+        camera.single_mut().scale += 0.001;
+        dbg!(camera.single().scale);
     }
-    if input.pressed(KeyCode::KeyP) {
-        camera.single_mut().scale -= 0.1;
+    if input.just_pressed(KeyCode::KeyP) {
+        commands.run_system_cached(slide_conveyor_belt);
     }
 
     if input.pressed(KeyCode::KeyR) {
