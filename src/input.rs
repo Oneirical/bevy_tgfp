@@ -7,6 +7,7 @@ use crate::{
     creature::{EffectDuration, Player, Soul, StatusEffect},
     cursor::CursorStep,
     events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
+    graphics::PortalCamera,
     sets::ControlState,
     spells::{Axiom, CastSpell, Spell},
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
@@ -27,7 +28,7 @@ pub fn keyboard_input(
     mut next_state: ResMut<NextState<ControlState>>,
     mut cursor: EventWriter<CursorStep>,
     mut caste_menu: Query<&mut LargeCastePanel>,
-    mut scale: ResMut<UiScale>,
+    mut camera: Query<&mut OrthographicProjection, (With<Camera>, Without<PortalCamera>)>,
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
     mut spell: EventWriter<CastSpell>,
@@ -193,10 +194,10 @@ pub fn keyboard_input(
     }
 
     if input.pressed(KeyCode::KeyO) {
-        scale.0 += 0.02;
+        camera.single_mut().scale += 0.1;
     }
     if input.pressed(KeyCode::KeyP) {
-        scale.0 -= 0.02;
+        camera.single_mut().scale -= 0.1;
     }
 
     if input.pressed(KeyCode::KeyR) {

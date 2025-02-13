@@ -1,6 +1,14 @@
 use std::f32::consts::PI;
 
-use bevy::prelude::*;
+use bevy::{
+    asset::RenderAssetUsages,
+    prelude::*,
+    render::{
+        camera::ScalingMode,
+        render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
+        view::RenderLayers,
+    },
+};
 use rand::{thread_rng, Rng};
 
 use crate::{creature::Player, map::Position, TILE_SIZE};
@@ -12,7 +20,107 @@ impl Plugin for GraphicsPlugin {
         app.init_resource::<SpriteSheetAtlas>();
         app.add_event::<PlaceMagicVfx>();
         app.add_systems(Startup, setup_camera);
+        app.add_systems(Startup, spawn_portal);
+        app.add_systems(Update, adjust_portals);
         app.insert_resource(Screenshake { intensity: 0 });
+    }
+}
+
+#[derive(Component)]
+pub struct PortalCamera;
+
+#[derive(Component)]
+pub struct Portal {
+    destination: Position,
+    camera: Entity,
+}
+
+pub fn spawn_portal(mut images: ResMut<Assets<Image>>, mut commands: Commands) {
+    let size = Extent3d {
+        width: 512,
+        height: 512,
+        ..default()
+    };
+
+    // This is the texture that will be rendered to.
+    let mut image = Image::new_fill(
+        size,
+        TextureDimension::D2,
+        &[0, 0, 0, 0],
+        TextureFormat::Bgra8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    // You need to set these texture usage flags in order to use the image as a render target
+    image.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+
+    let image_handle = images.add(image);
+
+    let entity = commands
+        .spawn((
+            Camera2d,
+            PortalCamera,
+            Position::new(10, 10),
+            Camera {
+                target: image_handle.clone().into(),
+                order: 1,
+                ..default()
+            },
+            Transform::from_xyz(0., 0., 10.),
+            Msaa::Off,
+        ))
+        .id();
+    commands.spawn((
+        Position::new(0, 0),
+        Portal {
+            destination: Position::new(10, 10),
+            camera: entity,
+        },
+        Sprite {
+            image: image_handle.clone().into(),
+            custom_size: Some(Vec2::splat(TILE_SIZE * 3.)),
+            ..default()
+        },
+        Transform::from_xyz(0., 0., -10.),
+    ));
+}
+
+pub fn adjust_portals(
+    mut query: Query<&mut OrthographicProjection, Added<PortalCamera>>,
+    player: Query<&Position, With<Player>>,
+    portals: Query<(&Position, &Portal)>,
+    mut camera: Query<&mut Camera>,
+) {
+    for mut proj in query.iter_mut() {
+        proj.scale = 0.2;
+    }
+    // HACK: This part of the system forcefully disables
+    // portal cameras that are too far away, as a quick
+    // and dirty fix against that incomprehensible
+    // graphical bug that happens when walking inside
+    // an area that is simultaneously supervised by
+    // a portal camera. This effectively means portals
+    // must lead at least 20 tiles from their current
+    // position.
+    // TODO: Trigger this only when the player moves.
+    if let Ok(player_pos) = player.get_single() {
+        let mut out_of_range = true;
+        for (position, portal) in portals.iter() {
+            if player_pos.is_within_range(
+                &Position {
+                    x: position.x - 20,
+                    y: position.y - 20,
+                },
+                &Position {
+                    x: position.x + 20,
+                    y: position.y + 20,
+                },
+            ) {
+                out_of_range = false;
+            }
+            camera.get_mut(portal.camera).unwrap().is_active =
+                if out_of_range { false } else { true };
+        }
     }
 }
 
@@ -39,7 +147,15 @@ impl FromWorld for SpriteSheetAtlas {
 }
 
 fn setup_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, Transform::from_xyz(0., 0., 0.), Msaa::Off));
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 0,
+            ..default()
+        },
+        Transform::from_xyz(0., 0., 10.),
+        Msaa::Off,
+    ));
 }
 
 #[derive(Component)]
@@ -100,11 +216,11 @@ pub fn adjust_transforms(
             let mut camera_trans = camera.get_single_mut().unwrap();
             camera_trans.translation.smooth_nudge(
                 &Vec3::new(
-                    trans.translation.x + shake_x + 10.,
+                    trans.translation.x + shake_x,
                     trans.translation.y + shake_y,
-                    0.,
+                    -20.,
                 ),
-                2.,
+                6.,
                 time.delta_secs(),
             );
         }

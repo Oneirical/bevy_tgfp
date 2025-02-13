@@ -2,6 +2,7 @@ use std::{cmp::min, f32::consts::PI};
 
 use bevy::{
     prelude::*,
+    render::view::RenderLayers,
     utils::{HashMap, HashSet},
 };
 use rand::{seq::IteratorRandom, thread_rng};
@@ -710,6 +711,9 @@ pub fn assign_species_components(
     for (flags, species) in changed_species.iter() {
         let mut new_creature = commands.entity(flags.species_flags);
         match species {
+            Species::Player => {
+                new_creature.insert(Intangible);
+            }
             Species::Trap => {
                 new_creature.insert((
                     Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
