@@ -21,7 +21,7 @@ use crate::{
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
-    map::register_creatures,
+    map::{register_creatures, ConveyorTracker},
     spells::{
         cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
         AntiContingencyLoop, Axiom,
@@ -67,6 +67,10 @@ impl Plugin for SetsPlugin {
         });
         app.insert_resource(AntiContingencyLoop {
             contingencies_this_turn: HashSet::new(),
+        });
+        app.insert_resource(ConveyorTracker {
+            number_spawned: 0,
+            open_doors_next: false,
         });
         app.insert_resource(BagOfLoot::get_initial());
         app.add_observer(add_crafting_mouse_interactivity);

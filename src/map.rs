@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use bevy::{
     prelude::*,
+    time::common_conditions::on_timer,
     utils::{HashMap, HashSet},
 };
 use rand::{
@@ -8,8 +11,8 @@ use rand::{
 };
 
 use crate::{
-    creature::{ConveyorBelt, CreatureFlags, FlagEntity, Intangible, Player, Species},
-    events::{RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
+    creature::{ConveyorBelt, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
+    events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
     ui::{AddMessage, Message},
     OrdDir,
 };
@@ -27,6 +30,10 @@ impl Plugin for MapPlugin {
             current_cage: 0,
         });
         app.add_systems(Startup, spawn_cage);
+        app.add_systems(
+            Update,
+            slide_conveyor_belt.run_if(on_timer(Duration::from_secs(1))),
+        );
     }
 }
 
@@ -250,14 +257,139 @@ pub fn is_soul_cage_room(room: usize) -> bool {
 // bump into it.
 pub fn slide_conveyor_belt(
     query: Query<(Entity, &Position), With<ConveyorBelt>>,
+    doors: Query<(Entity, &Position, &CreatureFlags, Has<ConveyorBelt>)>,
+    closed_door_query: Query<&Door, Without<Intangible>>,
     mut teleport: EventWriter<TeleportEntity>,
+    mut commands: Commands,
+    mut remove: EventWriter<RemoveCreature>,
+    mut open: EventWriter<OpenCloseDoor>,
+    mut tracker: ResMut<ConveyorTracker>,
 ) {
+    if tracker.open_doors_next {
+        let mut doors_were_opened = false;
+        for (door, pos, flags, is_on_conveyor) in doors.iter() {
+            if (closed_door_query.contains(flags.species_flags)
+                || closed_door_query.contains(flags.effects_flags))
+                && ((is_on_conveyor && pos.y == 27)
+                    || pos == &Position::new(25, 27)
+                    || pos == &Position::new(35, 27))
+            {
+                doors_were_opened = true;
+                open.send(OpenCloseDoor {
+                    entity: door,
+                    open: true,
+                });
+            }
+        }
+        // tracker.open_doors_next = false;
+        if doors_were_opened {
+            commands.run_system_cached(new_cage_on_conveyor);
+        }
+        return;
+    }
     let mut creatures = query.iter().collect::<Vec<(Entity, &Position)>>();
+    let mut send_next = false;
+    let mut close_door = false;
     creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
     for (entity, pos) in creatures {
-        teleport.send(TeleportEntity {
-            destination: Position::new(pos.x, pos.y - 9),
-            entity,
+        if pos.y == 32 {
+            send_next = true;
+        } else if pos.y == 23 {
+            close_door = true;
+        }
+        if pos.y < -10 {
+            remove.send(RemoveCreature { entity });
+        } else {
+            teleport.send(TeleportEntity {
+                destination: Position::new(pos.x, pos.y - 9),
+                entity,
+            });
+        }
+    }
+    if send_next {
+        tracker.open_doors_next = true;
+    }
+    if close_door {
+        for (door, pos, flags, _is_on_conveyor) in doors.iter() {
+            if (!closed_door_query.contains(flags.species_flags)
+                && !closed_door_query.contains(flags.effects_flags))
+                && (pos == &Position::new(25, 27) || pos == &Position::new(35, 27))
+            {
+                open.send(OpenCloseDoor {
+                    entity: door,
+                    open: false,
+                });
+            }
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct ConveyorTracker {
+    pub number_spawned: usize,
+    pub open_doors_next: bool,
+}
+
+pub fn new_cage_on_conveyor(
+    mut tracker: ResMut<ConveyorTracker>,
+    mut summon: EventWriter<SummonCreature>,
+) {
+    tracker.number_spawned += 1;
+    let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
+    add_creatures(&mut cage, 2 + tracker.number_spawned, false);
+
+    let cage_corner = Position::new(26, -5 + 9 * 7);
+    for (idx, tile_char) in cage.iter().enumerate() {
+        let position = Position::new(
+            (idx % 9) as i32 + cage_corner.x,
+            9 as i32 - (idx / 9) as i32 + cage_corner.y,
+        );
+        let species = match tile_char {
+            '#' => Species::Wall,
+            'H' => Species::Hunter,
+            'S' => Species::Spawner,
+            'T' => Species::Tinker,
+            '@' => Species::Player,
+            'W' => Species::WeakWall,
+            '2' => Species::Second,
+            'A' => Species::Apiarist,
+            'F' => Species::Shrike,
+            'O' => Species::Oracle,
+            'E' => Species::EpsilonHead,
+            't' => Species::EpsilonTail,
+            'x' => Species::CageSlot,
+            'C' => Species::AxiomaticSeal,
+            '^' | '>' | '<' | 'V' => Species::Airlock,
+            'w' | 'n' | 'e' | 's' => Species::CageBorder,
+            _ => continue,
+        };
+        let mut properties = vec![SummonProperties::Momentum(match tile_char {
+            '^' => OrdDir::Up,
+            '>' => OrdDir::Right,
+            '<' => OrdDir::Left,
+            'n' => OrdDir::Up,
+            'e' => OrdDir::Right,
+            'w' => OrdDir::Left,
+            's' => OrdDir::Down,
+            'V' | _ => OrdDir::Down,
+        })];
+        properties.push(SummonProperties::ConveyorBelt);
+        if [
+            Species::Hunter,
+            Species::Shrike,
+            Species::Second,
+            Species::Tinker,
+            Species::Apiarist,
+            Species::Oracle,
+        ]
+        .contains(&species)
+        {
+            properties.push(SummonProperties::Sleeping);
+        }
+        summon.send(SummonCreature {
+            species,
+            position,
+            properties,
         });
     }
 }
@@ -304,11 +436,11 @@ pub fn spawn_cage(
 ......#.....#...###....##...........##..........#.....#......\
 ......#..B..#.....##....#...........#.......#####.....#......\
 ......#.....#..#####....#...........#....####.........#......\
-......##...##.##'''##...##.........##...##'''.sss....##......\
-.......#####..#'''''#....#.........#....#''''exxxw..##.......\
-..............#''C''+....>.........<....+''C'exxxw..#........\
-.......#####..#'''''#....#.........#....#''''exxxw..##.......\
-......##...##.##'''##...##.........##...##'''.nnn....##......\
+......##...##.##'''##...##.........##...##'''.sss.....##.....\
+.......#####..#'''''#....#.........#....#''''exxxw.....##....\
+..............#''C''+....>.........<....+''C'exxxw......#....\
+.......#####..#'''''#....#.........#....#''''exxxw.....##....\
+......##...##.##'''##...##.........##...##'''.nnn.....##.....\
 ......#.....#..#####....#...........#....####.........#......\
 ......#..B..#.....##....#...........#.......#####..B..#......\
 ......#.....#...###....##...........##..........#.....#......\
@@ -321,7 +453,7 @@ pub fn spawn_cage(
 ##...###...#####........#...........#........#####...###...##\
 .#####.##+##............#...........#............##+##.#####.\
 ......##...##...........#...........#...........##...##......\
-......#HHHHH#...........#...........#...........#.....#......\
+......#.....#...........#...........#...........#.....#......\
 ......#..B..#...........#...........#...........#..B..#......\
 ......#.....#...........#...........#...........#.....#......\
 ......##...##...........#...........#...........##...##......\
@@ -405,6 +537,18 @@ pub fn spawn_cage(
             })];
             if tower_floor > 0 {
                 properties.push(SummonProperties::ConveyorBelt);
+            }
+            if [
+                Species::Hunter,
+                Species::Shrike,
+                Species::Second,
+                Species::Tinker,
+                Species::Apiarist,
+                Species::Oracle,
+            ]
+            .contains(&species)
+            {
+                properties.push(SummonProperties::Sleeping);
             }
             summon.send(SummonCreature {
                 species,

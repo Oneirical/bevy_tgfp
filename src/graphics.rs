@@ -100,7 +100,7 @@ pub fn adjust_portals(
     // position.
     // TODO: Trigger this only when the player moves.
     if let Ok(player_pos) = player.get_single() {
-        let mut out_of_range = true;
+        let mut out_of_range = false;
         for (position, portal) in portals.iter() {
             if player_pos.is_within_range(
                 &Position {

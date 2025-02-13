@@ -495,6 +495,7 @@ pub enum SummonProperties {
         summoner: Entity,
     },
     Momentum(OrdDir),
+    Sleeping,
 }
 
 /// Place a new Creature on the map of Species and at Position.
@@ -625,48 +626,13 @@ pub fn summon_creature(
                 SummonProperties::ConveyorBelt => {
                     new_creature.insert(ConveyorBelt);
                 }
+                SummonProperties::Sleeping => {
+                    new_creature.insert(Sleeping);
+                }
             };
         }
 
         new_creature.insert(transform);
-
-        // If the map is "faith's end", log the cage address # of this creature.
-        if let Some(cage_idx) = faiths_end
-            .cage_address_position
-            .get(&event.position)
-            .copied()
-        {
-            // HACK: Walls being marked as Awake prevents the cage clear check,
-            // as they must then be cleared as well to open the doors (this is impossible).
-            if cage_idx != 0
-                && [
-                    Species::Shrike,
-                    Species::Tinker,
-                    Species::Oracle,
-                    Species::Second,
-                    Species::Hunter,
-                    Species::Apiarist,
-                    Species::EpsilonHead,
-                    Species::AxiomaticSeal,
-                ]
-                .contains(&event.species)
-            {
-                new_creature.insert(Sleeping { cage_idx });
-            } else if [
-                Species::Shrike,
-                Species::Tinker,
-                Species::Oracle,
-                Species::Second,
-                Species::Hunter,
-                Species::Apiarist,
-                Species::EpsilonHead,
-                Species::AxiomaticSeal,
-            ]
-            .contains(&event.species)
-            {
-                new_creature.insert(Awake);
-            }
-        }
 
         // TODO: This will have to be removed when creating player clones
         // becomes possible.
@@ -1457,8 +1423,8 @@ pub fn harm_creature(
 
 #[derive(Event)]
 pub struct OpenCloseDoor {
-    entity: Entity,
-    open: bool,
+    pub entity: Entity,
+    pub open: bool,
 }
 
 #[derive(Component)]
@@ -1724,14 +1690,6 @@ pub fn remove_designated_creatures(
     mut commands: Commands,
     mut map: ResMut<Map>,
     position: Query<&Position>,
-    awake: Query<&Awake>,
-    sleeping: Query<&Sleeping>,
-    doors: Query<(Entity, &CreatureFlags)>,
-    closed_door_query: Query<&Door, Without<Intangible>>,
-    mut open: EventWriter<OpenCloseDoor>,
-    mut craft: EventWriter<CraftWithAxioms>,
-    player: Query<Entity, With<Player>>,
-    faiths_end: Res<FaithsEnd>,
 ) {
     for (designated, designated_flags) in remove.iter() {
         // Remove the creature from Map
@@ -1753,31 +1711,6 @@ pub fn remove_designated_creatures(
         commands
             .entity(designated_flags.effects_flags)
             .despawn_recursive();
-    }
-
-    // `sleeping` should be empty, or else this will
-    // try to open doors that are in the process of being
-    // despawned by the victory check.
-    if awake.is_empty() && !sleeping.is_empty() {
-        // HACK: Since this system runs every tick, this variable ensures
-        // the "CraftWithAxioms" happens only once.
-        let mut happened_once = false;
-        for (door, flags) in doors.iter() {
-            if closed_door_query.contains(flags.species_flags)
-                || closed_door_query.contains(flags.effects_flags)
-            {
-                open.send(OpenCloseDoor {
-                    entity: door,
-                    open: true,
-                });
-                if is_soul_cage_room(faiths_end.current_cage) && !happened_once {
-                    craft.send(CraftWithAxioms {
-                        receiver: player.single(),
-                    });
-                    happened_once = true;
-                }
-            }
-        }
     }
 }
 
@@ -1887,7 +1820,7 @@ fn stop_possessing_creature(
 
 fn room_circulation_check(
     awake_creatures: Query<&Awake>,
-    sleeping_creatures: Query<(Entity, &Sleeping)>,
+    sleeping_creatures: Query<Entity, With<Sleeping>>,
     mut faiths_end: ResMut<FaithsEnd>,
     player_position: Query<&Position, With<Player>>,
     flags_query: Query<(Entity, &CreatureFlags)>,
@@ -1934,24 +1867,22 @@ fn room_circulation_check(
                     });
                 }
             }
-            for (sleeping_entity, sleeping_component) in sleeping_creatures.iter() {
-                if sleeping_component.cage_idx == faiths_end.current_cage {
-                    commands.entity(sleeping_entity).insert(Awake);
-                    commands.entity(sleeping_entity).remove::<Sleeping>();
-                    // Give one turn for the player to act.
-                    // This also prevents them from immediately moving
-                    // inside the closing doors.
-                    commands
-                        .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
-                        .insert(Dizzy);
-                    status_effect.send(AddStatusEffect {
-                        entity: sleeping_entity,
-                        effect: StatusEffect::Dizzy,
-                        potency: 1,
-                        stacks: EffectDuration::Finite { stacks: 1 },
-                        culprit: sleeping_entity,
-                    });
-                }
+            for sleeping_entity in sleeping_creatures.iter() {
+                commands.entity(sleeping_entity).insert(Awake);
+                commands.entity(sleeping_entity).remove::<Sleeping>();
+                // Give one turn for the player to act.
+                // This also prevents them from immediately moving
+                // inside the closing doors.
+                commands
+                    .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
+                    .insert(Dizzy);
+                status_effect.send(AddStatusEffect {
+                    entity: sleeping_entity,
+                    effect: StatusEffect::Dizzy,
+                    potency: 1,
+                    stacks: EffectDuration::Finite { stacks: 1 },
+                    culprit: sleeping_entity,
+                });
             }
         }
     }

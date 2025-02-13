@@ -8,7 +8,7 @@ use crate::{
     cursor::CursorStep,
     events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
     graphics::PortalCamera,
-    map::slide_conveyor_belt,
+    map::{slide_conveyor_belt, ConveyorTracker},
     sets::ControlState,
     spells::{Axiom, CastSpell, Spell},
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
@@ -33,7 +33,7 @@ pub fn keyboard_input(
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
     mut spell: EventWriter<CastSpell>,
-    mut commands: Commands,
+    mut tracker: ResMut<ConveyorTracker>,
 ) {
     let soul_keys = [
         KeyCode::Digit1,
@@ -200,9 +200,10 @@ pub fn keyboard_input(
         dbg!(camera.single().scale);
     }
     if input.just_pressed(KeyCode::KeyP) {
-        commands.run_system_cached(slide_conveyor_belt);
+        tracker.open_doors_next = false;
     }
 
+    #[cfg(debug_assertions)]
     if input.pressed(KeyCode::KeyR) {
         spell.send(CastSpell {
             caster: player.single(),

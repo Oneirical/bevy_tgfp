@@ -205,9 +205,7 @@ pub struct Invincible;
 pub struct Dizzy;
 
 #[derive(Component)]
-pub struct Sleeping {
-    pub cage_idx: usize,
-}
+pub struct Sleeping;
 
 #[derive(Component)]
 pub struct Awake;
