@@ -11,7 +11,7 @@ use rand::{
 };
 
 use crate::{
-    creature::{ConveyorBelt, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
+    creature::{Awake, ConveyorBelt, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
     events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
     ui::{AddMessage, Message},
     OrdDir,
@@ -264,9 +264,15 @@ pub fn slide_conveyor_belt(
     mut remove: EventWriter<RemoveCreature>,
     mut open: EventWriter<OpenCloseDoor>,
     mut tracker: ResMut<ConveyorTracker>,
+    awake_creatures: Query<&Position, With<Awake>>,
 ) {
     if tracker.open_doors_next {
-        let mut doors_were_opened = false;
+        let (boundary_a, boundary_b) = (Position::new(27, 24), Position::new(33, 30));
+        for pos in awake_creatures.iter() {
+            if pos.is_within_range(&boundary_a, &boundary_b) {
+                return;
+            }
+        }
         for (door, pos, flags, is_on_conveyor) in doors.iter() {
             if (closed_door_query.contains(flags.species_flags)
                 || closed_door_query.contains(flags.effects_flags))
@@ -274,16 +280,11 @@ pub fn slide_conveyor_belt(
                     || pos == &Position::new(25, 27)
                     || pos == &Position::new(35, 27))
             {
-                doors_were_opened = true;
                 open.send(OpenCloseDoor {
                     entity: door,
                     open: true,
                 });
             }
-        }
-        // tracker.open_doors_next = false;
-        if doors_were_opened {
-            commands.run_system_cached(new_cage_on_conveyor);
         }
         return;
     }
@@ -310,6 +311,7 @@ pub fn slide_conveyor_belt(
         tracker.open_doors_next = true;
     }
     if close_door {
+        commands.run_system_cached(new_cage_on_conveyor);
         for (door, pos, flags, _is_on_conveyor) in doors.iter() {
             if (!closed_door_query.contains(flags.species_flags)
                 && !closed_door_query.contains(flags.effects_flags))

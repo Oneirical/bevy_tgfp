@@ -24,7 +24,10 @@ use crate::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{is_soul_cage_room, manhattan_distance, spawn_cage, FaithsEnd, Map, Position},
+    map::{
+        is_soul_cage_room, manhattan_distance, spawn_cage, ConveyorTracker, FaithsEnd, Map,
+        Position,
+    },
     sets::ControlState,
     spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
     ui::{
@@ -709,9 +712,6 @@ pub fn assign_species_components(
     for (flags, species) in changed_species.iter() {
         let mut new_creature = commands.entity(flags.species_flags);
         match species {
-            Species::Player => {
-                new_creature.insert(Intangible);
-            }
             Species::Trap => {
                 new_creature.insert((
                     Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
@@ -1819,72 +1819,80 @@ fn stop_possessing_creature(
 }
 
 fn room_circulation_check(
-    awake_creatures: Query<&Awake>,
-    sleeping_creatures: Query<Entity, With<Sleeping>>,
-    mut faiths_end: ResMut<FaithsEnd>,
+    awake_creatures: Query<&Position, With<Awake>>,
+    sleeping_creatures: Query<(Entity, &Position), With<Sleeping>>,
     player_position: Query<&Position, With<Player>>,
-    flags_query: Query<(Entity, &CreatureFlags)>,
+    flags_query: Query<(Entity, &CreatureFlags), With<ConveyorBelt>>,
     open_door_query: Query<&Door, With<Intangible>>,
     mut open: EventWriter<OpenCloseDoor>,
-    mut respawn: EventWriter<RespawnPlayer>,
     mut status_effect: EventWriter<AddStatusEffect>,
-    mut learn: EventWriter<LearnNewAxiom>,
-    mut loot: ResMut<BagOfLoot>,
     mut commands: Commands,
+    mut tracker: ResMut<ConveyorTracker>,
 ) {
-    // Victory check.
-    if sleeping_creatures.is_empty() && awake_creatures.is_empty() {
-        respawn.send(RespawnPlayer { victorious: true });
-    }
-    // If the player has cleared a cage inside of faith's end, awaken all the
-    // creatures in the next cage.
-    else if let Some((mut boundary_a, mut boundary_b)) = faiths_end
-        .cage_dimensions
-        .get(&(faiths_end.current_cage + 1))
+    let (boundary_a, boundary_b) = (Position::new(27, 24), Position::new(33, 30));
+    if player_position
+        .get_single()
+        .unwrap()
+        .is_within_range(&boundary_a, &boundary_b)
     {
-        boundary_a.shift(1, 1);
-        boundary_b.shift(-1, -1);
-        if awake_creatures.is_empty()
-            && player_position
-                .get_single()
-                .unwrap()
-                .is_within_range(&boundary_a, &boundary_b)
-        {
-            faiths_end.current_cage += 1;
-            if is_soul_cage_room(faiths_end.current_cage) {
-                let extracted_axioms = loot.extract_axioms();
-                for axiom in extracted_axioms {
-                    learn.send(LearnNewAxiom { axiom });
-                }
+        let mut creature_left_in_the_room = false;
+
+        for (sleeping_entity, pos) in sleeping_creatures.iter() {
+            commands.entity(sleeping_entity).insert(Awake);
+            commands.entity(sleeping_entity).remove::<Sleeping>();
+            // Give one turn for the player to act.
+            // This also prevents them from immediately moving
+            // inside the closing doors.
+            commands
+                .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
+                .insert(Dizzy);
+            status_effect.send(AddStatusEffect {
+                entity: sleeping_entity,
+                effect: StatusEffect::Dizzy,
+                potency: 1,
+                stacks: EffectDuration::Finite { stacks: 1 },
+                culprit: sleeping_entity,
+            });
+            if pos.is_within_range(&boundary_a, &boundary_b) {
+                creature_left_in_the_room = true;
             }
-            for (door, flags) in flags_query.iter() {
-                if open_door_query.contains(flags.species_flags)
-                    || open_door_query.contains(flags.effects_flags)
-                {
-                    open.send(OpenCloseDoor {
-                        entity: door,
-                        open: false,
-                    });
-                }
+        }
+        for pos in awake_creatures.iter() {
+            if pos.is_within_range(&boundary_a, &boundary_b) {
+                creature_left_in_the_room = true;
             }
-            for sleeping_entity in sleeping_creatures.iter() {
-                commands.entity(sleeping_entity).insert(Awake);
-                commands.entity(sleeping_entity).remove::<Sleeping>();
-                // Give one turn for the player to act.
-                // This also prevents them from immediately moving
-                // inside the closing doors.
-                commands
-                    .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
-                    .insert(Dizzy);
-                status_effect.send(AddStatusEffect {
-                    entity: sleeping_entity,
-                    effect: StatusEffect::Dizzy,
-                    potency: 1,
-                    stacks: EffectDuration::Finite { stacks: 1 },
-                    culprit: sleeping_entity,
+        }
+        if !creature_left_in_the_room {
+            return;
+        }
+        for (door, flags) in flags_query.iter() {
+            if open_door_query.contains(flags.species_flags)
+                || open_door_query.contains(flags.effects_flags)
+            {
+                open.send(OpenCloseDoor {
+                    entity: door,
+                    open: false,
                 });
             }
         }
+    }
+    let (boundary_a, boundary_b) = (Position::new(25, 22), Position::new(35, 32));
+    if !player_position
+        .get_single()
+        .unwrap()
+        .is_within_range(&boundary_a, &boundary_b)
+    {
+        for (_, pos) in sleeping_creatures.iter() {
+            if pos.is_within_range(&boundary_a, &boundary_b) {
+                return;
+            }
+        }
+        for pos in awake_creatures.iter() {
+            if pos.is_within_range(&boundary_a, &boundary_b) {
+                return;
+            }
+        }
+        tracker.open_doors_next = false;
     }
 }
 

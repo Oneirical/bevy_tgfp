@@ -7,7 +7,7 @@ use bevy::{
 };
 use rand::{thread_rng, Rng};
 
-use crate::{creature::Player, map::Position, TILE_SIZE};
+use crate::{creature::Player, events::DoorPanel, map::Position, TILE_SIZE};
 
 pub struct GraphicsPlugin;
 
@@ -166,13 +166,14 @@ pub fn adjust_transforms(
         &mut Transform,
         Has<SlideAnimation>,
         Has<Player>,
+        Has<DoorPanel>,
     )>,
     mut camera: Query<&mut Transform, (With<Camera>, Without<Position>)>,
     time: Res<Time>,
     mut commands: Commands,
     mut screenshake: ResMut<Screenshake>,
 ) {
-    for (entity, pos, mut trans, is_animated, is_player) in creatures.iter_mut() {
+    for (entity, pos, mut trans, is_animated, is_player, is_door_panel) in creatures.iter_mut() {
         // If this creature is affected by an animation...
         if is_animated {
             // The sprite approaches its destination.
@@ -195,6 +196,9 @@ pub fn adjust_transforms(
                 commands.entity(entity).remove::<SlideAnimation>();
             }
         } else {
+            if is_door_panel {
+                commands.entity(entity).despawn();
+            }
             // For creatures with no animation.
             // Multiplied by the graphical size of a tile, which is TILE_SIZE.
             trans.translation.x = pos.x as f32 * TILE_SIZE;
