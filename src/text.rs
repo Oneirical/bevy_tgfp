@@ -12,6 +12,7 @@ use bevy::{
 
 use crate::{
     creature::{EffectDuration, Soul, Species, StatusEffect},
+    quests::Quest,
     spells::Axiom,
 };
 
@@ -66,6 +67,9 @@ pub const LORE: &[&str] = &[
 "[o]Rebuild the Flesh of Old\n[o]Function[w]\n\nOn all passable [r]Targets[w], summon a hostile [l]Scion of the Old World[w].\n\n[p]@A ruin is the final state of an idea - the data has crystallized into matter, latched itself into the material like a tick - and once all the praise has been drained out, it leaves itself at the mercy of passing hours.",
 "[^]Soaked Tails Trail Across The Soil\n[o]Function[w]\n\nAll [r]Targeted Creatures[w] receive [^]Magnetic [y]I[w] for [y]10[w] turns.\n\n[^]Magnetic[w]: This creature attaches [a]Ramparts of Nacre[w] to its tail as it moves.\n\n[p]@An ideology first and foremost has a demographic. Invisible chains unite tribes, and it is by tugging at them that ideas get injected.",
 "[s]Zenorium, Who Dreams of Broken Hierarchies\n[o]Function[w]\n\nThe first [r]Targeted Creature[w] receives [s]Possessed [y]I[w] for [y]10[w] turns. [s]Possessed[w]: You may control this creature while your body stays behind.\n\n[p]@In Zenorium's dream of a truly equal society, each body is but a temporary refuge, and each soul would come to know the pride of commanding an Ordered garrison, the delight in using Vile business tactics, the brutality of Feral infighting and the illumination that comes with Sainthood - all in a single day.",
+"[l]A Tingling in the Soul\n[y]Reward: [b]Haughty as the Saints Were[w]\n\nEnter the [a]Mnemonic Quarry[w] to complete this research node.\n\n[p]@There is no mistaking that strange buzzing in my brain. This cycle has ended. My pilgrimage begins.",
+"[m]Wear Beings Like Costumes\n[y]Reward: [m]False Charms and Pretend Affection[w]\n\nCast a spell using the [a]Soul Wheel[w] to complete this research node.\n\n[p]@Ideology, identity, values... As malleable as soft clay. I choose to not be myself for a half-second, and gain a taste of the glorious annihilation awaiting me at the end of this pilgrimage.",
+"[c]Herald of the New World\n[y]Reward: [a]Share the Fruits of Faith[w]\n\nInteract with the Herald of the New World to complete this research node.\n\n[p]@I have waited for far too long an apocalypse that refused to come. I lust to learn what has become of the outside world, and this Herald is my key.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -165,6 +169,14 @@ pub fn match_axiom_with_description(axiom: &Axiom) -> &str {
             stacks: EffectDuration::Finite { stacks: 10 },
         } => 47,
         _ => 0,
+    }]
+}
+
+pub fn match_quest_with_description(quest: &Quest) -> &str {
+    LORE[match quest {
+        Quest::Intro => 48,
+        Quest::Spellcast => 49,
+        Quest::Herald => 50,
     }]
 }
 

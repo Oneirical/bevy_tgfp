@@ -728,27 +728,53 @@ fn setup(
                                     },
                                 ));
                         });
-                    parent.spawn((
-                        ChainBox,
-                        LargeQuestPanel { selected: None },
-                        QuestBox,
-                        Visibility::Hidden,
-                        Node {
-                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
-                            height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
-                            min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
-                            max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
-                            min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
-                            max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
-                            border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
-                            right: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                            position_type: PositionType::Absolute,
-                            align_items: AlignItems::Center,
-                            justify_items: JustifyItems::Center,
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0., 0., 0.)),
-                    ));
+                    parent
+                        .spawn((
+                            ChainBox,
+                            LargeQuestPanel { selected: None },
+                            QuestBox,
+                            Visibility::Hidden,
+                            Node {
+                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                                border: UiRect::new(
+                                    Val::Px(0.),
+                                    Val::Px(2.),
+                                    Val::Px(2.),
+                                    Val::Px(0.),
+                                ),
+                                right: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                                position_type: PositionType::Absolute,
+                                ..default()
+                            },
+                            BackgroundColor(Color::srgb(0., 0., 0.)),
+                        ))
+                        .with_children(|parent| {
+                            for _i in 0..3 {
+                                parent.spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: 0,
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    Node {
+                                        width: Val::Px(4.),
+                                        height: Val::Px(4.),
+                                        left: Val::Px(1.),
+                                        top: Val::Px(1.),
+                                        ..default()
+                                    },
+                                ));
+                            }
+                        });
+
                     parent
                         .spawn((
                             ChainBox,

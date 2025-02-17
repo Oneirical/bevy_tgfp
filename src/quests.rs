@@ -5,6 +5,13 @@ use crate::{
     ui::{AxiomBox, MessageLog, QuestBox, RecipebookUI},
 };
 
+#[derive(Component)]
+pub enum Quest {
+    Intro,
+    Herald,
+    Spellcast,
+}
+
 pub fn show_quest_menu(
     mut set: ParamSet<(
         Query<&mut Visibility, With<MessageLog>>,
