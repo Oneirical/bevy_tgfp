@@ -16,8 +16,8 @@ impl Plugin for GraphicsPlugin {
         app.init_resource::<SpriteSheetAtlas>();
         app.add_event::<PlaceMagicVfx>();
         app.add_systems(Startup, setup_camera);
-        app.add_systems(Startup, spawn_portal);
-        app.add_systems(Update, adjust_portals);
+        // app.add_systems(Startup, spawn_portal);
+        // app.add_systems(Update, adjust_portals);
         app.insert_resource(Screenshake { intensity: 0 });
     }
 }
@@ -188,9 +188,9 @@ pub fn adjust_transforms(
                 + (target_translation.y - current_translation.y).abs())
                 > 0.05
             {
-                trans.translation = trans
+                trans
                     .translation
-                    .lerp(target_translation, 10. * time.delta_secs());
+                    .smooth_nudge(&target_translation, 10., time.delta_secs());
             // Otherwise, the animation is over - clip the creature onto the grid.
             } else {
                 commands.entity(entity).remove::<SlideAnimation>();

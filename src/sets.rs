@@ -22,9 +22,10 @@ use crate::{
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
     map::{register_creatures, ConveyorTracker},
+    quests::{hide_quest_menu, show_quest_menu},
     spells::{
         cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
-        AntiContingencyLoop, Axiom,
+        AntiContingencyLoop,
     },
     ui::{
         decay_fading_title, despawn_fading_title, dispense_sliding_components_log,
@@ -41,6 +42,8 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnExit(ControlState::Cursor), despawn_cursor);
         app.add_systems(OnEnter(ControlState::CasteMenu), show_caste_menu);
         app.add_systems(OnExit(ControlState::CasteMenu), hide_caste_menu);
+        app.add_systems(OnEnter(ControlState::QuestMenu), show_quest_menu);
+        app.add_systems(OnExit(ControlState::QuestMenu), hide_quest_menu);
         app.add_systems(Update, magnetize_tail_segments.before(teleport_entity));
         app.add_systems(Update, magnet_follow.after(teleport_entity));
         app.add_systems(Update, take_or_drop_soul.after(stepped_on_tile));
@@ -167,4 +170,5 @@ pub enum ControlState {
     Player,
     Cursor,
     CasteMenu,
+    QuestMenu,
 }

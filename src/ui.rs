@@ -578,6 +578,20 @@ fn setup(
                                 },
                                 Visibility::Hidden,
                             ));
+                            parent.spawn((
+                                QuestBox,
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
+                                    height: Val::Px(23.),
+                                    left: Val::Px(0.5),
+                                    min_height: Val::Px(23.),
+                                    max_height: Val::Px(23.),
+                                    overflow: Overflow::clip(),
+                                    position_type: PositionType::Absolute,
+                                    ..default()
+                                },
+                                Visibility::Hidden,
+                            ));
                         });
                     parent
                         .spawn((
@@ -649,7 +663,7 @@ fn setup(
                                     Node {
                                         width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
                                         height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        left: Val::Px(8.5),
+                                        left: Val::Px(6.5),
                                         top: Val::Px(0.5),
                                         ..default()
                                     },
@@ -674,7 +688,67 @@ fn setup(
                                         ..default()
                                     },
                                 ));
+
+                            parent
+                                .spawn((
+                                    ImageNode {
+                                        image: asset_server.load("spritesheet.png"),
+                                        texture_atlas: Some(TextureAtlas {
+                                            layout: atlas_layout.handle.clone(),
+                                            index: 227,
+                                        }),
+                                        ..Default::default()
+                                    },
+                                    Node {
+                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                        left: Val::Px(12.5),
+                                        top: Val::Px(0.5),
+                                        ..default()
+                                    },
+                                ))
+                                .with_child((
+                                    Text::new("Q"),
+                                    TextLayout {
+                                        justify: JustifyText::Center,
+                                        linebreak: LineBreak::NoWrap,
+                                    },
+                                    TextColor(Color::WHITE),
+                                    TextFont {
+                                        font: asset_server.load("fonts/Play-Regular.ttf"),
+                                        font_size: 1.5,
+                                        ..default()
+                                    },
+                                    Label,
+                                    Node {
+                                        left: Val::Px(4.1),
+                                        top: Val::Px(1.),
+                                        position_type: PositionType::Absolute,
+                                        ..default()
+                                    },
+                                ));
                         });
+                    parent.spawn((
+                        ChainBox,
+                        LargeQuestPanel { selected: None },
+                        QuestBox,
+                        Visibility::Hidden,
+                        Node {
+                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                            height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                            min_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                            max_width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                            min_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                            max_height: Val::Px(SOUL_WHEEL_CONTAINER_SIZE + 32.),
+                            border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
+                            right: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                            position_type: PositionType::Absolute,
+                            align_items: AlignItems::Center,
+                            justify_items: JustifyItems::Center,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0., 0., 0.)),
+                    ));
                     parent
                         .spawn((
                             ChainBox,
@@ -1014,6 +1088,15 @@ pub struct LargeCastePanel {
     pub selected_column: CastePanelColumn,
     pub selected_row: CastePanelRow,
 }
+
+#[derive(Component)]
+pub struct LargeQuestPanel {
+    pub selected: Option<usize>,
+}
+
+#[derive(Component)]
+/// To describe what Quests do in the text box
+pub struct QuestBox;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum CastePanelColumn {

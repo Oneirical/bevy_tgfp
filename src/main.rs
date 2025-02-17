@@ -6,6 +6,7 @@ mod events;
 mod graphics;
 mod input;
 mod map;
+mod quests;
 mod sets;
 mod spells;
 mod text;

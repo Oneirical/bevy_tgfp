@@ -84,6 +84,7 @@ pub fn keyboard_input(
                 let column = caste_menu.selected_column;
                 caste_menu.selected_row.shift(-1, &column);
             }
+            ControlState::QuestMenu => (),
         }
     }
     if input.just_pressed(KeyCode::ArrowRight) || input.just_pressed(KeyCode::KeyD) {
@@ -117,6 +118,7 @@ pub fn keyboard_input(
                     caste_menu.selected_row = CastePanelRow::Top;
                 }
             }
+            ControlState::QuestMenu => (),
         }
     }
     if input.just_pressed(KeyCode::ArrowLeft) || input.just_pressed(KeyCode::KeyA) {
@@ -150,6 +152,7 @@ pub fn keyboard_input(
                     caste_menu.selected_row = CastePanelRow::Top;
                 }
             }
+            ControlState::QuestMenu => (),
         }
     }
     if input.just_pressed(KeyCode::ArrowDown) || input.just_pressed(KeyCode::KeyS) {
@@ -172,6 +175,7 @@ pub fn keyboard_input(
                 let column = caste_menu.selected_column;
                 caste_menu.selected_row.shift(1, &column);
             }
+            ControlState::QuestMenu => (),
         }
     }
     if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {
@@ -188,6 +192,12 @@ pub fn keyboard_input(
         match state.get() {
             ControlState::CasteMenu => next_state.set(ControlState::Player),
             _ => next_state.set(ControlState::CasteMenu),
+        }
+    }
+    if input.just_pressed(KeyCode::KeyQ) {
+        match state.get() {
+            ControlState::QuestMenu => next_state.set(ControlState::Player),
+            _ => next_state.set(ControlState::QuestMenu),
         }
     }
 
