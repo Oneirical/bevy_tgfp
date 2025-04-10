@@ -86,6 +86,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_function_dash),
         );
         axioms.library.insert(
+            discriminant(&Axiom::TeleportDash { distance: 1 }),
+            world.register_system(axiom_function_teleport_dash),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::SummonCreature {
                 species: Species::Player,
             }),
@@ -161,6 +165,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_mutator_terminate),
         );
         axioms.library.insert(
+            discriminant(&Axiom::DisableVfx),
+            world.register_system(axiom_mutator_disable_vfx),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::TerminateIfCounter {
                 condition: CounterCondition::LessThan,
                 threshold: 0,
@@ -205,6 +213,20 @@ pub struct TriggerContingency {
     pub contingency: Axiom,
 }
 
+pub fn tick_time_contingency(
+    mut contingency: EventWriter<TriggerContingency>,
+    creatures: Query<(Entity, &Position), With<CreatureFlags>>,
+) {
+    let mut creatures = creatures.iter().collect::<Vec<(Entity, &Position)>>();
+    creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
+    for (creature, _) in creatures.iter() {
+        contingency.send(TriggerContingency {
+            caster: *creature,
+            contingency: Axiom::WhenTimePasses,
+        });
+    }
+}
+
 pub fn trigger_contingency(
     mut events: EventReader<TriggerContingency>,
     spellbook: Query<&Spellbook>,
@@ -214,9 +236,10 @@ pub fn trigger_contingency(
     for event in events.read() {
         if let Ok(spellbook) = spellbook.get(event.caster) {
             for (soul, spell) in spellbook.spells.iter() {
-                if loop_protection
-                    .contingencies_this_turn
-                    .contains(&(event.caster, event.contingency.clone()))
+                if event.contingency != Axiom::WhenTimePasses
+                    && loop_protection
+                        .contingencies_this_turn
+                        .contains(&(event.caster, event.contingency.clone()))
                 {
                     // Do not allow infinite contingency loops
                     // (such as, "when dealing damage, deal damage")
@@ -277,6 +300,8 @@ pub enum Axiom {
     WhenDealingDamage,
     // Triggers when this creature takes damage.
     WhenTakingDamage,
+    // Triggers every 0.2 seconds.
+    WhenTimePasses,
 
     // FORMS
     /// Target the caster's tile.
@@ -305,6 +330,10 @@ pub enum Axiom {
     /// The targeted creatures dash in the direction of the caster's last move.
     Dash {
         max_distance: i32,
+    },
+    /// Offset targeted creatures' position in the direction of the caster's last move.
+    TeleportDash {
+        distance: i32,
     },
     /// The targeted passable tiles summon a new instance of species.
     SummonCreature {
@@ -371,6 +400,8 @@ pub enum Axiom {
     },
     // End this spell.
     Terminate,
+    /// Block visual magic effects from being drawn to the screen.
+    DisableVfx,
     /// Only once, loop backwards `steps` in the axiom queue.
     LoopBack {
         steps: usize,
@@ -446,6 +477,8 @@ pub enum SynapseFlag {
     PiercingBeams,
     /// A Counter, to go in tandem with TerminateIfCounter
     Counter { count: i32 },
+    /// Block visual magic effects from being drawn to the screen.
+    DisableVfx,
 }
 
 pub fn cast_new_spell(
@@ -480,13 +513,18 @@ fn axiom_form_ego(
     // Get the caster's position.
     let caster_position = *position.get(synapse_data.caster).unwrap();
     // Place the visual effect.
-    magic_vfx.send(PlaceMagicVfx {
-        targets: vec![caster_position],
-        sequence: EffectSequence::Sequential { duration: 0.04 },
-        effect: EffectType::RedBlast,
-        decay: 0.5,
-        appear: 0.,
-    });
+    if !synapse_data
+        .synapse_flags
+        .contains(&SynapseFlag::DisableVfx)
+    {
+        magic_vfx.send(PlaceMagicVfx {
+            targets: vec![caster_position],
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::RedBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+    }
     // Add that caster's position to the targets.
     synapse_data.targets.insert(caster_position);
 }
@@ -503,13 +541,18 @@ fn axiom_form_player(
     // Get the caster's position.
     let player_position = *position.get_single().unwrap();
     // Place the visual effect.
-    magic_vfx.send(PlaceMagicVfx {
-        targets: vec![player_position],
-        sequence: EffectSequence::Sequential { duration: 0.04 },
-        effect: EffectType::RedBlast,
-        decay: 0.5,
-        appear: 0.,
-    });
+    if !synapse_data
+        .synapse_flags
+        .contains(&SynapseFlag::DisableVfx)
+    {
+        magic_vfx.send(PlaceMagicVfx {
+            targets: vec![player_position],
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::RedBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+    }
     // Add that caster's position to the targets.
     synapse_data.targets.insert(player_position);
 }
@@ -531,13 +574,18 @@ fn axiom_form_plus(
         new_pos.shift(offset.0, offset.1);
         output.push(new_pos);
     }
-    magic_vfx.send(PlaceMagicVfx {
-        targets: output.clone(),
-        sequence: EffectSequence::Sequential { duration: 0.04 },
-        effect: EffectType::GreenBlast,
-        decay: 0.5,
-        appear: 0.,
-    });
+    if !synapse_data
+        .synapse_flags
+        .contains(&SynapseFlag::DisableVfx)
+    {
+        magic_vfx.send(PlaceMagicVfx {
+            targets: output.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::GreenBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+    }
     synapse_data.targets.extend(&output);
 }
 
@@ -587,6 +635,7 @@ fn axiom_function_dash(
                     TeleportEntity {
                         destination: final_dash_destination,
                         entity: dasher,
+                        culprit: synapse_data.caster,
                     },
                     spell_idx,
                 ),
@@ -595,6 +644,49 @@ fn axiom_function_dash(
     } else {
         // This should NEVER trigger. This system was chosen to run because the
         // next axiom in the SpellStack explicitly requested it by being an Axiom::Dash.
+        panic!()
+    }
+}
+
+/// Offset targeted creatures' position by dx, dy.
+fn axiom_function_teleport_dash(
+    In(spell_idx): In<usize>,
+    library: Res<AxiomLibrary>,
+    mut commands: Commands,
+    map: Res<Map>,
+    spell_stack: Res<SpellStack>,
+    momentum: Query<&OrdDir>,
+    spellproof_query: Query<&Spellproof>,
+    flags: Query<&CreatureFlags>,
+) {
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
+    let caster_momentum = momentum.get(synapse_data.caster).unwrap();
+    if let Axiom::TeleportDash { distance } = synapse_data.axioms[synapse_data.step] {
+        // For each (Entity, Position) on a targeted tile with a creature on it...
+        for (entity, entity_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
+            // Spellproof entities cannot be affected.
+            if is_spellproof(entity, &flags, &spellproof_query) {
+                continue;
+            }
+            let (off_x, off_y) = caster_momentum.as_offset();
+            commands.run_system_with_input(
+                library.teleport,
+                (
+                    TeleportEntity {
+                        destination: Position::new(
+                            entity_pos.x + off_x * distance,
+                            entity_pos.y + off_y * distance,
+                        ),
+                        entity,
+                        culprit: synapse_data.caster,
+                    },
+                    spell_idx,
+                ),
+            );
+        }
+    } else {
+        // This should NEVER trigger. This system was chosen to run because the
+        // next axiom in the SpellStack explicitly requested it by being an Axiom::Teleport.
         panic!()
     }
 }
@@ -628,16 +720,21 @@ fn axiom_form_momentum_beam(
         (&flags, &spellproof_query),
     );
     // Add some visual beam effects.
-    magic_vfx.send(PlaceMagicVfx {
-        targets: output.clone(),
-        sequence: EffectSequence::Sequential { duration: 0.04 },
-        effect: match caster_momentum {
-            OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
-            OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
-        },
-        decay: 0.5,
-        appear: 0.,
-    });
+    if !synapse_data
+        .synapse_flags
+        .contains(&SynapseFlag::DisableVfx)
+    {
+        magic_vfx.send(PlaceMagicVfx {
+            targets: output.clone(),
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: match caster_momentum {
+                OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
+                OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
+            },
+            decay: 0.5,
+            appear: 0.,
+        });
+    }
     // Add these tiles to `targets`.
     synapse_data.targets.extend(&output);
 }
@@ -671,13 +768,18 @@ fn axiom_form_xbeam(
             (&flags, &spellproof_query),
         );
         // Add some visual beam effects.
-        magic_vfx.send(PlaceMagicVfx {
-            targets: output.clone(),
-            sequence: EffectSequence::Sequential { duration: 0.04 },
-            effect: EffectType::RedBlast,
-            decay: 0.5,
-            appear: 0.,
-        });
+        if !synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::DisableVfx)
+        {
+            magic_vfx.send(PlaceMagicVfx {
+                targets: output.clone(),
+                sequence: EffectSequence::Sequential { duration: 0.04 },
+                effect: EffectType::RedBlast,
+                decay: 0.5,
+                appear: 0.,
+            });
+        }
         // Add these tiles to `targets`.
         synapse_data.targets.extend(&output);
     }
@@ -713,16 +815,21 @@ fn axiom_form_plus_beam(
             (&flags, &spellproof_query),
         );
         // Add some visual beam effects.
-        magic_vfx.send(PlaceMagicVfx {
-            targets: output.clone(),
-            sequence: EffectSequence::Sequential { duration: 0.04 },
-            effect: match cardinal {
-                OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
-                OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
-            },
-            decay: 0.5,
-            appear: 0.,
-        });
+        if !synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::DisableVfx)
+        {
+            magic_vfx.send(PlaceMagicVfx {
+                targets: output.clone(),
+                sequence: EffectSequence::Sequential { duration: 0.04 },
+                effect: match cardinal {
+                    OrdDir::Up | OrdDir::Down => EffectType::VerticalBeam,
+                    OrdDir::Right | OrdDir::Left => EffectType::HorizontalBeam,
+                },
+                decay: 0.5,
+                appear: 0.,
+            });
+        }
         // Add these tiles to `targets`.
         synapse_data.targets.extend(&output);
     }
@@ -741,13 +848,18 @@ fn axiom_form_touch(
     let (off_x, off_y) = caster_momentum.as_offset();
     let touch = Position::new(caster_position.x + off_x, caster_position.y + off_y);
     synapse_data.targets.insert(touch);
-    magic_vfx.send(PlaceMagicVfx {
-        targets: vec![touch],
-        sequence: EffectSequence::Sequential { duration: 0.04 },
-        effect: EffectType::RedBlast,
-        decay: 0.5,
-        appear: 0.,
-    });
+    if !synapse_data
+        .synapse_flags
+        .contains(&SynapseFlag::DisableVfx)
+    {
+        magic_vfx.send(PlaceMagicVfx {
+            targets: vec![touch],
+            sequence: EffectSequence::Sequential { duration: 0.04 },
+            effect: EffectType::RedBlast,
+            decay: 0.5,
+            appear: 0.,
+        });
+    }
 }
 
 /// Target a ring of `radius` around the caster.
@@ -768,13 +880,18 @@ fn axiom_form_halo(
             angle_a.partial_cmp(&angle_b).unwrap()
         });
         // Add some visual halo effects.
-        magic_vfx.send(PlaceMagicVfx {
-            targets: circle.clone(),
-            sequence: EffectSequence::Sequential { duration: 0.04 },
-            effect: EffectType::GreenBlast,
-            decay: 0.5,
-            appear: 0.,
-        });
+        if !synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::DisableVfx)
+        {
+            magic_vfx.send(PlaceMagicVfx {
+                targets: circle.clone(),
+                sequence: EffectSequence::Sequential { duration: 0.04 },
+                effect: EffectType::GreenBlast,
+                decay: 0.5,
+                appear: 0.,
+            });
+        }
         // Add these tiles to `targets`.
         synapse_data.targets.extend(&circle);
     } else {
@@ -877,6 +994,12 @@ fn axiom_mutator_terminate_if_counter(
 fn axiom_mutator_terminate(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+}
+
+/// Disable all visual magic effects.
+fn axiom_mutator_disable_vfx(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    synapse_data.synapse_flags.insert(SynapseFlag::DisableVfx);
 }
 
 /// Any targeted creature with the Wall component is removed.
@@ -1132,13 +1255,18 @@ fn axiom_mutator_spread(
     }
     // All upwards, then all rightwards, etc, for a consistent animation effect.
     for ord_dir_vec in output {
-        magic_vfx.send(PlaceMagicVfx {
-            targets: ord_dir_vec.clone(),
-            sequence: EffectSequence::Sequential { duration: 0.04 },
-            effect: EffectType::RedBlast,
-            decay: 0.5,
-            appear: 0.,
-        });
+        if !synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::DisableVfx)
+        {
+            magic_vfx.send(PlaceMagicVfx {
+                targets: ord_dir_vec.clone(),
+                sequence: EffectSequence::Sequential { duration: 0.04 },
+                effect: EffectType::RedBlast,
+                decay: 0.5,
+                appear: 0.,
+            });
+        }
         synapse_data.targets.extend(&ord_dir_vec);
     }
 }
@@ -1223,6 +1351,7 @@ fn axiom_function_force_cast(
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
 }
 
+/// This is required for effects such as Trace.
 fn teleport_transmission(
     In((teleport_event, spell_idx)): In<(TeleportEntity, usize)>,
     position: Query<&Position>,
@@ -1239,13 +1368,18 @@ fn teleport_transmission(
             output.pop();
             output.remove(0);
             // Add some visual beam effects.
-            magic_vfx.send(PlaceMagicVfx {
-                targets: output.clone(),
-                sequence: EffectSequence::Sequential { duration: 0.04 },
-                effect: EffectType::RedBlast,
-                decay: 0.5,
-                appear: 0.,
-            });
+            if !synapse_data
+                .synapse_flags
+                .contains(&SynapseFlag::DisableVfx)
+            {
+                magic_vfx.send(PlaceMagicVfx {
+                    targets: output.clone(),
+                    sequence: EffectSequence::Sequential { duration: 0.04 },
+                    effect: EffectType::RedBlast,
+                    decay: 0.5,
+                    appear: 0.,
+                });
+            }
             // Add these tiles to `targets`.
             synapse_data.targets.extend(&output);
         }

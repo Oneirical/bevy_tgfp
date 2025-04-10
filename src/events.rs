@@ -17,8 +17,9 @@ use crate::{
         Charm, ConveyorBelt, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
         Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile,
         Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed,
-        Possessing, PotencyAndStacks, Random, Sleeping, Soul, Species, Speed, SpellLibrary,
-        Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping, Soul, Species,
+        Speed, SpellLibrary, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList,
+        Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -44,6 +45,7 @@ impl Plugin for EventPlugin {
         app.add_event::<SummonCreature>();
         app.init_resource::<Events<EndTurn>>();
         app.add_event::<TeleportEntity>();
+        app.add_event::<TeleportExecution>();
         app.add_event::<TransformCreature>();
         app.add_event::<SteppedOnTile>();
         app.add_event::<CreatureCollision>();
@@ -714,16 +716,47 @@ pub fn assign_species_components(
         match species {
             Species::Trap => {
                 new_creature.insert((
-                    Meleeproof, Spellproof, Intangible, Fragile, Invincible, NoDropSoul,
+                    Meleeproof,
+                    RealityShield(1),
+                    Intangible,
+                    Fragile,
+                    Invincible,
+                    NoDropSoul,
+                ));
+            }
+            Species::ConveyorBelt => {
+                new_creature.insert((
+                    Meleeproof,
+                    Intangible,
+                    Invincible,
+                    NoDropSoul,
+                    RealityBreak(5),
+                    RealityShield(5),
+                ));
+            }
+            Species::Grinder => {
+                new_creature.insert((
+                    Meleeproof,
+                    Intangible,
+                    Invincible,
+                    NoDropSoul,
+                    RealityBreak(5),
+                    RealityShield(5),
                 ));
             }
             Species::CageBorder => {
-                new_creature.insert((Meleeproof, Spellproof, Intangible, Invincible, NoDropSoul));
+                new_creature.insert((
+                    Meleeproof,
+                    RealityShield(6),
+                    Intangible,
+                    Invincible,
+                    NoDropSoul,
+                ));
             }
             Species::CageSlot => {
                 new_creature.insert((
                     Meleeproof,
-                    Spellproof,
+                    RealityShield(6),
                     Intangible,
                     Invincible,
                     NoDropSoul,
@@ -731,13 +764,27 @@ pub fn assign_species_components(
                 ));
             }
             Species::Wall => {
-                new_creature.insert((Meleeproof, Spellproof, Wall, Invincible, Dizzy, NoDropSoul));
+                new_creature.insert((
+                    Meleeproof,
+                    RealityShield(1),
+                    Wall,
+                    Invincible,
+                    Dizzy,
+                    NoDropSoul,
+                ));
             }
             Species::WeakWall => {
                 new_creature.insert((Meleeproof, Wall, Invincible, Dizzy, NoDropSoul));
             }
             Species::Airlock => {
-                new_creature.insert((Meleeproof, Spellproof, Door, Invincible, Dizzy, NoDropSoul));
+                new_creature.insert((
+                    Meleeproof,
+                    RealityShield(1),
+                    Door,
+                    Invincible,
+                    Dizzy,
+                    NoDropSoul,
+                ));
             }
             Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
                 new_creature.insert(Hunt);
@@ -939,6 +986,13 @@ pub fn magnetize_tail_segments(
 pub struct TeleportEntity {
     pub destination: Position,
     pub entity: Entity,
+    pub culprit: Entity,
+}
+
+#[derive(Event)]
+pub struct TeleportExecution {
+    pub destination: Position,
+    pub entity: Entity,
 }
 
 impl TeleportEntity {
@@ -946,36 +1000,108 @@ impl TeleportEntity {
         Self {
             destination: Position::new(x, y),
             entity,
+            culprit: entity,
         }
     }
 }
 
 pub fn teleport_entity(
     mut events: EventReader<TeleportEntity>,
-    mut creature: Query<(&mut Position, &CreatureFlags)>,
-    intangible_query: Query<&Intangible>,
+    position: Query<&Position>,
+    flags: Query<&CreatureFlags>,
     immobile_query: Query<&Immobile>,
+    shield_query: Query<&RealityShield>,
+    break_query: Query<&RealityBreak>,
+    mut execution: EventWriter<TeleportExecution>,
+) {
+    if events.is_empty() {
+        return;
+    }
+
+    // --- Phase 1: Collect all needed data upfront ---
+    let mut proposals: Vec<_> = events
+        .read()
+        .filter_map(|event| {
+            let creature_flags = flags.get(event.entity).ok()?;
+            let culprit_flags = flags.get(event.culprit).ok()?;
+            let current_pos = position.get(event.entity).ok()?;
+
+            // Early immobility check
+            let is_immobile = immobile_query.contains(creature_flags.species_flags)
+                || immobile_query.contains(creature_flags.effects_flags);
+            let reality_shield = shield_query
+                .get(creature_flags.species_flags)
+                .or(shield_query.get(creature_flags.effects_flags))
+                .unwrap_or(&RealityShield(0))
+                .0;
+            let reality_break = break_query
+                .get(culprit_flags.species_flags)
+                .or(break_query.get(culprit_flags.effects_flags))
+                .unwrap_or(&RealityBreak(0))
+                .0;
+
+            if !is_immobile || reality_break > reality_shield {
+                Some((event.entity, *current_pos, event.destination))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // NOTE: This entire block doesn't seem to actually do anything...
+    // let proposals_copy = proposals.clone();
+    // --- Phase 2: Sort using only copied data ---
+    // proposals.sort_by(|a, b| {
+    //     let a_dir = a.2.subtract(&a.1);
+    //     let b_dir = b.2.subtract(&b.1);
+
+    //     // Check if this move would free a tile another move needs
+    //     let a_frees = proposals_copy.iter().any(|p| p.2 == a.1);
+    //     let b_frees = proposals_copy.iter().any(|p| p.2 == b.1);
+
+    //     match (a_frees, b_frees) {
+    //         (true, false) => std::cmp::Ordering::Less,
+    //         (false, true) => std::cmp::Ordering::Greater,
+    //         _ => match (a_dir.x.abs(), b_dir.x.abs()) {
+    //             (0, 0) => a_dir.y.cmp(&b_dir.y),
+    //             _ => a_dir.x.cmp(&b_dir.x),
+    //         }
+    //         .reverse(),
+    //     }
+    // });
+
+    // --- Phase 3: Execute ---
+    for (entity, _, destination) in proposals {
+        execution.send(TeleportExecution {
+            destination,
+            entity,
+        });
+    }
+}
+
+pub fn teleport_execution(
+    mut events: EventReader<TeleportExecution>,
+    flags: Query<&CreatureFlags>,
+    mut position: Query<&mut Position>,
+    intangible_query: Query<&Intangible>,
     magnet_query: Query<&Magnetized>,
     charm_query: Query<&Charm>,
-    mut map: ResMut<Map>,
     mut commands: Commands,
     mut collision: EventWriter<CreatureCollision>,
     mut stepped: EventWriter<SteppedOnTile>,
     mut contingency: EventWriter<TriggerContingency>,
     mut magnet: EventWriter<MagnetFollow>,
+    mut map: ResMut<Map>,
     is_player: Query<Has<Player>>,
 ) {
     for event in events.read() {
-        let (mut creature_position, creature_flags) = creature
-            // Get the Position of the Entity targeted by TeleportEntity.
-            .get_mut(event.entity)
-            .expect("A TeleportEntity was given an invalid entity");
-        let (is_intangible, is_immobile, is_magnetized, is_charmed) = {
+        // Get the Position of the Entity targeted by TeleportEntity.
+        let mut creature_position = position.get_mut(event.entity).unwrap();
+        let creature_flags = flags.get(event.entity).unwrap();
+        let (is_intangible, is_magnetized, is_charmed) = {
             (
                 intangible_query.contains(creature_flags.species_flags)
                     || intangible_query.contains(creature_flags.effects_flags),
-                immobile_query.contains(creature_flags.species_flags)
-                    || immobile_query.contains(creature_flags.effects_flags),
                 magnet_query.contains(creature_flags.species_flags)
                     || magnet_query.contains(creature_flags.effects_flags),
                 charm_query.contains(creature_flags.species_flags)
@@ -983,9 +1109,7 @@ pub fn teleport_entity(
             )
         };
         // If motion is possible...
-        if !is_immobile
-            && (map.is_passable(event.destination.x, event.destination.y) || is_intangible)
-        {
+        if map.is_passable(event.destination.x, event.destination.y) || is_intangible {
             if !is_intangible {
                 // ...update the Map to reflect this...
                 map.move_creature(*creature_position, event.destination);
@@ -1126,6 +1250,7 @@ pub fn magnet_follow(
                 teleport.send(TeleportEntity {
                     destination: *tile,
                     entity: magnet.train[train_idx],
+                    culprit: event.conductor,
                 });
                 train_idx += 1;
                 if train_idx >= magnet.train.len() {
@@ -1654,6 +1779,7 @@ pub fn respawn_player(
         teleport.send(TeleportEntity {
             destination: Position::new(4, 4),
             entity: player,
+            culprit: player,
         });
         // Ensure the player is back to its initial form.
         transform.send(TransformCreature {

@@ -268,6 +268,15 @@ pub struct Immobile;
 #[derive(Component)]
 pub struct NoDropSoul;
 
+/// This creature ignores Immobile when it teleports
+/// others.
+#[derive(Component)]
+pub struct RealityBreak(pub usize);
+
+/// This creature ignores others' RealityBreak.
+#[derive(Component)]
+pub struct RealityShield(pub usize);
+
 #[derive(Component)]
 pub struct Intangible;
 
@@ -307,6 +316,8 @@ pub enum Species {
     CageBorder,
     CageSlot,
     AxiomaticSeal,
+    ConveyorBelt,
+    Grinder,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -330,6 +341,8 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::CageBorder => 108,
         Species::CageSlot => 167,
         Species::AxiomaticSeal => 25,
+        Species::ConveyorBelt => 23,
+        Species::Grinder => 20,
     }
 }
 
@@ -399,6 +412,32 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                 Axiom::HealOrHarm { amount: 1 },
             ]),
             None,
+            None,
+            None,
+            None,
+            None,
+        ]),
+        Species::ConveyorBelt => Spellbook::new([
+            None,
+            Some(vec![
+                Axiom::WhenTimePasses,
+                Axiom::DisableVfx,
+                Axiom::Ego,
+                Axiom::TeleportDash { distance: 1 },
+            ]),
+            None,
+            None,
+            None,
+            None,
+        ]),
+        Species::Grinder => Spellbook::new([
+            None,
+            Some(vec![
+                Axiom::WhenSteppedOn,
+                Axiom::DisableVfx,
+                Axiom::Ego,
+                Axiom::HealOrHarm { amount: 99 },
+            ]),
             None,
             None,
             None,

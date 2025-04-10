@@ -1,4 +1,6 @@
-use bevy::{prelude::*, utils::HashSet};
+use std::time::Duration;
+
+use bevy::{prelude::*, time::common_conditions::on_timer, utils::HashSet};
 
 use crate::{
     caste::{
@@ -16,16 +18,16 @@ use crate::{
         creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
         is_painting, magnet_follow, magnetize_tail_segments, open_close_door, remove_creature,
         remove_designated_creatures, render_closing_doors, respawn_cage, respawn_player,
-        stepped_on_tile, summon_creature, swap_current_paint, teleport_entity, transform_creature,
-        use_wheel_soul,
+        stepped_on_tile, summon_creature, swap_current_paint, teleport_entity, teleport_execution,
+        transform_creature, use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
     map::{register_creatures, ConveyorTracker},
     quests::{hide_quest_menu, show_quest_menu},
     spells::{
-        cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty, trigger_contingency,
-        AntiContingencyLoop,
+        cast_new_spell, cleanup_synapses, process_axiom, spell_stack_is_empty,
+        tick_time_contingency, trigger_contingency, AntiContingencyLoop,
     },
     ui::{
         decay_fading_title, despawn_fading_title, dispense_sliding_components_log,
@@ -45,7 +47,8 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnEnter(ControlState::QuestMenu), show_quest_menu);
         app.add_systems(OnExit(ControlState::QuestMenu), hide_quest_menu);
         app.add_systems(Update, magnetize_tail_segments.before(teleport_entity));
-        app.add_systems(Update, magnet_follow.after(teleport_entity));
+        app.add_systems(Update, magnet_follow.after(teleport_execution));
+        app.add_systems(Update, teleport_entity.before(teleport_execution));
         app.add_systems(Update, take_or_drop_soul.after(stepped_on_tile));
         app.add_systems(Update, craft_with_axioms);
         app.add_systems(Update, swap_current_paint.run_if(is_painting));
@@ -64,6 +67,10 @@ impl Plugin for SetsPlugin {
         app.add_event::<EquipSpell>();
         app.add_event::<UnequipSpell>();
         app.add_systems(Update, equip_spell);
+        app.add_systems(
+            Update,
+            tick_time_contingency.run_if(on_timer(Duration::from_millis(200))),
+        );
         app.init_resource::<CraftingRecipes>();
         app.insert_resource(SpellLibrary {
             library: Vec::new(),
@@ -109,7 +116,7 @@ impl Plugin for SetsPlugin {
                 assign_species_components,
                 register_creatures,
                 add_status_effects,
-                teleport_entity,
+                teleport_execution,
                 stepped_on_tile,
                 creature_collision,
                 alter_momentum,
