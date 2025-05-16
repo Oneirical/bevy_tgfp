@@ -82,14 +82,15 @@ pub fn spawn_portal(mut images: ResMut<Assets<Image>>, mut commands: Commands) {
 }
 
 pub fn adjust_portals(
-    mut query: Query<&mut OrthographicProjection, Added<PortalCamera>>,
+    mut query: Query<&mut Projection, Added<PortalCamera>>,
     player: Query<&Position, With<Player>>,
     portals: Query<(&Position, &Portal)>,
     mut camera: Query<&mut Camera>,
 ) {
-    for mut proj in query.iter_mut() {
-        proj.scale = -0.053;
-    }
+    // for mut proj in query.iter_mut() {
+    //     // NOTE This is no longer a field in 0.16
+    //     proj.scale = -0.053;
+    // }
     // HACK: This part of the system forcefully disables
     // portal cameras that are too far away, as a quick
     // and dirty fix against that incomprehensible
@@ -99,7 +100,7 @@ pub fn adjust_portals(
     // must lead at least 20 tiles from their current
     // position.
     // TODO: Trigger this only when the player moves.
-    if let Ok(player_pos) = player.get_single() {
+    if let Ok(player_pos) = player.single() {
         let mut out_of_range = false;
         for (position, portal) in portals.iter() {
             if player_pos.is_within_range(
@@ -172,7 +173,7 @@ pub fn adjust_transforms(
     time: Res<Time>,
     mut commands: Commands,
     mut screenshake: ResMut<Screenshake>,
-) {
+) -> Result {
     for (entity, pos, mut trans, is_animated, is_player, is_door_panel) in creatures.iter_mut() {
         // If this creature is affected by an animation...
         if is_animated {
@@ -213,7 +214,7 @@ pub fn adjust_transforms(
                 shake_angle.sin() * screenshake.intensity as f32,
             );
             // The camera follows the player.
-            let mut camera_trans = camera.get_single_mut().unwrap();
+            let mut camera_trans = camera.single_mut()?;
             camera_trans.translation.smooth_nudge(
                 &Vec3::new(
                     trans.translation.x + shake_x,
@@ -225,6 +226,7 @@ pub fn adjust_transforms(
             );
         }
     }
+    Ok(())
 }
 
 // graphics.rs

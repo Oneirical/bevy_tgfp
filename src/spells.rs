@@ -5,8 +5,8 @@ use std::{
 
 use bevy::{
     ecs::system::SystemId,
+    platform::collections::{HashMap, HashSet},
     prelude::*,
-    utils::{HashMap, HashSet},
 };
 
 use uuid::Uuid;
@@ -220,7 +220,7 @@ pub fn tick_time_contingency(
     let mut creatures = creatures.iter().collect::<Vec<(Entity, &Position)>>();
     creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
     for (creature, _) in creatures.iter() {
-        contingency.send(TriggerContingency {
+        contingency.write(TriggerContingency {
             caster: *creature,
             contingency: Axiom::WhenTimePasses,
         });
@@ -253,7 +253,7 @@ pub fn trigger_contingency(
                     loop_protection
                         .contingencies_this_turn
                         .insert((event.caster, event.contingency.clone()));
-                    cast_spell.send(CastSpell {
+                    cast_spell.write(CastSpell {
                         caster: event.caster,
                         spell: spell.clone(),
                         starting_step: contingency_index,
@@ -517,7 +517,7 @@ fn axiom_form_ego(
         .synapse_flags
         .contains(&SynapseFlag::DisableVfx)
     {
-        magic_vfx.send(PlaceMagicVfx {
+        magic_vfx.write(PlaceMagicVfx {
             targets: vec![caster_position],
             sequence: EffectSequence::Sequential { duration: 0.04 },
             effect: EffectType::RedBlast,
@@ -539,13 +539,14 @@ fn axiom_form_player(
     // Get the currently executed spell.
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     // Get the caster's position.
-    let player_position = *position.get_single().unwrap();
+    // TODO replace this by ? when the bevy bug is fixed
+    let player_position = *position.single().unwrap();
     // Place the visual effect.
     if !synapse_data
         .synapse_flags
         .contains(&SynapseFlag::DisableVfx)
     {
-        magic_vfx.send(PlaceMagicVfx {
+        magic_vfx.write(PlaceMagicVfx {
             targets: vec![player_position],
             sequence: EffectSequence::Sequential { duration: 0.04 },
             effect: EffectType::RedBlast,
@@ -578,7 +579,7 @@ fn axiom_form_plus(
         .synapse_flags
         .contains(&SynapseFlag::DisableVfx)
     {
-        magic_vfx.send(PlaceMagicVfx {
+        magic_vfx.write(PlaceMagicVfx {
             targets: output.clone(),
             sequence: EffectSequence::Sequential { duration: 0.04 },
             effect: EffectType::GreenBlast,
@@ -629,7 +630,7 @@ fn axiom_function_dash(
             }
 
             // Once finished, release the Teleport event.
-            commands.run_system_with_input(
+            commands.run_system_with(
                 library.teleport,
                 (
                     TeleportEntity {
@@ -669,7 +670,7 @@ fn axiom_function_teleport_dash(
                 continue;
             }
             let (off_x, off_y) = caster_momentum.as_offset();
-            commands.run_system_with_input(
+            commands.run_system_with(
                 library.teleport,
                 (
                     TeleportEntity {
@@ -724,7 +725,7 @@ fn axiom_form_momentum_beam(
         .synapse_flags
         .contains(&SynapseFlag::DisableVfx)
     {
-        magic_vfx.send(PlaceMagicVfx {
+        magic_vfx.write(PlaceMagicVfx {
             targets: output.clone(),
             sequence: EffectSequence::Sequential { duration: 0.04 },
             effect: match caster_momentum {
@@ -772,7 +773,7 @@ fn axiom_form_xbeam(
             .synapse_flags
             .contains(&SynapseFlag::DisableVfx)
         {
-            magic_vfx.send(PlaceMagicVfx {
+            magic_vfx.write(PlaceMagicVfx {
                 targets: output.clone(),
                 sequence: EffectSequence::Sequential { duration: 0.04 },
                 effect: EffectType::RedBlast,
@@ -819,7 +820,7 @@ fn axiom_form_plus_beam(
             .synapse_flags
             .contains(&SynapseFlag::DisableVfx)
         {
-            magic_vfx.send(PlaceMagicVfx {
+            magic_vfx.write(PlaceMagicVfx {
                 targets: output.clone(),
                 sequence: EffectSequence::Sequential { duration: 0.04 },
                 effect: match cardinal {
@@ -852,7 +853,7 @@ fn axiom_form_touch(
         .synapse_flags
         .contains(&SynapseFlag::DisableVfx)
     {
-        magic_vfx.send(PlaceMagicVfx {
+        magic_vfx.write(PlaceMagicVfx {
             targets: vec![touch],
             sequence: EffectSequence::Sequential { duration: 0.04 },
             effect: EffectType::RedBlast,
@@ -884,7 +885,7 @@ fn axiom_form_halo(
             .synapse_flags
             .contains(&SynapseFlag::DisableVfx)
         {
-            magic_vfx.send(PlaceMagicVfx {
+            magic_vfx.write(PlaceMagicVfx {
                 targets: circle.clone(),
                 sequence: EffectSequence::Sequential { duration: 0.04 },
                 effect: EffectType::GreenBlast,
@@ -910,7 +911,7 @@ fn axiom_function_summon_creature(
     let caster_position = position.get(synapse_data.caster).unwrap();
     if let Axiom::SummonCreature { species } = synapse_data.axioms[synapse_data.step] {
         for position in &synapse_data.targets {
-            summon.send(SummonCreature {
+            summon.write(SummonCreature {
                 species,
                 position: *position,
                 properties: vec![SummonProperties::Summoned {
@@ -935,7 +936,7 @@ fn axiom_function_place_step_trap(
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = position.get(synapse_data.caster).unwrap();
     for position in &synapse_data.targets {
-        summon.send(SummonCreature {
+        summon.write(SummonCreature {
             species: Species::Trap,
             position: *position,
             properties: vec![
@@ -1027,11 +1028,11 @@ fn axiom_function_devour_wall(
             )
         };
         if is_wall && !is_spellproof {
-            remove.send(RemoveCreature { entity });
+            remove.write(RemoveCreature { entity });
             total_heal = total_heal.saturating_add(1);
         }
     }
-    heal.send(DamageOrHealCreature {
+    heal.write(DamageOrHealCreature {
         entity: synapse_data.caster,
         culprit: synapse_data.caster,
         hp_mod: total_heal,
@@ -1053,7 +1054,7 @@ fn axiom_function_heal_or_harm(
             if is_spellproof(entity, &flags, &spellproof_query) {
                 continue;
             }
-            heal.send(DamageOrHealCreature {
+            heal.write(DamageOrHealCreature {
                 entity,
                 culprit: synapse_data.caster,
                 hp_mod: amount,
@@ -1084,7 +1085,7 @@ fn axiom_function_status_effect(
             if is_spellproof(entity, &flags, &spellproof_query) {
                 continue;
             }
-            status_effect.send(AddStatusEffect {
+            status_effect.write(AddStatusEffect {
                 entity,
                 effect,
                 potency,
@@ -1120,7 +1121,7 @@ fn axiom_function_upgrade_status_effect(
             }
             let status_list = creature_status_effect.get(entity).unwrap();
             if let Some(upgrade_effect) = status_list.effects.get(&effect) {
-                status_effect.send(AddStatusEffect {
+                status_effect.write(AddStatusEffect {
                     entity,
                     effect,
                     potency: upgrade_effect.potency + potency,
@@ -1192,7 +1193,7 @@ fn axiom_function_abjuration(
         }
         for (summoned_component, flag_entity) in summons.iter() {
             if summoned_component.summoner == entity {
-                remove.send(RemoveCreature {
+                remove.write(RemoveCreature {
                     entity: flag_entity.parent_creature,
                 });
             }
@@ -1214,7 +1215,7 @@ fn axiom_function_transform(
             if is_spellproof(entity, &flags, &spellproof_query) {
                 continue;
             }
-            transform.send(TransformCreature {
+            transform.write(TransformCreature {
                 entity,
                 new_species: species,
             });
@@ -1259,7 +1260,7 @@ fn axiom_mutator_spread(
             .synapse_flags
             .contains(&SynapseFlag::DisableVfx)
         {
-            magic_vfx.send(PlaceMagicVfx {
+            magic_vfx.write(PlaceMagicVfx {
                 targets: ord_dir_vec.clone(),
                 sequence: EffectSequence::Sequential { duration: 0.04 },
                 effect: EffectType::RedBlast,
@@ -1335,7 +1336,7 @@ fn axiom_function_force_cast(
         if is_spellproof.get(entity).unwrap() {
             continue;
         }
-        cast_spell.send(CastSpell {
+        cast_spell.write(CastSpell {
             caster: entity,
             spell: Spell {
                 axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
@@ -1372,7 +1373,7 @@ fn teleport_transmission(
                 .synapse_flags
                 .contains(&SynapseFlag::DisableVfx)
             {
-                magic_vfx.send(PlaceMagicVfx {
+                magic_vfx.write(PlaceMagicVfx {
                     targets: output.clone(),
                     sequence: EffectSequence::Sequential { duration: 0.04 },
                     effect: EffectType::RedBlast,
@@ -1384,7 +1385,7 @@ fn teleport_transmission(
             synapse_data.targets.extend(&output);
         }
     }
-    teleport_writer.send(teleport_event);
+    teleport_writer.write(teleport_event);
 }
 
 fn linear_beam(
@@ -1465,7 +1466,7 @@ pub fn process_axiom(
         // decides where the Functions will take place.)
         // Axioms not in the library are discarded: they are Contingencies.
         if let Some(one_shot_system) = axioms.library.get(&discriminant(axiom)) {
-            commands.run_system_with_input(*one_shot_system, i);
+            commands.run_system_with(*one_shot_system, i);
         }
     }
 }

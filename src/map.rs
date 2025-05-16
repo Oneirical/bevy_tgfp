@@ -1,9 +1,6 @@
-use std::time::Duration;
-
 use bevy::{
+    platform::collections::{HashMap, HashSet},
     prelude::*,
-    time::common_conditions::on_timer,
-    utils::{HashMap, HashSet},
 };
 use rand::{
     seq::{IteratorRandom, SliceRandom},
@@ -209,7 +206,7 @@ pub fn register_creatures(
                     // ("the pauli principle"). Creatures recovering tangibility
                     // on top of another die. I am mostly adding this so I can
                     // debug the occasional door issue.
-                    remove.send(RemoveCreature { entity });
+                    remove.write(RemoveCreature { entity });
                     dbg!(tangible_position);
                     dbg!("A creature recovered its tangibility while on top of another creature!");
                 } else {
@@ -286,7 +283,7 @@ pub fn slide_conveyor_belt(
                     || pos == &Position::new(25, 27)
                     || pos == &Position::new(35, 27))
             {
-                open.send(OpenCloseDoor {
+                open.write(OpenCloseDoor {
                     entity: door,
                     open: true,
                 });
@@ -305,9 +302,9 @@ pub fn slide_conveyor_belt(
             close_door = true;
         }
         if pos.y < -10 {
-            remove.send(RemoveCreature { entity });
+            remove.write(RemoveCreature { entity });
         } else {
-            // teleport.send(TeleportEntity {
+            // teleport.write(TeleportEntity {
             //     destination: Position::new(pos.x, pos.y - 9),
             //     entity,
             // });
@@ -323,7 +320,7 @@ pub fn slide_conveyor_belt(
                 && !closed_door_query.contains(flags.effects_flags))
                 && (pos == &Position::new(25, 27) || pos == &Position::new(35, 27))
             {
-                open.send(OpenCloseDoor {
+                open.write(OpenCloseDoor {
                     entity: door,
                     open: false,
                 });
@@ -394,7 +391,7 @@ pub fn new_cage_on_conveyor(
         {
             properties.push(SummonProperties::Sleeping);
         }
-        summon.send(SummonCreature {
+        summon.write(SummonCreature {
             species,
             position,
             properties,
@@ -408,7 +405,7 @@ pub fn spawn_cage(
     player: Query<&Player>,
     mut text: EventWriter<AddMessage>,
 ) {
-    text.send(AddMessage {
+    text.write(AddMessage {
         message: Message::Tutorial,
     });
     let quarry = "\
@@ -560,7 +557,7 @@ pub fn spawn_cage(
             {
                 properties.push(SummonProperties::Sleeping);
             }
-            summon.send(SummonCreature {
+            summon.write(SummonCreature {
                 species,
                 position,
                 properties,

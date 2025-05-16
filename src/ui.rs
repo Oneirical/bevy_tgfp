@@ -105,7 +105,7 @@ pub fn spawn_fading_title(
                 align_items: AlignItems::Center,
                 ..default()
             })
-            .insert(PickingBehavior::IGNORE)
+            .insert(Pickable::IGNORE)
             .with_children(|parent| {
                 parent
                     .spawn((
@@ -277,7 +277,7 @@ fn setup(
             justify_content: JustifyContent::FlexStart,
             ..default()
         })
-        .insert(PickingBehavior::IGNORE)
+        .insert(Pickable::IGNORE)
         .with_children(|parent| {
             parent
                 .spawn(Node {
@@ -379,7 +379,7 @@ fn setup(
             justify_content: JustifyContent::FlexEnd,
             ..default()
         })
-        .insert(PickingBehavior::IGNORE)
+        .insert(Pickable::IGNORE)
         .with_children(|parent| {
             parent
                 .spawn(Node {
@@ -1231,7 +1231,7 @@ pub fn print_message_in_log(
     log: Query<Entity, With<MessageLog>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-) {
+) -> Result {
     for (i, event) in events.read().enumerate() {
         let new_string = match &event.message {
             Message::Tutorial => LORE[18],
@@ -1290,7 +1290,7 @@ pub fn print_message_in_log(
             },
         };
         let mut new_text = Entity::PLACEHOLDER;
-        commands.entity(log.single()).with_children(|parent| {
+        commands.entity(log.single()?).with_children(|parent| {
             new_text = spawn_split_text(new_string, parent, &asset_server);
         });
         // Necessary to prevent a "flash" of the text before it is moved by
@@ -1303,9 +1303,10 @@ pub fn print_message_in_log(
 
         // This should only happen once.
         if i == 0 {
-            slide.send(SlideMessages);
+            slide.write(SlideMessages);
         }
     }
+    Ok(())
 }
 
 pub fn dispense_sliding_components_log(
@@ -1340,7 +1341,7 @@ pub fn dispense_sliding_components_log(
             });
             // Despawn text that has scrolled out of view.
             if slide.target > 50. {
-                commands.entity(entity).despawn_recursive();
+                commands.entity(entity).despawn();
             }
         }
     }
@@ -1380,7 +1381,7 @@ pub fn match_species_with_string(species: &Species) -> String {
 
 pub fn spawn_split_text(
     new_string: &str,
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     asset_server: &Res<AssetServer>,
 ) -> Entity {
     let split_string = split_text(new_string);

@@ -1,8 +1,8 @@
 use std::{collections::VecDeque, f32::consts::PI};
 
 use bevy::{
+    platform::collections::{HashMap, HashSet},
     prelude::*,
-    utils::{HashMap, HashSet},
 };
 use rand::{
     seq::{IteratorRandom, SliceRandom},
@@ -129,7 +129,7 @@ pub fn add_crafting_mouse_interactivity(
     query: Query<&FlagEntity>,
     mut commands: Commands,
 ) {
-    let entity = query.get(trigger.entity()).unwrap().parent_creature;
+    let entity = query.get(trigger.target()).unwrap().parent_creature;
     commands
         .entity(entity)
         .observe(crafting_mouse_soul_drop)
@@ -143,17 +143,17 @@ pub fn crafting_mouse_soul_drop(
     mut commands: Commands,
 ) {
     if buttons.pressed(MouseButton::Left) {
-        let (position, flags) = position.get(movement.entity()).unwrap();
+        let (position, flags) = position.get(movement.target()).unwrap();
         commands.run_system_cached_with(soul_drop, (*position, *flags));
     }
 }
 
 pub fn crafting_click_soul_drop(
-    down: Trigger<Pointer<Down>>,
+    down: Trigger<Pointer<Pressed>>,
     position: Query<(&Position, &CreatureFlags)>,
     mut commands: Commands,
 ) {
-    let (position, flags) = position.get(down.entity()).unwrap();
+    let (position, flags) = position.get(down.target()).unwrap();
     commands.run_system_cached_with(soul_drop, (*position, *flags));
 }
 
@@ -166,7 +166,7 @@ pub fn soul_drop(
     // If a creature USED to be a crafting slot, it might still have the observer - this extra check
     // prevents jank where you'd drop souls outside of soul cages.
     if slot_query.contains(flags.species_flags) || slot_query.contains(flags.effects_flags) {
-        drop.send(TakeOrDropSoul {
+        drop.write(TakeOrDropSoul {
             position,
             soul: paint.current_paint,
         });
@@ -321,7 +321,7 @@ pub fn predict_craft(
     slots: Query<&FlagEntity, With<CraftingSlot>>,
     position: Query<&Position>,
     patterns: Query<&KnownPattern>,
-) {
+) -> Result {
     for event in events.read() {
         let boundaries = locate_crafting_boundaries(&slots, &position, event.impact_point);
         // The actual prediction starts here.
@@ -338,9 +338,10 @@ pub fn predict_craft(
             known_recipes.push(&known_pattern.recipe);
         }
         let matches = crafting_recipes.find_all_matching_axioms(&ingredients, &known_recipes);
-        commands.entity(ui.single()).try_despawn_descendants();
+        // WARN this used to be "try_despawn", so if it fails we know why
+        commands.entity(ui.single()?).despawn_related::<Children>();
         for (positions, axiom) in matches {
-            commands.entity(ui.single()).with_children(|parent| {
+            commands.entity(ui.single()?).with_children(|parent| {
                 parent
                     .spawn((
                         CraftingVeil {
@@ -371,6 +372,7 @@ pub fn predict_craft(
             });
         }
     }
+    Ok(())
 }
 
 fn on_exit_hover_axiom(
@@ -378,13 +380,14 @@ fn on_exit_hover_axiom(
     mut message: Query<&mut Visibility, (With<MessageLog>, Without<AxiomBox>)>,
     mut axiom_box: Query<&mut Visibility, (With<AxiomBox>, Without<MessageLog>)>,
     state: Res<State<ControlState>>,
-) {
+) -> Result {
     // This prevents overlap with other UIs, like caste/cursor.
     if state.get() != &ControlState::Player {
-        return;
+        return Ok(());
     }
-    *message.single_mut() = Visibility::Inherited;
-    *axiom_box.single_mut() = Visibility::Hidden;
+    *message.single_mut()? = Visibility::Inherited;
+    *axiom_box.single_mut()? = Visibility::Hidden;
+    Ok(())
 }
 
 fn on_hover_display_axiom(
@@ -396,22 +399,24 @@ fn on_hover_display_axiom(
     atlas_layout: Res<SpriteSheetAtlas>,
     axiom: Query<&AxiomUI>,
     state: Res<State<ControlState>>,
-) {
+) -> Result {
     // This prevents overlap with other UIs, like caste/cursor.
     if state.get() != &ControlState::Player {
-        return;
+        return Ok(());
     }
-    *message.single_mut() = Visibility::Hidden;
-    let (axiom_box_entity, mut vis) = axiom_box.single_mut();
+    *message.single_mut()? = Visibility::Hidden;
+    let (axiom_box_entity, mut vis) = axiom_box.single_mut()?;
     *vis = Visibility::Inherited;
 
-    let axiom = axiom.get(hover.entity()).unwrap();
+    let axiom = axiom.get(hover.target()).unwrap();
     let axiom = &axiom.axiom;
     // TODO: Instead of multiple entities, would it be interesting to
     // have these merged into a single string with \n to space them out?
     // This would be good in case there's a ton of "effects flags".
     let mut axiom_description = Entity::PLACEHOLDER;
-    commands.entity(axiom_box_entity).despawn_descendants();
+    commands
+        .entity(axiom_box_entity)
+        .despawn_related::<Children>();
     commands.entity(axiom_box_entity).with_children(|parent| {
         axiom_description =
             spawn_split_text(match_axiom_with_description(axiom), parent, &asset_server);
@@ -439,6 +444,7 @@ fn on_hover_display_axiom(
         top: Val::Px(0.5),
         ..default()
     });
+    Ok(())
 }
 
 #[derive(Component)]
@@ -455,7 +461,7 @@ fn on_hover_crafting_predictor(
     if !black.is_empty() {
         return;
     }
-    let veil = veil.get(hover.entity()).unwrap();
+    let veil = veil.get(hover.target()).unwrap();
     for x in veil.boundaries.0.x..=veil.boundaries.1.x {
         for y in veil.boundaries.0.y..=veil.boundaries.1.y {
             let position = Position::new(x, y);
@@ -512,7 +518,7 @@ pub fn learn_new_axiom(
     atlas_layout: Res<SpriteSheetAtlas>,
     all_patterns: Res<CraftingRecipes>,
     mut events: EventReader<LearnNewAxiom>,
-) {
+) -> Result {
     for event in events.read() {
         // Do not learn duplicate axioms.
         let mut seen_before = false;
@@ -525,7 +531,7 @@ pub fn learn_new_axiom(
         if seen_before {
             continue;
         }
-        commands.entity(ui.single()).with_children(|parent| {
+        commands.entity(ui.single()?).with_children(|parent| {
             parent
                 .spawn((
                     AxiomUI {
@@ -567,15 +573,17 @@ pub fn learn_new_axiom(
                 .observe(on_exit_pattern_display);
         });
     }
+    Ok(())
 }
 
 fn on_exit_pattern_display(
     _out: Trigger<Pointer<Out>>,
     mut wheel: Query<&mut Visibility, (With<SoulWheelBox>, Without<PatternBox>)>,
     mut pattern_box: Query<&mut Visibility, (With<PatternBox>, Without<SoulWheelBox>)>,
-) {
-    *wheel.single_mut() = Visibility::Inherited;
-    *pattern_box.single_mut() = Visibility::Hidden;
+) -> Result {
+    *wheel.single_mut()? = Visibility::Inherited;
+    *pattern_box.single_mut()? = Visibility::Hidden;
+    Ok(())
 }
 
 fn on_hover_pattern_display(
@@ -586,12 +594,12 @@ fn on_hover_pattern_display(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
     pattern: Query<&KnownPattern>,
-) {
-    *wheel.single_mut() = Visibility::Hidden;
-    let (pattern_box_entity, mut vis) = pattern_box.single_mut();
+) -> Result {
+    *wheel.single_mut()? = Visibility::Hidden;
+    let (pattern_box_entity, mut vis) = pattern_box.single_mut()?;
     *vis = Visibility::Inherited;
 
-    let pattern = pattern.get(hover.entity()).unwrap();
+    let pattern = pattern.get(hover.target()).unwrap();
     let mut pattern = pattern.recipe.clone();
 
     let mut min_x = pattern.souls[0].x;
@@ -611,7 +619,9 @@ fn on_hover_pattern_display(
         pos.y += -min_y;
     }
 
-    commands.entity(pattern_box_entity).despawn_descendants();
+    commands
+        .entity(pattern_box_entity)
+        .despawn_related::<Children>();
     commands.entity(pattern_box_entity).with_children(|parent| {
         for x in 0..pattern.dimensions.x + 2 {
             for y in 0..pattern.dimensions.y + 2 {
@@ -697,6 +707,7 @@ fn on_hover_pattern_display(
             }
         }
     });
+    Ok(())
 }
 
 pub fn take_or_drop_soul(
@@ -740,7 +751,7 @@ pub fn take_or_drop_soul(
                 )),
             ));
         }
-        predict.send(PredictCraft {
+        predict.write(PredictCraft {
             impact_point: event.position,
         });
     }
@@ -765,7 +776,7 @@ pub fn craft_with_axioms(
     slots: Query<&FlagEntity, With<CraftingSlot>>,
     position: Query<&Position>,
     patterns: Query<&KnownPattern>,
-) {
+) -> Result {
     for event in events.read() {
         // Find the closest Soul Cage to the entity receiving the crafted
         // spell.
@@ -820,7 +831,7 @@ pub fn craft_with_axioms(
             let (mut book, is_player) = spellbook.get_mut(event.receiver).unwrap();
             if is_player {
                 spell_library.library.push(spell);
-                commands.entity(ui.single()).with_children(|parent| {
+                commands.entity(ui.single()?).with_children(|parent| {
                     parent
                         .spawn((
                             LibrarySlot(id),
@@ -846,6 +857,7 @@ pub fn craft_with_axioms(
             }
         }
     }
+    Ok(())
 }
 
 pub fn most_common_soul(souls: Vec<Soul>) -> Option<Soul> {

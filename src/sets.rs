@@ -1,17 +1,15 @@
 use std::time::Duration;
 
-use bevy::{prelude::*, time::common_conditions::on_timer, utils::HashSet};
+use bevy::{platform::collections::HashSet, prelude::*, time::common_conditions::on_timer};
 
 use crate::{
-    caste::{
-        equip_spell, hide_caste_menu, show_caste_menu, update_caste_box, EquipSpell, UnequipSpell,
-    },
+    caste::{equip_spell, hide_caste_menu, show_caste_menu, EquipSpell, UnequipSpell},
     crafting::{
         add_crafting_mouse_interactivity, craft_with_axioms, learn_new_axiom, predict_craft,
         take_or_drop_soul, BagOfLoot, CraftWithAxioms, CraftingRecipes, LearnNewAxiom,
         PredictCraft, TakeOrDropSoul,
     },
-    creature::{EffectDuration, Species, SpellLibrary, StatusEffect},
+    creature::SpellLibrary,
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
         add_status_effects, alter_momentum, assign_species_components, creature_collision,

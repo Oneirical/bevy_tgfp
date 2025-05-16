@@ -3,12 +3,11 @@ use uuid::Uuid;
 
 use crate::{
     caste::{EquipSpell, UnequipSpell},
-    crafting::CraftWithAxioms,
     creature::{EffectDuration, Player, Soul, StatusEffect},
     cursor::CursorStep,
     events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
     graphics::PortalCamera,
-    map::{slide_conveyor_belt, ConveyorTracker},
+    map::ConveyorTracker,
     sets::ControlState,
     spells::{Axiom, CastSpell, Spell},
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
@@ -29,12 +28,12 @@ pub fn keyboard_input(
     mut next_state: ResMut<NextState<ControlState>>,
     mut cursor: EventWriter<CursorStep>,
     mut caste_menu: Query<&mut LargeCastePanel>,
-    mut camera: Query<&mut OrthographicProjection, (With<Camera>, Without<PortalCamera>)>,
+    mut camera: Query<&mut Projection, (With<Camera>, Without<PortalCamera>)>,
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
     mut spell: EventWriter<CastSpell>,
     mut tracker: ResMut<ConveyorTracker>,
-) {
+) -> Result {
     let soul_keys = [
         KeyCode::Digit1,
         KeyCode::Digit2,
@@ -50,9 +49,9 @@ pub fn keyboard_input(
             if input.just_pressed(*key) {
                 match state.get() {
                     ControlState::Player => {
-                        use_wheel_soul.send(UseWheelSoul { index: i });
+                        use_wheel_soul.write(UseWheelSoul { index: i });
                         turn_manager.action_this_turn = PlayerAction::Spell;
-                        turn_end.send(EndTurn);
+                        turn_end.write(EndTurn);
                     }
                     _ => (),
                 }
@@ -60,27 +59,27 @@ pub fn keyboard_input(
         }
     }
     // if input.just_pressed(KeyCode::Space) || input.just_pressed(KeyCode::KeyQ) {
-    //     draw_soul.send(DrawSoul { amount: 1 });
+    //     draw_soul.write(DrawSoul { amount: 1 });
     //     turn_manager.action_this_turn = PlayerAction::Draw;
-    //     turn_end.send(EndTurn);
+    //     turn_end.write(EndTurn);
     // }
     if input.just_pressed(KeyCode::ArrowUp) || input.just_pressed(KeyCode::KeyW) {
         match state.get() {
             ControlState::Cursor => {
-                cursor.send(CursorStep {
+                cursor.write(CursorStep {
                     direction: OrdDir::Up,
                 });
             }
             ControlState::Player => {
-                events.send(CreatureStep {
+                events.write(CreatureStep {
                     direction: OrdDir::Up,
-                    entity: player.get_single().unwrap(),
+                    entity: player.single()?,
                 });
                 turn_manager.action_this_turn = PlayerAction::Step;
-                turn_end.send(EndTurn);
+                turn_end.write(EndTurn);
             }
             ControlState::CasteMenu => {
-                let mut caste_menu = caste_menu.single_mut();
+                let mut caste_menu = caste_menu.single_mut()?;
                 let column = caste_menu.selected_column;
                 caste_menu.selected_row.shift(-1, &column);
             }
@@ -90,20 +89,20 @@ pub fn keyboard_input(
     if input.just_pressed(KeyCode::ArrowRight) || input.just_pressed(KeyCode::KeyD) {
         match state.get() {
             ControlState::Cursor => {
-                cursor.send(CursorStep {
+                cursor.write(CursorStep {
                     direction: OrdDir::Right,
                 });
             }
             ControlState::Player => {
-                events.send(CreatureStep {
+                events.write(CreatureStep {
                     direction: OrdDir::Right,
-                    entity: player.get_single().unwrap(),
+                    entity: player.single()?,
                 });
                 turn_manager.action_this_turn = PlayerAction::Step;
-                turn_end.send(EndTurn);
+                turn_end.write(EndTurn);
             }
             ControlState::CasteMenu => {
-                let mut caste_menu = caste_menu.single_mut();
+                let mut caste_menu = caste_menu.single_mut()?;
                 caste_menu.selected_column.shift(1);
                 if matches!(
                     caste_menu.selected_column,
@@ -124,20 +123,20 @@ pub fn keyboard_input(
     if input.just_pressed(KeyCode::ArrowLeft) || input.just_pressed(KeyCode::KeyA) {
         match state.get() {
             ControlState::Cursor => {
-                cursor.send(CursorStep {
+                cursor.write(CursorStep {
                     direction: OrdDir::Left,
                 });
             }
             ControlState::Player => {
-                events.send(CreatureStep {
+                events.write(CreatureStep {
                     direction: OrdDir::Left,
-                    entity: player.get_single().unwrap(),
+                    entity: player.single()?,
                 });
                 turn_manager.action_this_turn = PlayerAction::Step;
-                turn_end.send(EndTurn);
+                turn_end.write(EndTurn);
             }
             ControlState::CasteMenu => {
-                let mut caste_menu = caste_menu.single_mut();
+                let mut caste_menu = caste_menu.single_mut()?;
                 caste_menu.selected_column.shift(-1);
                 if matches!(
                     caste_menu.selected_column,
@@ -158,20 +157,20 @@ pub fn keyboard_input(
     if input.just_pressed(KeyCode::ArrowDown) || input.just_pressed(KeyCode::KeyS) {
         match state.get() {
             ControlState::Cursor => {
-                cursor.send(CursorStep {
+                cursor.write(CursorStep {
                     direction: OrdDir::Down,
                 });
             }
             ControlState::Player => {
-                events.send(CreatureStep {
+                events.write(CreatureStep {
                     direction: OrdDir::Down,
-                    entity: player.get_single().unwrap(),
+                    entity: player.single()?,
                 });
                 turn_manager.action_this_turn = PlayerAction::Step;
-                turn_end.send(EndTurn);
+                turn_end.write(EndTurn);
             }
             ControlState::CasteMenu => {
-                let mut caste_menu = caste_menu.single_mut();
+                let mut caste_menu = caste_menu.single_mut()?;
                 let column = caste_menu.selected_column;
                 caste_menu.selected_row.shift(1, &column);
             }
@@ -179,7 +178,7 @@ pub fn keyboard_input(
         }
     }
     if input.just_pressed(KeyCode::KeyZ) || input.just_pressed(KeyCode::KeyX) {
-        respawn.send(RespawnPlayer { victorious: false });
+        respawn.write(RespawnPlayer { victorious: false });
     }
 
     if input.just_pressed(KeyCode::KeyC) {
@@ -205,18 +204,14 @@ pub fn keyboard_input(
         next_state.set(ControlState::Player);
     }
 
-    if input.pressed(KeyCode::KeyO) {
-        camera.single_mut().scale += 0.001;
-        dbg!(camera.single().scale);
-    }
     if input.just_pressed(KeyCode::KeyP) {
         tracker.open_doors_next = false;
     }
 
     #[cfg(debug_assertions)]
     if input.pressed(KeyCode::KeyR) {
-        spell.send(CastSpell {
-            caster: player.single(),
+        spell.write(CastSpell {
+            caster: player.single()?,
             spell: Spell {
                 axioms: vec![
                     Axiom::Ego,
@@ -243,9 +238,9 @@ pub fn keyboard_input(
     }
 
     if input.just_pressed(KeyCode::Enter) {
-        let caste_menu = caste_menu.single();
+        let caste_menu = caste_menu.single()?;
         if let CastePanelRow::Library(depth) = caste_menu.selected_row {
-            equip.send(EquipSpell {
+            equip.write(EquipSpell {
                 index: match caste_menu.selected_column {
                     CastePanelColumn::LibraryLeft => depth * 2,
                     CastePanelColumn::LibraryRight => depth * 2 + 1,
@@ -253,7 +248,7 @@ pub fn keyboard_input(
                 },
             });
         } else {
-            unequip.send(UnequipSpell {
+            unequip.write(UnequipSpell {
                 caste: match (caste_menu.selected_column, caste_menu.selected_row) {
                     (CastePanelColumn::Left, CastePanelRow::Top) => Soul::Saintly,
                     (CastePanelColumn::Left, CastePanelRow::Middle) => Soul::Artistic,
@@ -266,4 +261,5 @@ pub fn keyboard_input(
             });
         }
     }
+    Ok(())
 }

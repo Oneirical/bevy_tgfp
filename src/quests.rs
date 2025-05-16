@@ -20,15 +20,16 @@ pub fn show_quest_menu(
         Query<&mut Visibility, With<QuestBox>>,
     )>,
     painter: Res<CagePainter>,
-) {
+) -> Result {
     if painter.is_painting {
-        *set.p1().single_mut() = Visibility::Hidden;
-        *set.p2().single_mut() = Visibility::Hidden;
+        *set.p1().single_mut()? = Visibility::Hidden;
+        *set.p2().single_mut()? = Visibility::Hidden;
     }
-    *set.p0().single_mut() = Visibility::Hidden;
+    *set.p0().single_mut()? = Visibility::Hidden;
     for mut vis in set.p3().iter_mut() {
         *vis = Visibility::Inherited;
     }
+    Ok(())
 }
 
 pub fn hide_quest_menu(
@@ -39,14 +40,15 @@ pub fn hide_quest_menu(
         Query<&mut Visibility, With<QuestBox>>,
     )>,
     painter: Res<CagePainter>,
-) {
+) -> Result {
     if painter.is_painting {
-        *set.p1().single_mut() = Visibility::Inherited;
+        *set.p1().single_mut()? = Visibility::Inherited;
     }
-    if matches!(set.p2().single(), Visibility::Hidden) {
-        *set.p0().single_mut() = Visibility::Inherited;
+    if matches!(set.p2().single()?, Visibility::Hidden) {
+        *set.p0().single_mut()? = Visibility::Inherited;
     }
     for mut vis in set.p3().iter_mut() {
         *vis = Visibility::Hidden;
     }
+    Ok(())
 }

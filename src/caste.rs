@@ -24,10 +24,10 @@ pub fn show_caste_menu(
     painter: Res<CagePainter>,
 ) {
     if painter.is_painting {
-        *set.p1().single_mut() = Visibility::Hidden;
-        *set.p2().single_mut() = Visibility::Hidden;
+        *set.p1().single_mut().unwrap() = Visibility::Hidden;
+        *set.p2().single_mut().unwrap() = Visibility::Hidden;
     }
-    *set.p0().single_mut() = Visibility::Hidden;
+    *set.p0().single_mut().unwrap() = Visibility::Hidden;
     for mut vis in set.p3().iter_mut() {
         *vis = Visibility::Inherited;
     }
@@ -41,16 +41,17 @@ pub fn hide_caste_menu(
         Query<&mut Visibility, With<CasteBox>>,
     )>,
     painter: Res<CagePainter>,
-) {
+) -> Result {
     if painter.is_painting {
-        *set.p1().single_mut() = Visibility::Inherited;
+        *set.p1().single_mut()? = Visibility::Inherited;
     }
-    if matches!(set.p2().single(), Visibility::Hidden) {
-        *set.p0().single_mut() = Visibility::Inherited;
+    if matches!(set.p2().single()?, Visibility::Hidden) {
+        *set.p0().single_mut()? = Visibility::Inherited;
     }
     for mut vis in set.p3().iter_mut() {
         *vis = Visibility::Hidden;
     }
+    Ok(())
 }
 
 #[derive(Event)]
@@ -74,7 +75,7 @@ pub fn equip_spell(
     ui: Query<Entity, With<SpellLibraryUI>>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
-) {
+) -> Result {
     // NOTE: Instead of this entire charade with matching Uuids, it might
     // have been better to let the spell library sprite BE the spell library
     // - no resource, just entities with a sprite and a spell component.
@@ -84,7 +85,7 @@ pub fn equip_spell(
             continue;
         }
         let equipped_spell = spell_library.library.remove(event.index);
-        let mut spellbook = spellbook.single_mut();
+        let mut spellbook = spellbook.single_mut().unwrap();
         // If a spell was in the equipped slot before, remove it and add it
         // back to the library.
         if let Some(old_spell) = spellbook.spells.remove(&equipped_spell.caste) {
@@ -120,10 +121,10 @@ pub fn equip_spell(
         commands.run_system_cached(update_caste_box);
     }
     for unequip in unequips.read() {
-        let mut spellbook = spellbook.single_mut();
+        let mut spellbook = spellbook.single_mut()?;
         if let Some(old_spell) = spellbook.spells.remove(&unequip.caste) {
             // Add the unequipped spell back into the library.
-            commands.entity(ui.single()).with_children(|parent| {
+            commands.entity(ui.single()?).with_children(|parent| {
                 parent
                     .spawn((
                         LibrarySlot(old_spell.id),
@@ -156,6 +157,7 @@ pub fn equip_spell(
         }
         commands.run_system_cached(update_caste_box);
     }
+    Ok(())
 }
 
 pub fn update_caste_box(
@@ -167,15 +169,16 @@ pub fn update_caste_box(
     library: Res<SpellLibrary>,
     mut cursor: Query<&mut Node, With<CasteCursor>>,
     player_spellbook: Query<&Spellbook, With<Player>>,
+    // TODO add result type when bevy cached bug gets fixed
 ) {
-    if let Ok(caste) = caste_panel.get_single() {
+    if let Ok(caste) = caste_panel.single() {
         // TODO Add text to the library souls and display descriptions on slots
-        let mut cursor = cursor.single_mut();
+        let mut cursor = cursor.single_mut().unwrap();
         // TODO: Instead of multiple entities, would it be interesting to
         // have these merged into a single string with \n to space them out?
         // This would be good in case there's a ton of "effects flags".
         let mut caste_description = Entity::PLACEHOLDER;
-        let caste_box = caste_box.single();
+        let caste_box = caste_box.single().unwrap();
         let spell = if matches!(
             caste.selected_column,
             CastePanelColumn::Left | CastePanelColumn::Right,
@@ -207,7 +210,7 @@ pub fn update_caste_box(
                 Soul::Feral | Soul::Vile => Val::Px(46.),
                 _ => Val::Auto,
             };
-            if let Some(spell) = player_spellbook.single().spells.get(&caste) {
+            if let Some(spell) = player_spellbook.single().unwrap().spells.get(&caste) {
                 spell
             } else {
                 &Spell {
@@ -249,7 +252,7 @@ pub fn update_caste_box(
             }
         };
 
-        commands.entity(caste_box).despawn_descendants();
+        commands.entity(caste_box).despawn_related::<Children>();
         let text = format!(
             "{}\n\n{}",
             spell.description,
@@ -294,8 +297,8 @@ pub fn on_hover_move_caste_cursor(
     spell_storage: Res<SpellLibrary>,
     mut commands: Commands,
 ) {
-    let mut caste_menu = caste_menu.single_mut();
-    if let Ok(slot) = equip.get(hover.entity()) {
+    let mut caste_menu = caste_menu.single_mut().unwrap();
+    if let Ok(slot) = equip.get(hover.target()) {
         (caste_menu.selected_column, caste_menu.selected_row) = match slot.0 {
             Soul::Saintly => (CastePanelColumn::Left, CastePanelRow::Top),
             Soul::Artistic => (CastePanelColumn::Left, CastePanelRow::Middle),
@@ -305,7 +308,7 @@ pub fn on_hover_move_caste_cursor(
             Soul::Vile => (CastePanelColumn::Right, CastePanelRow::Bottom),
             _ => panic!(),
         };
-    } else if let Ok(library) = library.get(hover.entity()) {
+    } else if let Ok(library) = library.get(hover.target()) {
         let index = spell_storage
             .library
             .iter()
@@ -329,15 +332,15 @@ pub fn on_click_equip_unequip(
     library: Query<&LibrarySlot>,
     spell_storage: Res<SpellLibrary>,
 ) {
-    if let Ok(slot) = equip_slot.get(click.entity()) {
-        unequip.send(UnequipSpell { caste: slot.0 });
-    } else if let Ok(library) = library.get(click.entity()) {
+    if let Ok(slot) = equip_slot.get(click.target()) {
+        unequip.write(UnequipSpell { caste: slot.0 });
+    } else if let Ok(library) = library.get(click.target()) {
         let index = spell_storage
             .library
             .iter()
             .position(|r| r.id == library.0)
             .unwrap();
-        equip.send(EquipSpell { index });
+        equip.write(EquipSpell { index });
     }
 }
 

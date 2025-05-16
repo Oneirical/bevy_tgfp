@@ -1,17 +1,13 @@
 use std::{cmp::min, f32::consts::PI};
 
 use bevy::{
+    platform::collections::{HashMap, HashSet},
     prelude::*,
-    render::view::RenderLayers,
-    utils::{HashMap, HashSet},
 };
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    crafting::{
-        BagOfLoot, CraftWithAxioms, DroppedSoul, KnownPattern, LearnNewAxiom, PredictCraft,
-        TakeOrDropSoul,
-    },
+    crafting::{BagOfLoot, DroppedSoul, KnownPattern, PredictCraft, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
         Charm, ConveyorBelt, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
@@ -25,10 +21,7 @@ use crate::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{
-        is_soul_cage_room, manhattan_distance, spawn_cage, ConveyorTracker, FaithsEnd, Map,
-        Position,
-    },
+    map::{manhattan_distance, spawn_cage, ConveyorTracker, FaithsEnd, Map, Position},
     sets::ControlState,
     spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
     ui::{
@@ -130,9 +123,10 @@ pub fn toggle_paint_mode(
     soul_wheel: Res<SoulWheel>,
     mut recipe_book: Query<&mut Visibility, With<RecipebookUI>>,
     mut predict: EventWriter<PredictCraft>,
+    // TODO -> Result and ? after bevy bug is fixed
 ) {
     if painter.is_painting {
-        let player_pos = player.single();
+        let player_pos = player.single().unwrap();
         let mut out_of_range = true;
         for slot in slots.iter() {
             let slot = position.get(slot.parent_creature).unwrap();
@@ -151,7 +145,7 @@ pub fn toggle_paint_mode(
         }
         if out_of_range {
             painter.is_painting = false;
-            *recipe_book.single_mut() = Visibility::Hidden;
+            *recipe_book.single_mut().unwrap() = Visibility::Hidden;
             for (mut ui_slot_node, ui_slot_marker) in ui_soul_slots.iter_mut() {
                 ui_slot_node.texture_atlas.as_mut().unwrap().index =
                     if let Some(wheel_soul) = soul_wheel.souls.get(ui_slot_marker.index).unwrap() {
@@ -163,7 +157,7 @@ pub fn toggle_paint_mode(
             }
         }
     } else {
-        let player_pos = player.single();
+        let player_pos = player.single().unwrap();
         for slot in slots.iter() {
             let slot = position.get(slot.parent_creature).unwrap();
             if player_pos.is_within_range(
@@ -177,10 +171,10 @@ pub fn toggle_paint_mode(
                 },
             ) {
                 painter.is_painting = true;
-                predict.send(PredictCraft {
+                predict.write(PredictCraft {
                     impact_point: *slot,
                 });
-                *recipe_book.single_mut() = Visibility::Inherited;
+                *recipe_book.single_mut().unwrap() = Visibility::Inherited;
                 let full_alpha_index = match painter.current_paint {
                     None => 0,
                     Some(Soul::Saintly) => 1,
@@ -281,7 +275,7 @@ pub fn draw_soul(
     mut events: EventReader<DrawSoul>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut ui_soul_slots: Query<(&mut ImageNode, &SoulSlot)>,
-    mut turn_manager: ResMut<TurnManager>,
+    turn_manager: ResMut<TurnManager>,
     mut text: EventWriter<AddMessage>,
 ) {
     for event in events.read() {
@@ -310,7 +304,7 @@ pub fn draw_soul(
                 } else {
                     // NOTE: Commented out to match the new "draw on melee" rework
                     // There is nothing left in the draw pile!
-                    // text.send(AddMessage {
+                    // text.write(AddMessage {
                     //     message: Message::InvalidAction(InvalidAction::NoSoulsInPile),
                     // });
                     // turn_manager.action_this_turn = PlayerAction::Invalid;
@@ -318,7 +312,7 @@ pub fn draw_soul(
             } else {
                 // NOTE: Commented out to match the new "draw on melee" rework
                 // There is no empty space in the Wheel!
-                // text.send(AddMessage {
+                // text.write(AddMessage {
                 //     message: Message::InvalidAction(InvalidAction::WheelFull),
                 // });
                 // turn_manager.action_this_turn = PlayerAction::Invalid;
@@ -341,11 +335,11 @@ pub fn mouse_use_wheel_soul(
     mut turn_end: EventWriter<EndTurn>,
 ) {
     if matches!(state.get(), ControlState::Player) {
-        use_wheel_soul.send(UseWheelSoul {
-            index: slot.get(trigger.entity()).unwrap().index,
+        use_wheel_soul.write(UseWheelSoul {
+            index: slot.get(trigger.target()).unwrap().index,
         });
         turn_manager.action_this_turn = PlayerAction::Spell;
-        turn_end.send(EndTurn);
+        turn_end.write(EndTurn);
     }
 }
 
@@ -357,14 +351,14 @@ pub fn use_wheel_soul(
     mut turn_manager: ResMut<TurnManager>,
     player: Query<(Entity, &Spellbook), With<Player>>,
     mut text: EventWriter<AddMessage>,
-) {
+) -> Result {
     for event in events.read() {
         let mut newly_discarded = None;
         if let Some(soul) = soul_wheel.souls.get(event.index).unwrap() {
             // Cast the spell corresponding to this soul type.
-            let (player_entity, spellbook) = player.get_single().unwrap();
+            let (player_entity, spellbook) = player.single()?;
             if let Some(chosen_spell) = spellbook.spells.get(soul) {
-                spell.send(CastSpell {
+                spell.write(CastSpell {
                     caster: player_entity,
                     spell: chosen_spell.clone(),
                     starting_step: 0,
@@ -382,14 +376,14 @@ pub fn use_wheel_soul(
                 }
             } else {
                 // That caste has no spell attached!
-                text.send(AddMessage {
+                text.write(AddMessage {
                     message: Message::InvalidAction(InvalidAction::NoSpellForCaste),
                 });
                 turn_manager.action_this_turn = PlayerAction::Invalid;
             }
         } else {
             // That soul slot is empty!
-            text.send(AddMessage {
+            text.write(AddMessage {
                 message: Message::InvalidAction(InvalidAction::EmptySlotCast),
             });
             turn_manager.action_this_turn = PlayerAction::Invalid;
@@ -402,6 +396,7 @@ pub fn use_wheel_soul(
                 .and_modify(|amount| *amount += 1);
         }
     }
+    Ok(())
 }
 
 pub enum PlayerAction {
@@ -865,13 +860,13 @@ pub fn creature_step(
     for event in events.read() {
         let creature_pos = creature.get_mut(event.entity).unwrap();
         let (off_x, off_y) = event.direction.as_offset();
-        teleporter.send(TeleportEntity::new(
+        teleporter.write(TeleportEntity::new(
             event.entity,
             creature_pos.x + off_x,
             creature_pos.y + off_y,
         ));
         // Update the direction towards which this creature is facing.
-        momentum.send(AlterMomentum {
+        momentum.write(AlterMomentum {
             entity: event.entity,
             direction: event.direction,
         });
@@ -1072,7 +1067,7 @@ pub fn teleport_entity(
 
     // --- Phase 3: Execute ---
     for (entity, _, destination) in proposals {
-        execution.send(TeleportExecution {
+        execution.write(TeleportExecution {
             destination,
             entity,
         });
@@ -1116,7 +1111,7 @@ pub fn teleport_execution(
             }
             // Magnetized creatures will have their tail follow them.
             if is_magnetized {
-                magnet.send(MagnetFollow {
+                magnet.write(MagnetFollow {
                     old_pos: *creature_position,
                     conductor: event.entity,
                 });
@@ -1126,12 +1121,12 @@ pub fn teleport_execution(
             // Also, animate this creature, making its teleport action visible on the screen.
             commands.entity(event.entity).insert(SlideAnimation);
             // The creature steps on its destination tile, triggering traps there.
-            stepped.send(SteppedOnTile {
+            stepped.write(SteppedOnTile {
                 entity: event.entity,
                 position: event.destination,
             });
             // This triggers the "when moved" contingency.
-            contingency.send(TriggerContingency {
+            contingency.write(TriggerContingency {
                 caster: event.entity,
                 contingency: Axiom::WhenMoved,
             });
@@ -1149,7 +1144,7 @@ pub fn teleport_execution(
             // Only collide if one of the two creature is the player, or if the
             // creature is charmed and is NOT attacking the player.
             if (culprit_is_player || collided_is_player) || (is_charmed && !collided_is_player) {
-                collision.send(CreatureCollision {
+                collision.write(CreatureCollision {
                     culprit: event.entity,
                     collided_with: *collided_with,
                 });
@@ -1247,7 +1242,7 @@ pub fn magnet_follow(
                     should_keep_looping = false;
                     break;
                 }
-                teleport.send(TeleportEntity {
+                teleport.write(TeleportEntity {
                     destination: *tile,
                     entity: magnet.train[train_idx],
                     culprit: event.conductor,
@@ -1295,17 +1290,17 @@ pub fn stepped_on_tile(
                // responsible for stepping...
             if event.position == *position && entity != event.entity {
                 // Traps trigger their spell effect when stepped on.
-                contingency.send(TriggerContingency {
+                contingency.write(TriggerContingency {
                     caster: entity,
                     contingency: Axiom::WhenSteppedOn,
                 });
                 // Fragile floor entities are destroyed when stepped on.
                 if is_fragile {
-                    remove.send(RemoveCreature { entity });
+                    remove.write(RemoveCreature { entity });
                 }
                 // If the player steps on a Soul Cage, start painting in it.
                 if is_crafting_slot && is_player.get(event.entity).unwrap() {
-                    drop.send(TakeOrDropSoul {
+                    drop.write(TakeOrDropSoul {
                         position: *position,
                         soul: paint.current_paint,
                     });
@@ -1350,7 +1345,7 @@ pub fn creature_collision(
         // if is_door {
         // Open doors.
         // NOTE: Disabled as doors are currently automatic.
-        // open.send(OpenCloseDoor {
+        // open.write(OpenCloseDoor {
         //     entity: event.collided_with,
         //     open: true,
         // });
@@ -1374,13 +1369,13 @@ pub fn creature_collision(
                 -1
             };
             // Melee attack.
-            harm.send(DamageOrHealCreature {
+            harm.write(DamageOrHealCreature {
                 entity: event.collided_with,
                 culprit: event.culprit,
                 hp_mod: damage,
             });
             if is_player {
-                draw_soul.send(DrawSoul { amount: 1 });
+                draw_soul.write(DrawSoul { amount: 1 });
             }
             // Melee attack animation.
             // This must be calculated and cannot be "momentum", it has not been altered yet.
@@ -1391,7 +1386,7 @@ pub fn creature_collision(
             commands.entity(event.culprit).insert(SlideAnimation);
         } else if matches!(turn_manager.action_this_turn, PlayerAction::Step) && is_player {
             // The player spent their turn walking into a wall, disallow the turn from ending.
-            text.send(AddMessage {
+            text.write(AddMessage {
                 message: Message::InvalidAction(InvalidAction::CannotMelee(
                     *species_query.get(event.collided_with).unwrap(),
                 )),
@@ -1429,7 +1424,7 @@ pub fn alter_momentum(
         }
         // Keep the HP bar on the bottom.
         for child in children.iter() {
-            let mut hp_transform = hp_bar.get_mut(*child).unwrap();
+            let mut hp_transform = hp_bar.get_mut(child).unwrap();
             match event.direction {
                 OrdDir::Down => hp_transform.rotation = Quat::from_rotation_z(0.),
                 OrdDir::Right => hp_transform.rotation = Quat::from_rotation_z(3. * PI / 2.),
@@ -1468,7 +1463,7 @@ pub fn harm_creature(
             -1 => {
                 if is_invincible {
                     if victim_is_player {
-                        text.send(AddMessage {
+                        text.write(AddMessage {
                             message: Message::PlayerIsInvincible(*culprit_species),
                         });
                     }
@@ -1476,15 +1471,15 @@ pub fn harm_creature(
                 }
 
                 if culprit_is_player {
-                    text.send(AddMessage {
+                    text.write(AddMessage {
                         message: Message::PlayerAttack(*victim_species, -event.hp_mod),
                     });
                 } else if victim_is_player {
-                    text.send(AddMessage {
+                    text.write(AddMessage {
                         message: Message::HostileAttack(*culprit_species, -event.hp_mod),
                     });
                 } else {
-                    text.send(AddMessage {
+                    text.write(AddMessage {
                         message: Message::NoPlayerAttack(
                             *culprit_species,
                             *victim_species,
@@ -1494,11 +1489,11 @@ pub fn harm_creature(
                 }
 
                 health.hp = health.hp.saturating_sub((-event.hp_mod) as usize);
-                contingency.send(TriggerContingency {
+                contingency.write(TriggerContingency {
                     caster: event.culprit,
                     contingency: Axiom::WhenDealingDamage,
                 });
-                contingency.send(TriggerContingency {
+                contingency.write(TriggerContingency {
                     caster: event.entity,
                     contingency: Axiom::WhenTakingDamage,
                 });
@@ -1515,15 +1510,15 @@ pub fn harm_creature(
                 );
                 let health_difference = (health.hp - health_difference) as isize;
                 if victim_is_player {
-                    text.send(AddMessage {
+                    text.write(AddMessage {
                         message: Message::HealSelf(health_difference),
                     });
                 } else if culprit_is_player {
-                    text.send(AddMessage {
+                    text.write(AddMessage {
                         message: Message::HealOther(*victim_species, health_difference),
                     });
                 } else {
-                    text.send(AddMessage {
+                    text.write(AddMessage {
                         message: Message::CreatureHealsItself(*victim_species, health_difference),
                     });
                 }
@@ -1532,14 +1527,14 @@ pub fn harm_creature(
         }
         // Update the healthbar.
         for child in children.iter() {
-            let (mut hp_vis, mut hp_bar) = hp_bar.get_mut(*child).unwrap();
+            let (mut hp_vis, mut hp_bar) = hp_bar.get_mut(child).unwrap();
             // Don't show the healthbar at full hp.
             (*hp_vis, hp_bar.texture_atlas.as_mut().unwrap().index) =
                 hp_bar_visibility_and_index(health.hp, health.max_hp);
         }
         // 0 hp creatures are removed.
         if health.hp == 0 {
-            remove.send(RemoveCreature {
+            remove.write(RemoveCreature {
                 entity: event.entity,
             });
         }
@@ -1692,7 +1687,7 @@ pub fn remove_creature(
         // to if let Ok instead of unwrap(), hoping to see the weird behaviour in game.
         if let Ok((position, soul, is_player, flags)) = creature.get(event.entity) {
             // Visually flash an X where the creature was removed.
-            magic_vfx.send(PlaceMagicVfx {
+            magic_vfx.write(PlaceMagicVfx {
                 targets: vec![*position],
                 sequence: EffectSequence::Simultaneous,
                 effect: EffectType::XCross,
@@ -1708,7 +1703,7 @@ pub fn remove_creature(
                     .entity(event.entity)
                     .insert((DesignatedForRemoval, Dizzy));
                 // This triggers the "when removed" contingency.
-                contingency.send(TriggerContingency {
+                contingency.write(TriggerContingency {
                     caster: event.entity,
                     contingency: Axiom::WhenRemoved,
                 });
@@ -1720,7 +1715,7 @@ pub fn remove_creature(
                         .and_modify(|amount| *amount += 1);
                 }
             } else {
-                respawn.send(RespawnPlayer { victorious: false });
+                respawn.write(RespawnPlayer { victorious: false });
             }
         } else {
             info!("A RemoveEntity failed to fetch components from its Entity.");
@@ -1758,31 +1753,31 @@ pub fn respawn_player(
     mut transform: EventWriter<TransformCreature>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut faiths_end: ResMut<FaithsEnd>,
-) {
+) -> Result {
     for event in events.read() {
         for npc in npcs.iter() {
-            remove.send(RemoveCreature { entity: npc });
+            remove.write(RemoveCreature { entity: npc });
         }
         for delete in souls_to_delete.iter() {
             commands.entity(delete).despawn();
         }
         spell_library.library.clear();
         *loot = BagOfLoot::get_initial();
-        let (player, mut spellbook) = player.single_mut();
+        let (player, mut spellbook) = player.single_mut()?;
         // Reset the player's HP.
-        heal.send(DamageOrHealCreature {
+        heal.write(DamageOrHealCreature {
             entity: player,
             culprit: player,
             hp_mod: 6,
         });
         // Return the player to the start.
-        teleport.send(TeleportEntity {
+        teleport.write(TeleportEntity {
             destination: Position::new(4, 4),
             entity: player,
             culprit: player,
         });
         // Ensure the player is back to its initial form.
-        transform.send(TransformCreature {
+        transform.write(TransformCreature {
             entity: player,
             new_species: Species::Player,
         });
@@ -1800,11 +1795,12 @@ pub fn respawn_player(
         soul_wheel.draw_pile.insert(Soul::Vile, 1);
         faiths_end.cage_address_position.clear();
         faiths_end.current_cage = 0;
-        cage.send(RespawnCage);
-        title.send(AnnounceGameOver {
+        cage.write(RespawnCage);
+        title.write(AnnounceGameOver {
             victorious: event.victorious,
         });
     }
+    Ok(())
 }
 
 /// This is done separately, and ONLY once the spell stack is empty, to avoid crashes
@@ -1830,13 +1826,9 @@ pub fn remove_designated_creatures(
             }
         }
         // Remove the creature AND its children (health bar)
-        commands.entity(designated).despawn_recursive();
-        commands
-            .entity(designated_flags.species_flags)
-            .despawn_recursive();
-        commands
-            .entity(designated_flags.effects_flags)
-            .despawn_recursive();
+        commands.entity(designated).despawn();
+        commands.entity(designated_flags.species_flags).despawn();
+        commands.entity(designated_flags.effects_flags).despawn();
     }
 }
 
@@ -1851,7 +1843,7 @@ pub fn end_turn(
     mut loop_protection: ResMut<AntiContingencyLoop>,
     player_flags: Query<&CreatureFlags, With<Player>>,
     speed_query: Query<&Speed>,
-) {
+) -> Result {
     for _event in events.read() {
         // The player shouldn't be allowed to "wait" turns by stepping into walls.
         if matches!(
@@ -1862,10 +1854,10 @@ pub fn end_turn(
             // if matches!(turn_manager.action_this_turn, PlayerAction::Invalid) {
             //     screenshake.intensity = 3;
             // }
-            return;
+            return Ok(());
         }
 
-        let flags = player_flags.single();
+        let flags = player_flags.single()?;
         let speed_level = if let Ok(player_speed) = speed_query
             .get(flags.effects_flags)
             .or(speed_query.get(flags.species_flags))
@@ -1894,8 +1886,9 @@ pub fn end_turn(
 
         // The turncount increases.
         turn_manager.turn_count += 1;
-        npc_actions.send(DistributeNpcActions { speed_level });
+        npc_actions.write(DistributeNpcActions { speed_level });
     }
+    Ok(())
 }
 
 fn start_possessing_creature(
@@ -1905,14 +1898,14 @@ fn start_possessing_creature(
     possessing: Query<Entity, With<Possessing>>,
     player: Query<Has<Player>>,
     mut commands: Commands,
-) {
+) -> Result {
     // Do not allow possessing multiple creatures at once.
     // NOTE: It could be fun to "sync" their movements if this
     // happens instead of just returning.
-    if possessing.get_single().is_ok() {
-        return;
+    if possessing.single().is_ok() {
+        return Ok(());
     }
-    let possessed_creature_flags = added.entity();
+    let possessed_creature_flags = added.target();
     let possessed_creature = flag_entity
         .get(possessed_creature_flags)
         .unwrap()
@@ -1923,6 +1916,7 @@ fn start_possessing_creature(
         commands.entity(possessed_creature).insert(Player);
         commands.entity(culprit).insert(Possessing);
     }
+    Ok(())
 }
 
 fn stop_possessing_creature(
@@ -1931,14 +1925,14 @@ fn stop_possessing_creature(
     flag_entity: Query<&FlagEntity>,
     mut commands: Commands,
 ) {
-    let possessed_creature_flags = removed.entity();
+    let possessed_creature_flags = removed.target();
     let possessed_creature = flag_entity
         .get(possessed_creature_flags)
         .unwrap()
         .parent_creature;
     // HACK: Possession "chains" will not be pretty with this, as
     // it assumes there is only one possession happening at a time.
-    if let Ok(culprit) = possessing.get_single() {
+    if let Ok(culprit) = possessing.single() {
         commands.entity(possessed_creature).remove::<Player>();
         commands.entity(culprit).insert(Player);
     }
@@ -1954,10 +1948,11 @@ fn room_circulation_check(
     mut status_effect: EventWriter<AddStatusEffect>,
     mut commands: Commands,
     mut tracker: ResMut<ConveyorTracker>,
+    // TODO -> Result and ? after bevy bug is fixed
 ) {
     let (boundary_a, boundary_b) = (Position::new(27, 24), Position::new(33, 30));
     if player_position
-        .get_single()
+        .single()
         .unwrap()
         .is_within_range(&boundary_a, &boundary_b)
     {
@@ -1972,7 +1967,7 @@ fn room_circulation_check(
             commands
                 .entity(flags_query.get(sleeping_entity).unwrap().1.effects_flags)
                 .insert(Dizzy);
-            status_effect.send(AddStatusEffect {
+            status_effect.write(AddStatusEffect {
                 entity: sleeping_entity,
                 effect: StatusEffect::Dizzy,
                 potency: 1,
@@ -1995,7 +1990,7 @@ fn room_circulation_check(
             if open_door_query.contains(flags.species_flags)
                 || open_door_query.contains(flags.effects_flags)
             {
-                open.send(OpenCloseDoor {
+                open.write(OpenCloseDoor {
                     entity: door,
                     open: false,
                 });
@@ -2004,7 +1999,7 @@ fn room_circulation_check(
     }
     let (boundary_a, boundary_b) = (Position::new(25, 22), Position::new(35, 32));
     if !player_position
-        .get_single()
+        .single()
         .unwrap()
         .is_within_range(&boundary_a, &boundary_b)
     {
@@ -2093,9 +2088,9 @@ pub fn distribute_npc_actions(
     speed_query: Query<&Speed>,
     charm_query: Query<&Charm>,
     stunned_query: Query<Entity, Or<(With<Dizzy>, With<Sleeping>)>>,
-) {
+) -> Result {
     for event in events.read() {
-        let player_pos = player.get_single().unwrap();
+        let player_pos = player.single()?;
         let mut send_echo = false;
         for (npc_entity, npc_pos, npc_species, npc_spellbook, flags) in npcs.iter() {
             let (is_hunter, is_random, is_stunned, is_charmed, speed) = {
@@ -2143,7 +2138,7 @@ pub fn distribute_npc_actions(
             if is_random {
                 if let Some(move_direction) = map.random_adjacent_passable_direction(*npc_pos) {
                     // If it is found, cause a CreatureStep event.
-                    step.send(CreatureStep {
+                    step.write(CreatureStep {
                         direction: move_direction,
                         entity: npc_entity,
                     });
@@ -2155,7 +2150,7 @@ pub fn distribute_npc_actions(
                     for adj_pos in map.get_adjacent_tiles(*npc_pos) {
                         if let Some(adjacent_npc) = map.creatures.get(&adj_pos) {
                             if *species.get(*adjacent_npc).unwrap() == Species::WeakWall {
-                                spell.send(CastSpell {
+                                spell.write(CastSpell {
                                     caster: npc_entity,
                                     spell: npc_spellbook.spells.get(&Soul::Vile).unwrap().clone(),
                                     starting_step: 0,
@@ -2191,7 +2186,7 @@ pub fn distribute_npc_actions(
                 // Try to find a tile that gets the hunter closer to its target.
                 if let Some(move_direction) = map.best_manhattan_move(*npc_pos, destination) {
                     // If it is found, cause a CreatureStep event.
-                    step.send(CreatureStep {
+                    step.write(CreatureStep {
                         direction: move_direction,
                         entity: npc_entity,
                     });
@@ -2199,11 +2194,12 @@ pub fn distribute_npc_actions(
             }
         }
         if send_echo {
-            echo.send(EchoSpeed {
+            echo.write(EchoSpeed {
                 speed_level: event.speed_level + 1,
             });
         }
     }
+    Ok(())
 }
 
 #[derive(Event)]
@@ -2216,7 +2212,7 @@ pub fn echo_speed(
     mut end_turn: EventWriter<DistributeNpcActions>,
 ) {
     for event in events.read() {
-        end_turn.send(DistributeNpcActions {
+        end_turn.write(DistributeNpcActions {
             speed_level: event.speed_level,
         });
     }

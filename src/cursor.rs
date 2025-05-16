@@ -35,8 +35,8 @@ pub fn spawn_cursor(
         Query<&mut Visibility, With<CursorBox>>,
     )>,
     painter: Res<CagePainter>,
-) {
-    let (entity, player_position) = player.single();
+) -> Result {
+    let (entity, player_position) = player.single()?;
     commands.spawn((
         *player_position,
         Cursor(entity),
@@ -52,11 +52,12 @@ pub fn spawn_cursor(
         Transform::from_translation(Vec3::new(0., 0., 3.)),
     ));
     if painter.is_painting {
-        *set.p1().single_mut() = Visibility::Hidden;
-        *set.p2().single_mut() = Visibility::Hidden;
+        *set.p1().single_mut()? = Visibility::Hidden;
+        *set.p2().single_mut()? = Visibility::Hidden;
     }
-    *set.p0().single_mut() = Visibility::Hidden;
-    *set.p3().single_mut() = Visibility::Inherited;
+    *set.p0().single_mut()? = Visibility::Hidden;
+    *set.p3().single_mut()? = Visibility::Inherited;
+    Ok(())
 }
 
 pub fn despawn_cursor(
@@ -69,15 +70,16 @@ pub fn despawn_cursor(
         Query<&mut Visibility, With<CursorBox>>,
     )>,
     painter: Res<CagePainter>,
-) {
-    commands.entity(cursor.single()).despawn();
+) -> Result {
+    commands.entity(cursor.single()?).despawn();
     if painter.is_painting {
-        *set.p1().single_mut() = Visibility::Inherited;
+        *set.p1().single_mut()? = Visibility::Inherited;
     }
-    if matches!(set.p2().single(), Visibility::Hidden) {
-        *set.p0().single_mut() = Visibility::Inherited;
+    if matches!(set.p2().single()?, Visibility::Hidden) {
+        *set.p0().single_mut()? = Visibility::Inherited;
     }
-    *set.p3().single_mut() = Visibility::Hidden;
+    *set.p3().single_mut()? = Visibility::Hidden;
+    Ok(())
 }
 
 #[derive(Event)]
@@ -89,14 +91,15 @@ pub fn cursor_step(
     mut events: EventReader<CursorStep>,
     mut teleporter: EventWriter<TeleportCursor>,
     cursor: Query<&Position, With<Cursor>>,
-) {
+) -> Result {
     for event in events.read() {
-        let cursor_pos = cursor.single();
+        let cursor_pos = cursor.single()?;
         let (off_x, off_y) = event.direction.as_offset();
-        teleporter.send(TeleportCursor {
+        teleporter.write(TeleportCursor {
             destination: Position::new(cursor_pos.x + off_x, cursor_pos.y + off_y),
         });
     }
+    Ok(())
 }
 
 #[derive(Event)]
@@ -109,15 +112,16 @@ pub fn teleport_cursor(
     mut cursor: Query<(Entity, &mut Position, &mut Cursor)>,
     mut commands: Commands,
     map: Res<Map>,
-) {
+) -> Result {
     for event in events.read() {
-        let (entity, mut cursor_position, mut cursor_target) = cursor.single_mut();
+        let (entity, mut cursor_position, mut cursor_target) = cursor.single_mut()?;
         cursor_position.update(event.destination.x, event.destination.y);
         if let Some(new_creature) = map.get_entity_at(cursor_position.x, cursor_position.y) {
             cursor_target.0 = *new_creature;
         }
         commands.entity(entity).insert(SlideAnimation);
     }
+    Ok(())
 }
 
 pub fn update_cursor_box(
@@ -127,17 +131,17 @@ pub fn update_cursor_box(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
-) {
-    if let Ok(examined_entity) = cursor.get_single() {
+) -> Result {
+    if let Ok(examined_entity) = cursor.single() {
         let examined_entity = examined_entity.0;
         let species = creature_query.get(examined_entity).unwrap();
-        let cursor_box = cursor_box.single();
+        let cursor_box = cursor_box.single()?;
         // TODO: Instead of multiple entities, would it be interesting to
         // have these merged into a single string with \n to space them out?
         // This would be good in case there's a ton of "effects flags".
         let (mut species_name, mut species_description) =
             (Entity::PLACEHOLDER, Entity::PLACEHOLDER);
-        commands.entity(cursor_box).despawn_descendants();
+        commands.entity(cursor_box).despawn_related::<Children>();
         commands.entity(cursor_box).with_children(|parent| {
             species_name =
                 spawn_split_text(&match_species_with_string(species), parent, &asset_server);
@@ -176,4 +180,5 @@ pub fn update_cursor_box(
             ..default()
         });
     }
+    Ok(())
 }
