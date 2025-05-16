@@ -17,8 +17,8 @@ use crate::{
         StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     events::{
-        AddStatusEffect, DamageOrHealCreature, RemoveCreature, SummonCreature, SummonProperties,
-        TeleportEntity, TransformCreature,
+        AddStatusEffect, DamageOrHealCreature, OpenCloseDoor, RemoveCreature, SummonCreature,
+        SummonProperties, TeleportEntity, TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{FaithsEnd, Map, Position},
@@ -218,12 +218,13 @@ pub fn tick_time_contingency(
     creatures: Query<(Entity, &Position, &Species, &Spellbook), With<CreatureFlags>>,
     mut spell: EventWriter<CastSpell>,
     faith: Res<FaithsEnd>,
+    mut open: EventWriter<OpenCloseDoor>,
 ) {
     let mut creatures = creatures
         .iter()
         .collect::<Vec<(Entity, &Position, &Species, &Spellbook)>>();
     creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
-    for (creature, _, species, spellbook) in creatures.iter() {
+    for (creature, pos, species, spellbook) in creatures.iter() {
         contingency.write(TriggerContingency {
             caster: *creature,
             contingency: Axiom::WhenTimePasses,
@@ -236,6 +237,19 @@ pub fn tick_time_contingency(
                         spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
                         starting_step: 0,
                         soul_caste: Soul::Ordered,
+                    });
+                }
+            }
+            Species::Airlock => {
+                if !faith.conveyor_active
+                    && (pos == &&Position::new(25, 27)
+                        || pos == &&Position::new(26, 27)
+                        || pos == &&Position::new(34, 27)
+                        || pos == &&Position::new(35, 27))
+                {
+                    open.write(OpenCloseDoor {
+                        entity: *creature,
+                        open: true,
                     });
                 }
             }

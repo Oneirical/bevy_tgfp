@@ -1586,16 +1586,18 @@ pub fn open_close_door(
         // the success check will try to open the door while the failure check is trying
         // to delete them.
         if let Ok((mut visibility, position, orientation, flags)) = door.get_mut(event.entity) {
-            if event.open {
+            if event.open && *visibility == Visibility::Inherited {
                 // The door becomes intangible, and can be walked through.
                 commands.entity(flags.species_flags).insert(Intangible);
                 // The door is no longer visible, as it is open.
                 *visibility = Visibility::Hidden;
-            } else {
+            } else if !event.open && *visibility == Visibility::Hidden {
                 commands.entity(flags.species_flags).remove::<Intangible>();
                 commands.entity(event.entity).insert(BecomingVisible {
                     timer: Timer::from_seconds(0.4, TimerMode::Once),
                 });
+            } else {
+                return;
             }
             // Find the direction in which the door was facing to play its animation correctly.
             let (offset_1, offset_2) = match orientation {
