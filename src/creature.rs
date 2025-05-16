@@ -145,16 +145,6 @@ pub struct PotencyAndStacks {
     pub stacks: EffectDuration,
 }
 
-impl PotencyAndStacks {
-    pub fn is_active(&self) -> bool {
-        self.potency > 0
-            && match self.stacks {
-                EffectDuration::Finite { stacks } => stacks > 0,
-                EffectDuration::Infinite => true,
-            }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EffectDuration {
     Finite { stacks: usize },
@@ -251,10 +241,6 @@ pub struct Door;
 
 #[derive(Component)]
 pub struct Wall;
-
-/// It slides downwards in the Quarry.
-#[derive(Component)]
-pub struct ConveyorBelt;
 
 #[derive(Component)]
 pub struct Spellproof;
@@ -420,7 +406,6 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         Species::ConveyorBelt => Spellbook::new([
             None,
             Some(vec![
-                Axiom::WhenTimePasses,
                 Axiom::DisableVfx,
                 Axiom::Ego,
                 Axiom::TeleportDash { distance: 1 },

@@ -21,7 +21,7 @@ use crate::{
         TeleportEntity, TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
-    map::{Map, Position},
+    map::{FaithsEnd, Map, Position},
     OrdDir,
 };
 
@@ -215,15 +215,32 @@ pub struct TriggerContingency {
 
 pub fn tick_time_contingency(
     mut contingency: EventWriter<TriggerContingency>,
-    creatures: Query<(Entity, &Position), With<CreatureFlags>>,
+    creatures: Query<(Entity, &Position, &Species, &Spellbook), With<CreatureFlags>>,
+    mut spell: EventWriter<CastSpell>,
+    faith: Res<FaithsEnd>,
 ) {
-    let mut creatures = creatures.iter().collect::<Vec<(Entity, &Position)>>();
+    let mut creatures = creatures
+        .iter()
+        .collect::<Vec<(Entity, &Position, &Species, &Spellbook)>>();
     creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
-    for (creature, _) in creatures.iter() {
+    for (creature, _, species, spellbook) in creatures.iter() {
         contingency.write(TriggerContingency {
             caster: *creature,
             contingency: Axiom::WhenTimePasses,
         });
+        match species {
+            Species::ConveyorBelt => {
+                if faith.conveyor_active {
+                    spell.write(CastSpell {
+                        caster: *creature,
+                        spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
+                        starting_step: 0,
+                        soul_caste: Soul::Ordered,
+                    });
+                }
+            }
+            _ => (),
+        }
     }
 }
 

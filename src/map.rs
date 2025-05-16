@@ -8,7 +8,7 @@ use rand::{
 };
 
 use crate::{
-    creature::{Awake, ConveyorBelt, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
+    creature::{Awake, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
     events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
     ui::{AddMessage, Message},
     OrdDir,
@@ -25,6 +25,7 @@ impl Plugin for MapPlugin {
             cage_address_position: HashMap::new(),
             cage_dimensions: HashMap::new(),
             current_cage: 0,
+            conveyor_active: true,
         });
         app.add_systems(Startup, spawn_cage);
         // app.add_systems(
@@ -95,7 +96,7 @@ impl Map {
     }
 
     /// Get all tile coordinates of adjacent tiles from a point.
-    pub fn get_adjacent_tiles(&self, centre: Position) -> Vec<Position> {
+    pub fn get_adjacent_tiles(&self, centre: &Position) -> Vec<Position> {
         vec![
             Position::new(centre.x, centre.y + 1),
             Position::new(centre.x, centre.y - 1),
@@ -117,7 +118,7 @@ impl Map {
     }
 
     pub fn random_adjacent_passable_direction(&self, start: Position) -> Option<OrdDir> {
-        let adjacent = self.get_adjacent_tiles(start);
+        let adjacent = self.get_adjacent_tiles(&start);
         let mut rng = thread_rng();
         let final_choice = adjacent
             .iter()
@@ -136,7 +137,7 @@ impl Map {
 
     /// Find all adjacent accessible tiles to start, and pick the one closest to end.
     pub fn best_manhattan_move(&self, start: Position, end: Position) -> Option<OrdDir> {
-        let adjacent = self.get_adjacent_tiles(start);
+        let adjacent = self.get_adjacent_tiles(&start);
         let adjacent_sorted = self.sort_by_manhattan(adjacent, end);
 
         let final_choice = adjacent_sorted
@@ -229,8 +230,8 @@ pub fn register_creatures(
             // REASON: If a creature spawns in already intangible on top of a
             // tangible creature, without this check, it would remove
             // the tangible creature from the map.
-            if *preexisting_entity != flag_entity.parent_creature {
-                continue;
+            if *preexisting_entity == flag_entity.parent_creature {
+                map.creatures.remove(intangible_position);
             }
         }
         // Lowering the sprite of the intangible creature, ensuring other creatures
@@ -240,7 +241,6 @@ pub fn register_creatures(
             .unwrap()
             .translation
             .z = -5.;
-        map.creatures.remove(intangible_position);
     }
 }
 
@@ -249,6 +249,7 @@ pub struct FaithsEnd {
     pub cage_address_position: HashMap<Position, usize>,
     pub cage_dimensions: HashMap<usize, (Position, Position)>,
     pub current_cage: usize,
+    pub conveyor_active: bool,
 }
 
 pub fn is_soul_cage_room(room: usize) -> bool {
@@ -259,8 +260,8 @@ pub fn is_soul_cage_room(room: usize) -> bool {
 // like Abazon, it will get stuck and make other entities
 // bump into it.
 pub fn slide_conveyor_belt(
-    query: Query<(Entity, &Position), With<ConveyorBelt>>,
-    doors: Query<(Entity, &Position, &CreatureFlags, Has<ConveyorBelt>)>,
+    query: Query<(Entity, &Position)>,
+    doors: Query<(Entity, &Position, &CreatureFlags)>,
     closed_door_query: Query<&Door, Without<Intangible>>,
     mut teleport: EventWriter<TeleportEntity>,
     mut commands: Commands,
@@ -276,12 +277,10 @@ pub fn slide_conveyor_belt(
                 return;
             }
         }
-        for (door, pos, flags, is_on_conveyor) in doors.iter() {
+        for (door, pos, flags) in doors.iter() {
             if (closed_door_query.contains(flags.species_flags)
                 || closed_door_query.contains(flags.effects_flags))
-                && ((is_on_conveyor && pos.y == 27)
-                    || pos == &Position::new(25, 27)
-                    || pos == &Position::new(35, 27))
+                && (pos.y == 27 || pos == &Position::new(25, 27) || pos == &Position::new(35, 27))
             {
                 open.write(OpenCloseDoor {
                     entity: door,
@@ -315,7 +314,7 @@ pub fn slide_conveyor_belt(
     }
     if close_door {
         commands.run_system_cached(new_cage_on_conveyor);
-        for (door, pos, flags, _is_on_conveyor) in doors.iter() {
+        for (door, pos, flags) in doors.iter() {
             if (!closed_door_query.contains(flags.species_flags)
                 && !closed_door_query.contains(flags.effects_flags))
                 && (pos == &Position::new(25, 27) || pos == &Position::new(35, 27))
@@ -378,7 +377,6 @@ pub fn new_cage_on_conveyor(
             's' => OrdDir::Down,
             'V' | _ => OrdDir::Down,
         })];
-        properties.push(SummonProperties::ConveyorBelt);
         if [
             Species::Hunter,
             Species::Shrike,
@@ -542,9 +540,6 @@ pub fn spawn_cage(
                 's' => OrdDir::Down,
                 'V' | _ => OrdDir::Down,
             })];
-            if tower_floor > 0 {
-                properties.push(SummonProperties::ConveyorBelt);
-            }
             if [
                 Species::Hunter,
                 Species::Shrike,

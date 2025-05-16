@@ -10,12 +10,11 @@ use crate::{
     crafting::{BagOfLoot, DroppedSoul, KnownPattern, PredictCraft, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Charm, ConveyorBelt, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
-        Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile,
-        Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed,
-        Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping, Soul, Species,
-        Speed, SpellLibrary, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList,
-        Summoned, Wall,
+        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door,
+        EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
+        Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed, Possessing,
+        PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping, Soul, Species, Speed,
+        SpellLibrary, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -489,7 +488,6 @@ pub struct SummonCreature {
 
 pub enum SummonProperties {
     Spellbook(Spellbook),
-    ConveyorBelt,
     Summoned {
         summoner_tile: Position,
         summoner: Entity,
@@ -622,9 +620,6 @@ pub fn summon_creature(
                     transform.translation.y = summoner_tile.y as f32 * TILE_SIZE;
                     // Summoned creatures are marked with their summoner.
                     summoner_flag_insertion = Some(*summoner);
-                }
-                SummonProperties::ConveyorBelt => {
-                    new_creature.insert(ConveyorBelt);
                 }
                 SummonProperties::Sleeping => {
                     new_creature.insert(Sleeping);
@@ -916,7 +911,7 @@ pub fn magnetize_tail_segments(
             };
             // Find adjacent creatures to magnetize.
             // NOTE: This will ignore intangible creatures.
-            let adjacent_tiles = map.get_adjacent_tiles(*pos);
+            let adjacent_tiles = map.get_adjacent_tiles(&pos);
             for tile in adjacent_tiles {
                 // If a creature is found...
                 if let Some(adjacent_creature) = map.creatures.get(&tile) {
@@ -1149,6 +1144,29 @@ pub fn teleport_execution(
                     collided_with: *collided_with,
                 });
             }
+        }
+    }
+}
+
+pub fn check_airlock_bridge_formation(
+    doors: Query<(&Species, &Position)>,
+    map: Res<Map>,
+    mut faith: ResMut<FaithsEnd>,
+) {
+    let mut potential_doors = Vec::new();
+    for (species, position) in doors.iter() {
+        if species == &Species::Airlock {
+            for tile in map.get_adjacent_tiles(position) {
+                if let Some(potential_door) = map.get_entity_at(tile.x, tile.y) {
+                    potential_doors.push(potential_door);
+                }
+            }
+        }
+    }
+    for potential_door in potential_doors {
+        let (species, _) = doors.get(*potential_door).unwrap();
+        if species == &Species::Airlock {
+            faith.conveyor_active = false;
         }
     }
 }
@@ -1942,7 +1960,7 @@ fn room_circulation_check(
     awake_creatures: Query<&Position, With<Awake>>,
     sleeping_creatures: Query<(Entity, &Position), With<Sleeping>>,
     player_position: Query<&Position, With<Player>>,
-    flags_query: Query<(Entity, &CreatureFlags), With<ConveyorBelt>>,
+    flags_query: Query<(Entity, &CreatureFlags)>,
     open_door_query: Query<&Door, With<Intangible>>,
     mut open: EventWriter<OpenCloseDoor>,
     mut status_effect: EventWriter<AddStatusEffect>,
@@ -2147,7 +2165,7 @@ pub fn distribute_npc_actions(
                 // Occasionally cast a spell.
                 if *npc_species == Species::Second {
                     let mut found_wall = false;
-                    for adj_pos in map.get_adjacent_tiles(*npc_pos) {
+                    for adj_pos in map.get_adjacent_tiles(npc_pos) {
                         if let Some(adjacent_npc) = map.creatures.get(&adj_pos) {
                             if *species.get(*adjacent_npc).unwrap() == Species::WeakWall {
                                 spell.write(CastSpell {

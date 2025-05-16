@@ -12,12 +12,13 @@ use crate::{
     creature::SpellLibrary,
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
-        add_status_effects, alter_momentum, assign_species_components, creature_collision,
-        creature_step, distribute_npc_actions, draw_soul, echo_speed, end_turn, harm_creature,
-        is_painting, magnet_follow, magnetize_tail_segments, open_close_door, remove_creature,
-        remove_designated_creatures, render_closing_doors, respawn_cage, respawn_player,
-        stepped_on_tile, summon_creature, swap_current_paint, teleport_entity, teleport_execution,
-        transform_creature, use_wheel_soul,
+        add_status_effects, alter_momentum, assign_species_components,
+        check_airlock_bridge_formation, creature_collision, creature_step, distribute_npc_actions,
+        draw_soul, echo_speed, end_turn, harm_creature, is_painting, magnet_follow,
+        magnetize_tail_segments, open_close_door, remove_creature, remove_designated_creatures,
+        render_closing_doors, respawn_cage, respawn_player, stepped_on_tile, summon_creature,
+        swap_current_paint, teleport_entity, teleport_execution, transform_creature,
+        use_wheel_soul,
     },
     graphics::{adjust_transforms, decay_magic_effects, place_magic_effects},
     input::keyboard_input,
@@ -46,6 +47,10 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnExit(ControlState::QuestMenu), hide_quest_menu);
         app.add_systems(Update, magnetize_tail_segments.before(teleport_entity));
         app.add_systems(Update, magnet_follow.after(teleport_execution));
+        app.add_systems(
+            Update,
+            check_airlock_bridge_formation.after(teleport_execution),
+        );
         app.add_systems(Update, teleport_entity.before(teleport_execution));
         app.add_systems(Update, take_or_drop_soul.after(stepped_on_tile));
         app.add_systems(Update, craft_with_axioms);
@@ -67,7 +72,7 @@ impl Plugin for SetsPlugin {
         app.add_systems(Update, equip_spell);
         app.add_systems(
             Update,
-            tick_time_contingency.run_if(on_timer(Duration::from_millis(200))),
+            tick_time_contingency.run_if(on_timer(Duration::from_millis(400))),
         );
         app.init_resource::<CraftingRecipes>();
         app.insert_resource(SpellLibrary {
