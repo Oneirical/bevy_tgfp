@@ -83,6 +83,7 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 # Coding
 
 - For NPC AI, enter a game state where events get routed to systems that don't actually affect the game state but calculate heuristics.
+- Use Bevy's Focus for UI keyboard input
 
 # Cool Musical Words
 

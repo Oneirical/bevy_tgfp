@@ -98,14 +98,16 @@ pub fn spawn_fading_title(
     for event in events.read() {
         // root node
         commands
-            .spawn(Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            })
-            .insert(Pickable::IGNORE)
+            .spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ))
             .with_children(|parent| {
                 parent
                     .spawn((
@@ -270,107 +272,99 @@ fn setup(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
-    commands
-        .spawn(Node {
+    commands.spawn((
+        Node {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
             justify_content: JustifyContent::FlexStart,
             ..default()
-        })
-        .insert(Pickable::IGNORE)
-        .with_children(|parent| {
-            parent
-                .spawn(Node {
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                })
-                .with_children(|parent| {
-                    parent
-                        .spawn((
-                            RecipebookUI,
-                            ChainBox,
-                            Visibility::Hidden,
-                            Node {
-                                width: Val::Px(19.),
-                                height: Val::Px(65.),
-                                min_width: Val::Px(19.),
-                                max_width: Val::Px(19.),
-                                min_height: Val::Px(65.),
-                                max_height: Val::Px(65.),
-                                row_gap: Val::Px(1.),
-                                column_gap: Val::Px(1.),
-                                flex_direction: FlexDirection::Column,
-                                border: UiRect::new(
-                                    Val::Px(2.),
-                                    Val::Px(0.),
-                                    Val::Px(2.),
-                                    Val::Px(0.),
-                                ),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0., 0., 0.)),
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
-                                Node {
-                                    width: Val::Px(16.),
-                                    height: Val::Px(15.),
-                                    row_gap: Val::Px(1.),
-                                    column_gap: Val::Px(1.),
-                                    top: Val::Px(1.),
-                                    left: Val::Px(1.),
-                                    position_type: PositionType::Relative,
-                                    flex_wrap: FlexWrap::Wrap,
-                                    align_content: AlignContent::FlexStart,
-                                    ..default()
-                                },
-                                CraftingPredictor,
-                            ));
-                            parent.spawn((
-                                Node {
-                                    width: Val::Px(16.),
-                                    height: Val::Px(46.),
-                                    row_gap: Val::Px(1.),
-                                    column_gap: Val::Px(1.),
-                                    top: Val::Px(1.),
-                                    left: Val::Px(1.),
-                                    position_type: PositionType::Relative,
-                                    flex_wrap: FlexWrap::Wrap,
-                                    align_content: AlignContent::FlexStart,
-                                    ..default()
-                                },
-                                CraftingPatterns,
-                            ));
-
-                            let chains = 9;
-                            for i in 0..chains {
-                                if i != chains - 1 && i != 0 {
-                                    parent.spawn((
-                                        ImageNode {
-                                            image: asset_server.load("spritesheet.png"),
-                                            texture_atlas: Some(TextureAtlas {
-                                                layout: atlas_layout.handle.clone(),
-                                                index: 139,
-                                            }),
-                                            ..Default::default()
-                                        },
-                                        Node {
-                                            top: Val::Px(14.3),
-                                            left: Val::Px(-0.5 + i as f32 * 2.),
-                                            width: Val::Px(2.),
-                                            height: Val::Px(2.),
-                                            position_type: PositionType::Absolute,
-                                            ..default()
-                                        },
-                                        Transform::from_rotation(Quat::from_rotation_z(
-                                            3. * PI / 2.,
-                                        )),
-                                    ));
-                                }
-                            }
-                        });
-                });
-        });
+        },
+        Pickable::IGNORE,
+        children![(
+            Node {
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            children![
+                (
+                    RecipebookUI,
+                    ChainBox,
+                    Visibility::Hidden,
+                    Node {
+                        width: Val::Px(19.),
+                        height: Val::Px(65.),
+                        min_width: Val::Px(19.),
+                        max_width: Val::Px(19.),
+                        min_height: Val::Px(65.),
+                        max_height: Val::Px(65.),
+                        row_gap: Val::Px(1.),
+                        column_gap: Val::Px(1.),
+                        flex_direction: FlexDirection::Column,
+                        border: UiRect::new(Val::Px(2.), Val::Px(0.), Val::Px(2.), Val::Px(0.)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0., 0., 0.)),
+                ),
+                children![
+                    (
+                        Node {
+                            width: Val::Px(16.),
+                            height: Val::Px(15.),
+                            row_gap: Val::Px(1.),
+                            column_gap: Val::Px(1.),
+                            top: Val::Px(1.),
+                            left: Val::Px(1.),
+                            position_type: PositionType::Relative,
+                            flex_wrap: FlexWrap::Wrap,
+                            align_content: AlignContent::FlexStart,
+                            ..default()
+                        },
+                        CraftingPredictor,
+                    ),
+                    (
+                        Node {
+                            width: Val::Px(16.),
+                            height: Val::Px(46.),
+                            row_gap: Val::Px(1.),
+                            column_gap: Val::Px(1.),
+                            top: Val::Px(1.),
+                            left: Val::Px(1.),
+                            position_type: PositionType::Relative,
+                            flex_wrap: FlexWrap::Wrap,
+                            align_content: AlignContent::FlexStart,
+                            ..default()
+                        },
+                        CraftingPatterns,
+                    )
+                ]
+            ]
+        )],
+    ));
+    // TODO add this linear chain separator to recipe book ui
+    // let chains = 9;
+    // for i in 0..chains {
+    //     if i != chains - 1 && i != 0 {
+    //         parent.spawn((
+    //             ImageNode {
+    //                 image: asset_server.load("spritesheet.png"),
+    //                 texture_atlas: Some(TextureAtlas {
+    //                     layout: atlas_layout.handle.clone(),
+    //                     index: 139,
+    //                 }),
+    //                 ..Default::default()
+    //             },
+    //             Node {
+    //                 top: Val::Px(14.3),
+    //                 left: Val::Px(-0.5 + i as f32 * 2.),
+    //                 width: Val::Px(2.),
+    //                 height: Val::Px(2.),
+    //                 position_type: PositionType::Absolute,
+    //                 ..default()
+    //             },
+    //             Transform::from_rotation(Quat::from_rotation_z(3. * PI / 2.)),
+    //         ));
+    //     }
+    // }
     // root node
     commands
         .spawn(Node {
@@ -503,26 +497,19 @@ fn setup(
                                     }
                                 });
                         });
-                    parent
-                        .spawn((
-                            ChainBox,
-                            Node {
-                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                                height: Val::Px(25.),
-                                min_height: Val::Px(25.),
-                                max_height: Val::Px(25.),
-                                border: UiRect::new(
-                                    Val::Px(0.),
-                                    Val::Px(2.),
-                                    Val::Px(2.),
-                                    Val::Px(0.),
-                                ),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0., 0., 0.)),
-                        ))
-                        .with_children(|parent| {
-                            parent.spawn((
+                    parent.spawn((
+                        ChainBox,
+                        Node {
+                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                            height: Val::Px(25.),
+                            min_height: Val::Px(25.),
+                            max_height: Val::Px(25.),
+                            border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0., 0., 0.)),
+                        children![
+                            (
                                 MessageLog,
                                 Node {
                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
@@ -535,8 +522,8 @@ fn setup(
                                     ..default()
                                 },
                                 Visibility::Inherited,
-                            ));
-                            parent.spawn((
+                            ),
+                            (
                                 CursorBox,
                                 Node {
                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
@@ -549,8 +536,8 @@ fn setup(
                                     ..default()
                                 },
                                 Visibility::Hidden,
-                            ));
-                            parent.spawn((
+                            ),
+                            (
                                 AxiomBox,
                                 Node {
                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
@@ -563,8 +550,8 @@ fn setup(
                                     ..default()
                                 },
                                 Visibility::Hidden,
-                            ));
-                            parent.spawn((
+                            ),
+                            (
                                 CasteBox,
                                 Node {
                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
@@ -577,8 +564,8 @@ fn setup(
                                     ..default()
                                 },
                                 Visibility::Hidden,
-                            ));
-                            parent.spawn((
+                            ),
+                            (
                                 QuestBox,
                                 Node {
                                     width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE - 3.),
@@ -591,8 +578,9 @@ fn setup(
                                     ..default()
                                 },
                                 Visibility::Hidden,
-                            ));
-                        });
+                            )
+                        ],
+                    ));
                     parent
                         .spawn((
                             ChainBox,
