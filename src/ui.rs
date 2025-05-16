@@ -285,26 +285,24 @@ fn setup(
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            children![
-                (
-                    RecipebookUI,
-                    ChainBox,
-                    Visibility::Hidden,
-                    Node {
-                        width: Val::Px(19.),
-                        height: Val::Px(65.),
-                        min_width: Val::Px(19.),
-                        max_width: Val::Px(19.),
-                        min_height: Val::Px(65.),
-                        max_height: Val::Px(65.),
-                        row_gap: Val::Px(1.),
-                        column_gap: Val::Px(1.),
-                        flex_direction: FlexDirection::Column,
-                        border: UiRect::new(Val::Px(2.), Val::Px(0.), Val::Px(2.), Val::Px(0.)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0., 0., 0.)),
-                ),
+            children![(
+                RecipebookUI,
+                ChainBox,
+                Visibility::Hidden,
+                Node {
+                    width: Val::Px(19.),
+                    height: Val::Px(65.),
+                    min_width: Val::Px(19.),
+                    max_width: Val::Px(19.),
+                    min_height: Val::Px(65.),
+                    max_height: Val::Px(65.),
+                    row_gap: Val::Px(1.),
+                    column_gap: Val::Px(1.),
+                    flex_direction: FlexDirection::Column,
+                    border: UiRect::new(Val::Px(2.), Val::Px(0.), Val::Px(2.), Val::Px(0.)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0., 0., 0.)),
                 children![
                     (
                         Node {
@@ -337,7 +335,7 @@ fn setup(
                         CraftingPatterns,
                     )
                 ]
-            ]
+            ),]
         )],
     ));
     // TODO add this linear chain separator to recipe book ui
