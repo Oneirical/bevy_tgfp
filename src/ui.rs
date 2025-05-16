@@ -581,44 +581,35 @@ fn setup(
                             )
                         ],
                     ));
-                    parent
-                        .spawn((
-                            ChainBox,
-                            Node {
-                                width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
-                                height: Val::Px(7.),
-                                min_height: Val::Px(7.),
-                                max_height: Val::Px(7.),
-                                border: UiRect::new(
-                                    Val::Px(0.),
-                                    Val::Px(2.),
-                                    Val::Px(2.),
-                                    Val::Px(0.),
-                                ),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0., 0., 0.)),
-                        ))
-                        .with_children(|parent| {
-                            parent
-                                .spawn((
-                                    ImageNode {
-                                        image: asset_server.load("spritesheet.png"),
-                                        texture_atlas: Some(TextureAtlas {
-                                            layout: atlas_layout.handle.clone(),
-                                            index: 169,
-                                        }),
-                                        ..Default::default()
-                                    },
-                                    Node {
-                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        left: Val::Px(0.5),
-                                        top: Val::Px(0.5),
-                                        ..default()
-                                    },
-                                ))
-                                .with_child((
+                    parent.spawn((
+                        ChainBox,
+                        Node {
+                            width: Val::Px(SOUL_WHEEL_CONTAINER_SIZE),
+                            height: Val::Px(7.),
+                            min_height: Val::Px(7.),
+                            max_height: Val::Px(7.),
+                            border: UiRect::new(Val::Px(0.), Val::Px(2.), Val::Px(2.), Val::Px(0.)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0., 0., 0.)),
+                        children![
+                            (
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: 169,
+                                    }),
+                                    ..Default::default()
+                                },
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                    height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                    left: Val::Px(0.5),
+                                    top: Val::Px(0.5),
+                                    ..default()
+                                },
+                                Children::spawn((Spawn((
                                     Text::new("C"),
                                     TextLayout {
                                         justify: JustifyText::Center,
@@ -637,26 +628,25 @@ fn setup(
                                         position_type: PositionType::Absolute,
                                         ..default()
                                     },
-                                ));
-                            parent
-                                .spawn((
-                                    ImageNode {
-                                        image: asset_server.load("spritesheet.png"),
-                                        texture_atlas: Some(TextureAtlas {
-                                            layout: atlas_layout.handle.clone(),
-                                            index: 166,
-                                        }),
-                                        ..Default::default()
-                                    },
-                                    Node {
-                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        left: Val::Px(6.5),
-                                        top: Val::Px(0.5),
-                                        ..default()
-                                    },
-                                ))
-                                .with_child((
+                                )),)),
+                            ),
+                            (
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: 166,
+                                    }),
+                                    ..Default::default()
+                                },
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                    height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                    left: Val::Px(6.5),
+                                    top: Val::Px(0.5),
+                                    ..default()
+                                },
+                                Children::spawn((Spawn((
                                     Text::new("E"),
                                     TextLayout {
                                         justify: JustifyText::Center,
@@ -675,27 +665,25 @@ fn setup(
                                         position_type: PositionType::Absolute,
                                         ..default()
                                     },
-                                ));
-
-                            parent
-                                .spawn((
-                                    ImageNode {
-                                        image: asset_server.load("spritesheet.png"),
-                                        texture_atlas: Some(TextureAtlas {
-                                            layout: atlas_layout.handle.clone(),
-                                            index: 227,
-                                        }),
-                                        ..Default::default()
-                                    },
-                                    Node {
-                                        width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
-                                        left: Val::Px(12.5),
-                                        top: Val::Px(0.5),
-                                        ..default()
-                                    },
-                                ))
-                                .with_child((
+                                )),)),
+                            ),
+                            (
+                                ImageNode {
+                                    image: asset_server.load("spritesheet.png"),
+                                    texture_atlas: Some(TextureAtlas {
+                                        layout: atlas_layout.handle.clone(),
+                                        index: 227,
+                                    }),
+                                    ..Default::default()
+                                },
+                                Node {
+                                    width: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                    height: Val::Px(SOUL_WHEEL_SLOT_SPRITE_SIZE),
+                                    left: Val::Px(12.5),
+                                    top: Val::Px(0.5),
+                                    ..default()
+                                },
+                                Children::spawn((Spawn((
                                     Text::new("Q"),
                                     TextLayout {
                                         justify: JustifyText::Center,
@@ -714,8 +702,10 @@ fn setup(
                                         position_type: PositionType::Absolute,
                                         ..default()
                                     },
-                                ));
-                        });
+                                )),)),
+                            )
+                        ],
+                    ));
                     parent
                         .spawn((
                             ChainBox,
