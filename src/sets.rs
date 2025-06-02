@@ -72,7 +72,7 @@ impl Plugin for SetsPlugin {
         app.add_systems(Update, equip_spell);
         app.add_systems(
             Update,
-            tick_time_contingency.run_if(on_timer(Duration::from_millis(400))),
+            tick_time_contingency.run_if(on_timer(Duration::from_millis(300))),
         );
         app.init_resource::<CraftingRecipes>();
         app.insert_resource(SpellLibrary {

@@ -1,10 +1,5 @@
 # The Games Foxes Play
 
-# Checklist
-
-- Descriptions in E menu
-- Change the tutorial text
-
 ## The redesigned edition
 
 The player starts in the World Seed, Terminal's cage, with 10 active Disgust, and the ability to swap between Introvert and Extrovert modes. 
@@ -82,6 +77,7 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 
 # Coding
 
+- Make text messages only appear if what they are reporting is visible to the player.
 - For NPC AI, enter a game state where events get routed to systems that don't actually affect the game state but calculate heuristics.
 - Use Bevy's Focus for UI keyboard input
 

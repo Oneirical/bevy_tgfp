@@ -14,7 +14,7 @@ use crate::{
         EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
         Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed, Possessing,
         PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping, Soul, Species, Speed,
-        SpellLibrary, Spellbook, Spellproof, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -707,10 +707,9 @@ pub fn assign_species_components(
             Species::Trap => {
                 new_creature.insert((
                     Meleeproof,
-                    RealityShield(1),
+                    RealityShield(2),
                     Intangible,
                     Fragile,
-                    Invincible,
                     NoDropSoul,
                 ));
             }
@@ -718,66 +717,46 @@ pub fn assign_species_components(
                 new_creature.insert((
                     Meleeproof,
                     Intangible,
-                    Invincible,
                     NoDropSoul,
                     RealityBreak(5),
-                    RealityShield(5),
+                    RealityShield(6),
                 ));
             }
             Species::Grinder => {
                 new_creature.insert((
                     Meleeproof,
                     Intangible,
-                    Invincible,
                     NoDropSoul,
                     RealityBreak(5),
-                    RealityShield(5),
+                    RealityShield(6),
                 ));
             }
             Species::CageBorder => {
-                new_creature.insert((
-                    Meleeproof,
-                    RealityShield(6),
-                    Intangible,
-                    Invincible,
-                    NoDropSoul,
-                ));
+                new_creature.insert((Meleeproof, RealityShield(10), Intangible, NoDropSoul));
             }
             Species::CageSlot => {
                 new_creature.insert((
                     Meleeproof,
-                    RealityShield(6),
+                    RealityShield(10),
                     Intangible,
-                    Invincible,
                     NoDropSoul,
                     CraftingSlot,
                 ));
             }
             Species::Wall => {
-                new_creature.insert((
-                    Meleeproof,
-                    RealityShield(1),
-                    Wall,
-                    Invincible,
-                    Dizzy,
-                    NoDropSoul,
-                ));
+                new_creature.insert((Meleeproof, RealityShield(2), Wall, Dizzy, NoDropSoul));
             }
             Species::WeakWall => {
-                new_creature.insert((Meleeproof, Wall, Invincible, Dizzy, NoDropSoul));
+                new_creature.insert((Meleeproof, Wall, RealityShield(1), Dizzy, NoDropSoul));
             }
             Species::Airlock => {
-                new_creature.insert((
-                    Meleeproof,
-                    RealityShield(1),
-                    Door,
-                    Invincible,
-                    Dizzy,
-                    NoDropSoul,
-                ));
+                new_creature.insert((Meleeproof, RealityShield(2), Door, Dizzy, NoDropSoul));
             }
-            Species::Hunter | Species::Spawner | Species::Second | Species::Oracle => {
+            Species::Hunter | Species::Spawner | Species::Oracle => {
                 new_creature.insert(Hunt);
+            }
+            Species::Second => {
+                new_creature.insert((Hunt, RealityBreak(2)));
             }
             Species::Tinker => {
                 new_creature.insert(Random);
@@ -786,7 +765,7 @@ pub fn assign_species_components(
                 new_creature.insert((Immobile, Hunt));
             }
             Species::AxiomaticSeal => {
-                new_creature.insert((Immobile, Hunt, Dizzy, NoDropSoul, Spellproof));
+                new_creature.insert((Immobile, Hunt, Dizzy, NoDropSoul, RealityShield(2)));
             }
             Species::EpsilonHead => {
                 new_creature.insert((

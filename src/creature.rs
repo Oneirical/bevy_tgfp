@@ -243,9 +243,6 @@ pub struct Door;
 pub struct Wall;
 
 #[derive(Component)]
-pub struct Spellproof;
-
-#[derive(Component)]
 pub struct Meleeproof;
 
 #[derive(Component)]
@@ -418,10 +415,9 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         Species::Grinder => Spellbook::new([
             None,
             Some(vec![
-                Axiom::WhenSteppedOn,
                 Axiom::DisableVfx,
                 Axiom::Ego,
-                Axiom::HealOrHarm { amount: 99 },
+                Axiom::HealOrHarm { amount: -99 },
             ]),
             None,
             None,
