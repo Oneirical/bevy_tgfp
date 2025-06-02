@@ -342,7 +342,7 @@ pub fn new_cage_on_conveyor(
     let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
     add_creatures(&mut cage, 2 + tracker.number_spawned, false);
 
-    let cage_corner = Position::new(26, -5 + 9 * 7);
+    let cage_corner = Position::new(26, 52);
     for (idx, tile_char) in cage.iter().enumerate() {
         let position = Position::new(
             (idx % 9) as i32 + cage_corner.x,
@@ -440,7 +440,7 @@ pub fn spawn_cage(
 ......#..B..#.....##....#vvvvvvvvvvv#.......#####.....#......\
 ......#.....#..#####....#vvvvvvvvvvv#....####.........#......\
 ......##...##.##'''##...##vvvvvvvvv##...##'''.sss.....##.....\
-.......#####..#'''''#....#vvvvvvvvv.....#''''exxxw.....##....\
+.......#####..#'''''#....#vvvvvvvvv#....#''''exxxw.....##....\
 ..............#''C''+....>vvvvvvvvv<....+''C'exxxw......#....\
 .......#####..#'''''#....#vvvvvvvvv#....#''''exxxw.....##....\
 ......##...##.##'''##...##vvvvvvvvv##...##'''.nnn.....##.....\

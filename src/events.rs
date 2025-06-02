@@ -10,11 +10,12 @@ use crate::{
     crafting::{BagOfLoot, DroppedSoul, KnownPattern, PredictCraft, TakeOrDropSoul},
     creature::{
         get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy, Door,
-        EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt, Immobile, Intangible,
-        Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player, Possessed, Possessing,
-        PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping, Soul, Species, Speed,
-        SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList, Summoned, Wall,
+        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
+        DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt,
+        Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
+        Possessed, Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping,
+        Soul, Species, Speed, SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList,
+        Summoned, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -720,6 +721,7 @@ pub fn assign_species_components(
                     NoDropSoul,
                     RealityBreak(5),
                     RealityShield(6),
+                    DoesNotLockInput,
                 ));
             }
             Species::Grinder => {
@@ -729,6 +731,7 @@ pub fn assign_species_components(
                     NoDropSoul,
                     RealityBreak(5),
                     RealityShield(6),
+                    DoesNotLockInput,
                 ));
             }
             Species::CageBorder => {
@@ -756,10 +759,10 @@ pub fn assign_species_components(
                 new_creature.insert(Hunt);
             }
             Species::Second => {
-                new_creature.insert((Hunt, RealityBreak(2)));
+                new_creature.insert((Hunt, RealityBreak(1)));
             }
             Species::Tinker => {
-                new_creature.insert(Random);
+                new_creature.insert((Random, RealityBreak(1)));
             }
             Species::Abazon => {
                 new_creature.insert((Immobile, Hunt));
@@ -988,16 +991,17 @@ pub fn teleport_entity(
     }
 
     // --- Phase 1: Collect all needed data upfront ---
-    let mut proposals: Vec<_> = events
+    let proposals: Vec<_> = events
         .read()
         .filter_map(|event| {
             let creature_flags = flags.get(event.entity).ok()?;
             let culprit_flags = flags.get(event.culprit).ok()?;
             let current_pos = position.get(event.entity).ok()?;
 
-            // Early immobility check
-            let is_immobile = immobile_query.contains(creature_flags.species_flags)
-                || immobile_query.contains(creature_flags.effects_flags);
+            // Check if it is immobile and attempting to move itself
+            let is_immobile = (immobile_query.contains(creature_flags.species_flags)
+                || immobile_query.contains(creature_flags.effects_flags))
+                && event.entity == event.culprit;
             let reality_shield = shield_query
                 .get(creature_flags.species_flags)
                 .or(shield_query.get(creature_flags.effects_flags))
@@ -1131,6 +1135,7 @@ pub fn check_airlock_bridge_formation(
     doors: Query<(&Species, &Position)>,
     map: Res<Map>,
     mut faith: ResMut<FaithsEnd>,
+    creatures_in_room: Query<&Position, Or<(With<Awake>, With<Sleeping>)>>,
 ) {
     let mut potential_doors = Vec::new();
     for (species, position) in doors.iter() {
@@ -1144,7 +1149,16 @@ pub fn check_airlock_bridge_formation(
     }
     for potential_door in potential_doors {
         let (species, _) = doors.get(*potential_door).unwrap();
-        if species == &Species::Airlock {
+        if species == &Species::Airlock && {
+            let mut creature_left_in_the_room = false;
+            let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
+            for pos in creatures_in_room.iter() {
+                if pos.is_within_range(&boundary_a, &boundary_b) {
+                    creature_left_in_the_room = true;
+                }
+            }
+            creature_left_in_the_room
+        } {
             faith.conveyor_active = false;
         }
     }
@@ -1556,6 +1570,7 @@ pub fn open_close_door(
     mut events: EventReader<OpenCloseDoor>,
     mut commands: Commands,
     mut door: Query<(&mut Visibility, &Position, &OrdDir, &CreatureFlags)>,
+    intangible: Query<&Intangible>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
 ) {
@@ -1565,18 +1580,20 @@ pub fn open_close_door(
         // the success check will try to open the door while the failure check is trying
         // to delete them.
         if let Ok((mut visibility, position, orientation, flags)) = door.get_mut(event.entity) {
-            if event.open && *visibility == Visibility::Inherited {
+            let is_intangible = intangible.contains(flags.species_flags)
+                || intangible.contains(flags.effects_flags);
+            if event.open && !is_intangible {
                 // The door becomes intangible, and can be walked through.
                 commands.entity(flags.species_flags).insert(Intangible);
                 // The door is no longer visible, as it is open.
                 *visibility = Visibility::Hidden;
-            } else if !event.open && *visibility == Visibility::Hidden {
+            } else if !event.open && is_intangible {
                 commands.entity(flags.species_flags).remove::<Intangible>();
                 commands.entity(event.entity).insert(BecomingVisible {
                     timer: Timer::from_seconds(0.4, TimerMode::Once),
                 });
             } else {
-                return;
+                continue;
             }
             // Find the direction in which the door was facing to play its animation correctly.
             let (offset_1, offset_2) = match orientation {
@@ -1942,7 +1959,7 @@ fn room_circulation_check(
     sleeping_creatures: Query<(Entity, &Position), With<Sleeping>>,
     player_position: Query<&Position, With<Player>>,
     flags_query: Query<(Entity, &CreatureFlags)>,
-    open_door_query: Query<&Door, With<Intangible>>,
+    door_query: Query<&Door>,
     mut open: EventWriter<OpenCloseDoor>,
     mut status_effect: EventWriter<AddStatusEffect>,
     mut commands: Commands,
@@ -1982,17 +1999,20 @@ fn room_circulation_check(
                 creature_left_in_the_room = true;
             }
         }
-        if !creature_left_in_the_room {
-            return;
-        }
         for (door, flags) in flags_query.iter() {
-            if open_door_query.contains(flags.species_flags)
-                || open_door_query.contains(flags.effects_flags)
+            if door_query.contains(flags.species_flags) || door_query.contains(flags.effects_flags)
             {
-                open.write(OpenCloseDoor {
-                    entity: door,
-                    open: false,
-                });
+                if creature_left_in_the_room {
+                    open.write(OpenCloseDoor {
+                        entity: door,
+                        open: false,
+                    });
+                } else {
+                    open.write(OpenCloseDoor {
+                        entity: door,
+                        open: true,
+                    });
+                }
             }
         }
     }

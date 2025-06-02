@@ -251,6 +251,9 @@ pub struct Immobile;
 #[derive(Component)]
 pub struct NoDropSoul;
 
+#[derive(Component)]
+pub struct DoesNotLockInput;
+
 /// This creature ignores Immobile when it teleports
 /// others.
 #[derive(Component)]

@@ -13,15 +13,16 @@ use uuid::Uuid;
 
 use crate::{
     creature::{
-        CreatureFlags, EffectDuration, FlagEntity, Player, RealityBreak, RealityShield, Soul,
-        Species, Spellbook, StatusEffect, StatusEffectsList, Summoned, Wall,
+        Awake, CreatureFlags, DoesNotLockInput, EffectDuration, FlagEntity, Intangible, Player,
+        RealityBreak, RealityShield, Sleeping, Soul, Species, Spellbook, StatusEffect,
+        StatusEffectsList, Summoned, Wall,
     },
     events::{
         AddStatusEffect, DamageOrHealCreature, OpenCloseDoor, RemoveCreature, SummonCreature,
         SummonProperties, TeleportEntity, TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
-    map::{FaithsEnd, Map, Position},
+    map::{new_cage_on_conveyor, FaithsEnd, Map, Position},
     OrdDir,
 };
 
@@ -215,23 +216,29 @@ pub struct TriggerContingency {
 
 pub fn tick_time_contingency(
     mut contingency: EventWriter<TriggerContingency>,
-    creatures: Query<(Entity, &Position, &Species, &Spellbook), With<CreatureFlags>>,
+    creatures: Query<(Entity, &Position, &Species, &Spellbook, &CreatureFlags)>,
     mut spell: EventWriter<CastSpell>,
-    faith: Res<FaithsEnd>,
+    mut faith: ResMut<FaithsEnd>,
     mut open: EventWriter<OpenCloseDoor>,
+    player_position: Query<&Position, With<Player>>,
+    creatures_in_room: Query<&Position, Or<(With<Awake>, With<Sleeping>)>>,
+    intangible_query: Query<&Intangible>,
+    mut commands: Commands,
 ) {
-    let mut creatures = creatures
-        .iter()
-        .collect::<Vec<(Entity, &Position, &Species, &Spellbook)>>();
+    let mut creatures =
+        creatures
+            .iter()
+            .collect::<Vec<(Entity, &Position, &Species, &Spellbook, &CreatureFlags)>>();
     creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
-    for (creature, pos, species, spellbook) in creatures.iter() {
+    for (creature, pos, species, spellbook, flags) in creatures.iter() {
         contingency.write(TriggerContingency {
             caster: *creature,
             contingency: Axiom::WhenTimePasses,
         });
+        let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
         match species {
             Species::ConveyorBelt | Species::Grinder => {
-                if faith.conveyor_active {
+                if faith.conveyor_active || pos.y < 19 {
                     spell.write(CastSpell {
                         caster: *creature,
                         spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
@@ -247,10 +254,38 @@ pub fn tick_time_contingency(
                         || pos == &&Position::new(34, 27)
                         || pos == &&Position::new(35, 27))
                 {
-                    open.write(OpenCloseDoor {
-                        entity: *creature,
-                        open: true,
-                    });
+                    if !player_position
+                        .single()
+                        .unwrap()
+                        .is_within_range(&boundary_a, &boundary_b)
+                    {
+                        if {
+                            let mut creature_left_in_the_room = false;
+                            for pos in creatures_in_room.iter() {
+                                if pos.is_within_range(&boundary_a, &boundary_b) {
+                                    creature_left_in_the_room = true;
+                                }
+                            }
+                            !creature_left_in_the_room
+                        } {
+                            if intangible_query.contains(flags.species_flags)
+                                || intangible_query.contains(flags.effects_flags)
+                            {
+                                open.write(OpenCloseDoor {
+                                    entity: *creature,
+                                    open: false,
+                                });
+                            } else {
+                                faith.conveyor_active = true;
+                                commands.run_system_cached(new_cage_on_conveyor);
+                            }
+                        } else {
+                            open.write(OpenCloseDoor {
+                                entity: *creature,
+                                open: true,
+                            });
+                        }
+                    }
                 }
             }
             _ => (),
@@ -1604,8 +1639,20 @@ pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>) {
     spell_stack.spells.append(&mut renewed_spells);
 }
 
-pub fn spell_stack_is_empty(spell_stack: Res<SpellStack>) -> bool {
-    spell_stack.spells.is_empty()
+pub fn spell_stack_is_empty(
+    spell_stack: Res<SpellStack>,
+    flags: Query<&CreatureFlags>,
+    no_disrupt: Query<&DoesNotLockInput>,
+) -> bool {
+    spell_stack
+        .spells
+        .iter()
+        .filter(|&s| {
+            let flags = flags.get(s.caster).unwrap();
+            !(no_disrupt.contains(flags.species_flags) || no_disrupt.contains(flags.effects_flags))
+        })
+        .count()
+        == 0
 }
 
 pub fn walk_grid(p0: Position, p1: Position) -> Vec<Position> {

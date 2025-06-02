@@ -28,7 +28,6 @@ pub fn keyboard_input(
     mut next_state: ResMut<NextState<ControlState>>,
     mut cursor: EventWriter<CursorStep>,
     mut caste_menu: Query<&mut LargeCastePanel>,
-    mut camera: Query<&mut Projection, (With<Camera>, Without<PortalCamera>)>,
     mut equip: EventWriter<EquipSpell>,
     mut unequip: EventWriter<UnequipSpell>,
     mut spell: EventWriter<CastSpell>,
