@@ -2,62 +2,34 @@
 
 ## The redesigned edition
 
-The player starts in the World Seed, Terminal's cage, with 10 active Disgust, and the ability to swap between Introvert and Extrovert modes. 
+# Level 1: The Quarry
 
-There are doors on all 4 sides, leading into an empty void.
+The Quarry is "mining out" the denizens of the world below in chunks to fill Terminal up with their souls. The Harmony hopes to concentrate the entire population in one body so it is easier to harmonize everyone all at once, and without needing to descend on the surface where the population is highly hostile to outsiders.
 
-Each door can be **Revealed** in **Lockdown** or **Low Security** mode by using the buttons neighbouring each door.
+Gameplay:
 
-## Revealing
+- Cages arrive on the treadmill one by one in increasing difficulty. These challenges are solved using the 6 basic souls.
+- Occasionally, a miniboss spawns with a special spell, and it rewards the player with a new pattern to use on the Canvas.
+- The player is invited to try their hand at crafting with these patterns.
+- If the player dies, a Harmonic Nurse will drag them out and inject them with a Serene Soul to revive them (it boosts their ego so much they will themselves alive again)
+    - This must eventually happen. If the player stays alive for too long, put them against an impossible miniboss but reward them with a nice rare pattern to compensate if they perform well against it.
 
-Revealing a door will spawn a new room on the other side of that door, containing friends, foes, traps, tricks, anything! The door will stay in **Lockdown** (red light) or **Low Security** (green light) depending on the mode chosen.
+After some time, one of the cages will be booby-trapped by Epsilon's squad. It will explode out of the quarry area and send out a militia to take over the facility. The Harmony will attempt to force them to inhale their gaseous forms, then realize that they are unbreathing mechanical beings.
 
-## Door access levels
+The player is warned to stay out of the way of these insurgents. If the player challenges them, they should be faced with an extremely difficult challenge which, if lost, ends up with them attached as an Epsilon segment.
+If they comply, Epsilon informs the player that they are infected by a terrible disease, and that they can be cured while still maintaining some level of autonomy if they journey down to the Panopticon. The way is opened to the Stations.
 
-A door in **Lockdown** cannot be opened. A door in **Low Security** can be opened by bumping into it, and can be freely passed through.
+# Level 2: The Stations
 
-These modes can be swapped by using the buttons on the side of the now **Revealed** door.
+This level takes place in the deeply frozen area which the Ordered spawned an ice age on in order to cool their server farms. As the tunnels are extremely cold, the main gimmick involves pushing a flaming cart across a railroad to keep warmth while battling swarms of robotic denizens trying to put out the flame.
 
-**Revealing** in **Lockdown** mode is safer. If the room on the other side contains a threat, it will be unable to escape containment and attack the player. **Revealing** in **Low Security** can result in enemies escaping!
+If the flame is put out, the player becomes another mining robot. If the infection progresses too much, they are beamed up by the Harmony in an epic showdown against Epsilon.
 
-Why would one ever want to use **Low Security**?
+The player will eventually find a train leading them to the Panopticon.
 
-## Stealth
+# Level 3: The Panopticon
 
-The Harmony is constantly watching over Faith's End and monitoring any suspicious activity.
-
-Interacting with security buttons is a suspicious activity. Pressing either **Lockdown** or **Low Security** will generate one **Alert**.
-
-Therefore, opening doors in **Lockdown** can be wasteful, as if the room it leads to is safe, this means the following:
-
-- 1 Alert for **Revealing** in **Lockdown**
-- 1 Alert for switching to **Low Security** so the room can be entered
-- 1 Alert for entering the room
-
-Yes, passing through any doorway also generates one Alert.
-
-Every time 4 Alert has been generated, the Harmony will launch an **Inquisition**.
-
-# Inquisitions
-
-Inquisitions are random events. They can be:
-
-- Sending Harmonic squads of varied purpose, from investigation, suppression or even assimilation
-- Dispensing beneficial effects to active squads
-- Triggering traps, blocking paths
-- Even more self-damage if the player has **Exerted**
-
-# Exertion
-
-The player can lower Alert by 1 by self-suppressing their own Identity. This is basically self-damage to get 1 extra action.
-
-# Room types
-
-- Empty rooms.
-- Checkpoints. Just a room with an extra door, wasting time.
-- Emotion Light Containment. Some basic enemies with only a single Identity.
-- Avatar Heavy Containment. A special boss representing a certain Identity with very high threat. (Ataixa, Anisychia, Rose...)
-- 
+Currently, this is where the game will end. The player becomes another mechanical member of the Panopticon. The infection is gone, but so is their identity as Terminal. Later developments should allow for some way to escape the Panopticon.
 
 
 
@@ -65,14 +37,9 @@ The player can lower Alert by 1 by self-suppressing their own Identity. This is 
 
 
 - Make one of the "inmates" something that takes the form of a seemingly innocuous creature somewhere. It can be noticed through one of its erratic behaviours.
-- Spawn all new room tiles "moving from" a main "reality generator" room.
 - "When a soul is drawn, draw a soul, give status effect that makes you lose 1 soul from the wheel next turn". A way to peek at the future at the cost of faster churn.
-
 - Instead of "UntargetCaster", make a mutator that makes every form untarget tiles instead of targeting them - "untarget" + "ego" instead of "untargetcaster".
-
-- A cave where you must push around a little cart on a railroad, "cold fire" themed
 - A racetrack with many obstacles on the way against an NPC
-
 - Multiple soul cage sizes and shapes, like a donut or a triangle.
 
 # Coding
