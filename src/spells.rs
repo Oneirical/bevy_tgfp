@@ -15,7 +15,7 @@ use crate::{
     creature::{
         Awake, CreatureFlags, DoesNotLockInput, EffectDuration, FlagEntity, Intangible, Player,
         RealityBreak, RealityShield, Sleeping, Soul, Species, Spellbook, StatusEffect,
-        StatusEffectsList, Summoned, Wall,
+        StatusEffectsList, Summoned, Targeting, Wall,
     },
     events::{
         AddStatusEffect, DamageOrHealCreature, OpenCloseDoor, RemoveCreature, SummonCreature,
@@ -247,6 +247,7 @@ pub fn tick_time_contingency(
                         spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
                         starting_step: 0,
                         soul_caste: Soul::Ordered,
+                        prediction: false,
                     });
                 }
             }
@@ -327,6 +328,7 @@ pub fn trigger_contingency(
                         spell: spell.clone(),
                         starting_step: contingency_index,
                         soul_caste: *soul,
+                        prediction: false,
                     });
                 }
             }
@@ -341,6 +343,7 @@ pub struct CastSpell {
     pub spell: Spell,
     pub starting_step: usize,
     pub soul_caste: Soul,
+    pub prediction: bool,
 }
 
 #[derive(Component, Clone, Debug)]
@@ -355,6 +358,7 @@ pub struct Spell {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(u16)]
 /// There are Form axioms, which target certain tiles, and Function axioms, which execute an effect
 /// onto those tiles.
 pub enum Axiom {
@@ -373,6 +377,7 @@ pub enum Axiom {
     WhenTimePasses,
 
     // FORMS
+    FormSeparator,
     /// Target the caster's tile.
     Ego,
     /// Target the player's tile.
@@ -396,6 +401,7 @@ pub enum Axiom {
     },
 
     // FUNCTIONS
+    FunctionSeparator,
     /// The targeted creatures dash in the direction of the caster's last move.
     Dash {
         max_distance: i32,
@@ -446,6 +452,7 @@ pub enum Axiom {
     ForceCast,
 
     // MUTATORS
+    MutatorSeparator,
     /// Any Teleport event will target all tiles between its start and destination tiles.
     Trace,
     /// All targeted tiles expand to also target their orthogonally adjacent tiles.
@@ -475,6 +482,33 @@ pub enum Axiom {
     LoopBack {
         steps: usize,
     },
+}
+
+impl Axiom {
+    fn discriminant(&self) -> u16 {
+        // SAFETY: Because `Self` is marked `repr(u16)`, its layout is a `repr(C)` `union`
+        // between `repr(C)` structs, each of which has the `u16` discriminant as its first
+        // field, so we can read the discriminant without offsetting the pointer.
+        unsafe { *<*const _>::from(self).cast::<u16>() }
+    }
+    pub fn return_axiom_type(&self) -> AxiomType {
+        if self.discriminant() < Axiom::FormSeparator.discriminant() {
+            AxiomType::Contingency
+        } else if self.discriminant() < Axiom::FunctionSeparator.discriminant() {
+            AxiomType::Form
+        } else if self.discriminant() < Axiom::MutatorSeparator.discriminant() {
+            AxiomType::Function
+        } else {
+            AxiomType::Mutator
+        }
+    }
+}
+
+pub enum AxiomType {
+    Contingency,
+    Form,
+    Function,
+    Mutator,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -548,6 +582,9 @@ pub enum SynapseFlag {
     Counter { count: i32 },
     /// Block visual magic effects from being drawn to the screen.
     DisableVfx,
+    /// A fake spell with its Functions blocked, used by AI to contemplate whether or not it is
+    /// wise to cast the real version of a spell.
+    Prediction,
 }
 
 pub fn cast_new_spell(
@@ -559,12 +596,17 @@ pub fn cast_new_spell(
         let axioms = cast_spell.spell.axioms.clone();
         // Create a new synapse to start "rolling down the hill" accumulating targets and
         // dispatching events.
-        let synapse_data = SynapseData::new(
+        let mut synapse_data = SynapseData::new(
             cast_spell.caster,
             axioms,
             cast_spell.starting_step,
             cast_spell.soul_caste,
         );
+        // Prediction-type spells should be invisible and not alter the gamestate.
+        if cast_spell.prediction {
+            synapse_data.synapse_flags.insert(SynapseFlag::Prediction);
+            synapse_data.synapse_flags.insert(SynapseFlag::DisableVfx);
+        }
         // Send it off for processing - right away, for the spell stack is "last in, first out."
         spell_stack.spells.push(synapse_data);
     }
@@ -1490,6 +1532,7 @@ fn axiom_function_force_cast(
             },
             soul_caste: synapse_data.soul_caste,
             starting_step: 0,
+            prediction: false,
         });
     }
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
@@ -1609,6 +1652,14 @@ pub fn process_axiom(
     for (i, synapse_data) in spell_stack.spells.iter().enumerate() {
         // Get this spell's first axiom.
         let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
+        if synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::Prediction)
+            && matches!(axiom.return_axiom_type(), AxiomType::Function)
+        {
+            // Predictor-type spells should ignore any Axiom that would affect the gamestate.
+            continue;
+        }
         // Launch the axiom, which will send out some Events (if it's a Function,
         // which affect the game world) or add some target tiles (if it's a Form, which
         // decides where the Functions will take place.)
@@ -1620,7 +1671,7 @@ pub fn process_axiom(
 }
 
 /// Remove all terminated spells.
-pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>) {
+pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>, mut commands: Commands) {
     let mut renewed_spells = Vec::new();
     let len = spell_stack.spells.len();
     for mut synapse_data in spell_stack.spells.drain(0..len) {
@@ -1637,9 +1688,68 @@ pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>) {
             && !synapse_data.synapse_flags.contains(&SynapseFlag::Terminate)
         {
             renewed_spells.push(synapse_data);
+        } else if synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::Prediction)
+        {
+            // The prediction has completed, judge if it should be turned into an actual spell.
+            commands.run_system_cached_with(ai_prediction_into_action, synapse_data);
         }
     }
     spell_stack.spells.append(&mut renewed_spells);
+}
+
+/// Consider transforming Predictions into actual spells
+pub fn ai_prediction_into_action(
+    In(synapse): In<SynapseData>,
+    flags: Query<&CreatureFlags>,
+    spellbook: Query<&Spellbook>,
+    target_query: Query<&Targeting>,
+    species_query: Query<&Species>,
+    map: Res<Map>,
+    mut spell: EventWriter<CastSpell>,
+    // TODO: Change this to -> Result after bevy bug is fixed
+) {
+    let targets = synapse.get_all_targeted_entities(&map);
+    let species_target_list: Vec<Species> = {
+        let flags = flags.get(synapse.caster).unwrap();
+        target_query
+            .get(flags.species_flags)
+            .map(|t| t.0.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .chain(
+                target_query
+                    .get(flags.effects_flags)
+                    .map(|t| t.0.clone())
+                    .unwrap_or_default(),
+            )
+            .collect()
+    };
+    if species_target_list.is_empty() {
+        // Early return if we are not looking to target anything.
+        return;
+    }
+    for target in targets {
+        let species = species_query.get(target).unwrap();
+        // If a species we WANT to target with our spell was caught in the prediction,
+        // fire the actual spell at it.
+        if species_target_list.contains(species) {
+            spell.write(CastSpell {
+                caster: synapse.caster,
+                spell: spellbook
+                    .get(synapse.caster)
+                    .unwrap()
+                    .spells
+                    .get(&synapse.soul_caste)
+                    .unwrap()
+                    .clone(),
+                starting_step: 0,
+                soul_caste: synapse.soul_caste,
+                prediction: false,
+            });
+        }
+    }
 }
 
 pub fn spell_stack_is_empty(

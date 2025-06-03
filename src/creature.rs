@@ -1,4 +1,7 @@
-use bevy::{platform::collections::HashMap, prelude::*};
+use bevy::{
+    platform::collections::{HashMap, HashSet},
+    prelude::*,
+};
 
 use uuid::Uuid;
 
@@ -182,6 +185,9 @@ pub struct Player;
 
 #[derive(Component)]
 pub struct Hunt;
+
+#[derive(Component, Default)]
+pub struct Targeting(pub HashSet<Species>);
 
 #[derive(Component)]
 pub struct Stab {
@@ -431,15 +437,6 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             None,
             Some(vec![
-                Axiom::WhenMoved,
-                Axiom::IncrementCounter {
-                    amount: 1,
-                    count: 0,
-                },
-                Axiom::TerminateIfCounter {
-                    condition: CounterCondition::NotModuloOf { modulo: 5 },
-                    threshold: 0,
-                },
                 Axiom::Plus,
                 Axiom::FilterBySpecies {
                     species: Species::WeakWall,

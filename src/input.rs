@@ -233,6 +233,7 @@ pub fn keyboard_input(
             },
             starting_step: 0,
             soul_caste: Soul::Saintly,
+            prediction: false,
         });
     }
 

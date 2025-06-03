@@ -15,7 +15,7 @@ use crate::{
         Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
         Possessed, Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping,
         Soul, Species, Speed, SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList,
-        Summoned, Wall,
+        Summoned, Targeting, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -363,6 +363,7 @@ pub fn use_wheel_soul(
                     spell: chosen_spell.clone(),
                     starting_step: 0,
                     soul_caste: *soul,
+                    prediction: false,
                 });
                 // Discard the soul into the discard pile.
                 newly_discarded = Some(*soul);
@@ -505,7 +506,6 @@ pub fn summon_creature(
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
     map: Res<Map>,
-    faiths_end: Res<FaithsEnd>,
 ) {
     for event in events.read() {
         // Avoid summoning if the tile is already occupied.
@@ -760,10 +760,18 @@ pub fn assign_species_components(
                 new_creature.insert(Hunt);
             }
             Species::Second => {
-                new_creature.insert((Hunt, RealityBreak(1)));
+                new_creature.insert((
+                    Hunt,
+                    RealityBreak(1),
+                    Targeting(HashSet::from([Species::WeakWall])),
+                ));
             }
             Species::Tinker => {
-                new_creature.insert((Random, RealityBreak(1)));
+                new_creature.insert((
+                    Random,
+                    RealityBreak(1),
+                    Targeting(HashSet::from([Species::WeakWall])),
+                ));
             }
             Species::Abazon => {
                 new_creature.insert((Immobile, Hunt));
@@ -2166,27 +2174,6 @@ pub fn distribute_npc_actions(
                     });
                 }
             } else if is_hunter {
-                // Occasionally cast a spell.
-                if *npc_species == Species::Second {
-                    let mut found_wall = false;
-                    for adj_pos in map.get_adjacent_tiles(npc_pos) {
-                        if let Some(adjacent_npc) = map.creatures.get(&adj_pos) {
-                            if *species.get(*adjacent_npc).unwrap() == Species::WeakWall {
-                                spell.write(CastSpell {
-                                    caster: npc_entity,
-                                    spell: npc_spellbook.spells.get(&Soul::Vile).unwrap().clone(),
-                                    starting_step: 0,
-                                    soul_caste: Soul::Vile,
-                                });
-                                found_wall = true;
-                                break;
-                            }
-                        }
-                    }
-                    if found_wall {
-                        continue;
-                    }
-                }
                 let destination = if is_charmed {
                     let mut closest_slot: Option<Position> = None;
                     let mut min_distance = i32::MAX;
