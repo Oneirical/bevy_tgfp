@@ -45,16 +45,24 @@ impl Plugin for SetsPlugin {
         app.add_systems(OnExit(ControlState::CasteMenu), hide_caste_menu);
         app.add_systems(OnEnter(ControlState::QuestMenu), show_quest_menu);
         app.add_systems(OnExit(ControlState::QuestMenu), hide_quest_menu);
-        app.add_systems(Update, magnetize_tail_segments.before(teleport_entity));
-        app.add_systems(Update, magnet_follow.after(teleport_execution));
         app.add_systems(
             Update,
-            check_airlock_bridge_formation.after(teleport_execution),
+            (
+                magnetize_tail_segments.before(teleport_entity),
+                magnet_follow.after(teleport_execution),
+                creature_collision.after(teleport_execution),
+                check_airlock_bridge_formation.after(teleport_execution),
+                teleport_entity.before(teleport_execution),
+                alter_momentum.after(creature_collision),
+                take_or_drop_soul.after(stepped_on_tile),
+            )
+                .in_set(ResolutionPhase),
         );
-        app.add_systems(Update, teleport_entity.before(teleport_execution));
-        app.add_systems(Update, take_or_drop_soul.after(stepped_on_tile));
         app.add_systems(Update, craft_with_axioms);
-        app.add_systems(Update, swap_current_paint.run_if(is_painting));
+        app.add_systems(
+            Update,
+            swap_current_paint.run_if(is_painting).in_set(ActionPhase),
+        );
 
         // app.add_systems(Update, dispense_sliding_components_caste);
         // app.add_systems(Update, slide_caste_spells);
@@ -121,8 +129,6 @@ impl Plugin for SetsPlugin {
                 add_status_effects,
                 teleport_execution,
                 stepped_on_tile,
-                creature_collision,
-                alter_momentum,
                 harm_creature,
                 open_close_door,
                 respawn_player,

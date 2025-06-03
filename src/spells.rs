@@ -224,6 +224,7 @@ pub fn tick_time_contingency(
     creatures_in_room: Query<&Position, Or<(With<Awake>, With<Sleeping>)>>,
     intangible_query: Query<&Intangible>,
     mut commands: Commands,
+    map: Res<Map>,
 ) {
     let mut creatures =
         creatures
@@ -238,7 +239,9 @@ pub fn tick_time_contingency(
         let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
         match species {
             Species::ConveyorBelt | Species::Grinder => {
-                if faith.conveyor_active || pos.y < 19 {
+                if (faith.conveyor_active || pos.y < 19)
+                    && map.get_entity_at(pos.x, pos.y).is_some()
+                {
                     spell.write(CastSpell {
                         caster: *creature,
                         spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),

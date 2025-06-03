@@ -399,6 +399,7 @@ pub fn use_wheel_soul(
     Ok(())
 }
 
+#[derive(Debug)]
 pub enum PlayerAction {
     Step,
     Spell,
@@ -985,6 +986,7 @@ pub fn teleport_entity(
     shield_query: Query<&RealityShield>,
     break_query: Query<&RealityBreak>,
     mut execution: EventWriter<TeleportExecution>,
+    map: Res<Map>,
 ) {
     if events.is_empty() {
         return;
@@ -998,10 +1000,11 @@ pub fn teleport_entity(
             let culprit_flags = flags.get(event.culprit).ok()?;
             let current_pos = position.get(event.entity).ok()?;
 
-            // Check if it is immobile and attempting to move itself
+            // Check if it is immobile and attempting to move itself into an empty tile
             let is_immobile = (immobile_query.contains(creature_flags.species_flags)
                 || immobile_query.contains(creature_flags.effects_flags))
-                && event.entity == event.culprit;
+                && event.entity == event.culprit
+                && map.is_passable(event.destination.x, event.destination.y);
             let reality_shield = shield_query
                 .get(creature_flags.species_flags)
                 .or(shield_query.get(creature_flags.effects_flags))
