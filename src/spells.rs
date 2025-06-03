@@ -18,8 +18,8 @@ use crate::{
         StatusEffectsList, Summoned, Targeting, Wall,
     },
     events::{
-        AddStatusEffect, DamageOrHealCreature, OpenCloseDoor, RemoveCreature, SummonCreature,
-        SummonProperties, TeleportEntity, TransformCreature,
+        AddStatusEffect, ChooseStepAction, DamageOrHealCreature, OpenCloseDoor, RemoveCreature,
+        SummonCreature, SummonProperties, TeleportEntity, TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{new_cage_on_conveyor, FaithsEnd, Map, Position},
@@ -1708,6 +1708,7 @@ pub fn ai_prediction_into_action(
     species_query: Query<&Species>,
     map: Res<Map>,
     mut spell: EventWriter<CastSpell>,
+    mut commands: Commands,
     // TODO: Change this to -> Result after bevy bug is fixed
 ) {
     let targets = synapse.get_all_targeted_entities(&map);
@@ -1728,6 +1729,7 @@ pub fn ai_prediction_into_action(
     };
     if species_target_list.is_empty() {
         // Early return if we are not looking to target anything.
+        commands.trigger_targets(ChooseStepAction, synapse.caster);
         return;
     }
     for target in targets {
@@ -1749,7 +1751,10 @@ pub fn ai_prediction_into_action(
                 prediction: false,
             });
         }
+        return;
     }
+    // If no spell was fired, take a step instead.
+    commands.trigger_targets(ChooseStepAction, synapse.caster);
 }
 
 pub fn spell_stack_is_empty(

@@ -7,15 +7,17 @@ use bevy::{
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
-    crafting::{BagOfLoot, DroppedSoul, KnownPattern, PredictCraft, TakeOrDropSoul},
+    crafting::{
+        AxiomUI, BagOfLoot, DroppedSoul, KnownPattern, LearnNewAxiom, PredictCraft, TakeOrDropSoul,
+    },
     creature::{
-        get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
-        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
-        DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt,
-        Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
-        Possessed, Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield, Sleeping,
-        Soul, Species, Speed, SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList,
-        Summoned, Targeting, Wall,
+        get_soul_sprite, get_species_recipe, get_species_spellbook, get_species_sprite,
+        is_naturally_intangible, Awake, Charm, CraftingSlot, Creature, CreatureFlags,
+        DesignatedForRemoval, Dizzy, DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile,
+        Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Magnetic, Magnetized,
+        Meleeproof, NoDropSoul, Player, Possessed, Possessing, PotencyAndStacks, Random,
+        RealityBreak, RealityShield, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Stab,
+        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -571,7 +573,7 @@ pub fn summon_creature(
                     Species::Hunter => Soul::Saintly,
                     Species::Shrike => Soul::Feral,
                     Species::Apiarist => Soul::Ordered,
-                    Species::Tinker => Soul::Artistic,
+                    Species::Tinker | Species::Hechaton => Soul::Artistic,
                     Species::Second => Soul::Vile,
                     Species::Oracle => Soul::Unhinged,
                     Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
@@ -630,6 +632,8 @@ pub fn summon_creature(
         }
 
         new_creature.insert(transform);
+
+        new_creature.observe(choose_step_action);
 
         // TODO: This will have to be removed when creating player clones
         // becomes possible.
@@ -765,6 +769,9 @@ pub fn assign_species_components(
                     RealityBreak(1),
                     Targeting(HashSet::from([Species::WeakWall])),
                 ));
+            }
+            Species::Hechaton => {
+                new_creature.insert((Hunt, Targeting(HashSet::from([Species::Player]))));
             }
             Species::Tinker => {
                 new_creature.insert((
@@ -1699,56 +1706,60 @@ pub struct RemoveCreature {
 pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
-    creature: Query<(&Position, &Soul, Has<Player>, &CreatureFlags)>,
+    creature: Query<(&Position, &Soul, Has<Player>, &CreatureFlags, &Species)>,
     dying_flags: Query<&NoDropSoul>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut contingency: EventWriter<TriggerContingency>,
     mut respawn: EventWriter<RespawnPlayer>,
-) {
+    mut learn: EventWriter<LearnNewAxiom>,
+    mut text: EventWriter<AddMessage>,
+    known_patterns: Query<&AxiomUI, With<KnownPattern>>,
+) -> Result {
     let mut seen = HashSet::new();
     // NOTE: This filter prevents double-removal of a single entity by removing duplicates.
     // As an example, this can happen if two Shrikes simultaneously attack the player.
     for event in events.read().filter(|e| seen.insert(e.entity)) {
-        // HACK: This panicked once for seemingly no good reason. It has been changed
-        // to if let Ok instead of unwrap(), hoping to see the weird behaviour in game.
-        if let Ok((position, soul, is_player, flags)) = creature.get(event.entity) {
-            // Visually flash an X where the creature was removed.
-            magic_vfx.write(PlaceMagicVfx {
-                targets: vec![*position],
-                sequence: EffectSequence::Simultaneous,
-                effect: EffectType::XCross,
-                decay: 0.5,
-                appear: 0.,
+        let (position, soul, is_player, flags, species) = creature.get(event.entity)?;
+        // Visually flash an X where the creature was removed.
+        magic_vfx.write(PlaceMagicVfx {
+            targets: vec![*position],
+            sequence: EffectSequence::Simultaneous,
+            effect: EffectType::XCross,
+            decay: 0.5,
+            appear: 0.,
+        });
+        let cannot_drop_soul =
+            dying_flags.contains(flags.effects_flags) || dying_flags.contains(flags.species_flags);
+        // For now, avoid removing the player - the game panics without a player.
+        if !is_player {
+            commands.entity(event.entity).insert(DesignatedForRemoval);
+            // This triggers the "when removed" contingency.
+            contingency.write(TriggerContingency {
+                caster: event.entity,
+                contingency: Axiom::WhenRemoved,
             });
-            let cannot_drop_soul = dying_flags.contains(flags.effects_flags)
-                || dying_flags.contains(flags.species_flags);
-            // For now, avoid removing the player - the game panics without a player.
-            if !is_player {
-                // Add Dizzy to prevent this creature from taking any further actions.
-                commands
-                    .entity(event.entity)
-                    .insert((DesignatedForRemoval, Dizzy));
-                // This triggers the "when removed" contingency.
-                contingency.write(TriggerContingency {
-                    caster: event.entity,
-                    contingency: Axiom::WhenRemoved,
-                });
-                if !cannot_drop_soul && soul != &Soul::Empty {
-                    // Add this entity's soul to the soul wheel
-                    soul_wheel
-                        .draw_pile
-                        .entry(*soul)
-                        .and_modify(|amount| *amount += 1);
+            if let Some(axiom) = get_species_recipe(species) {
+                // Do not send any message if the new axiom discovered was already known.
+                if !known_patterns.iter().any(|known| known.axiom == axiom) {
+                    text.write(AddMessage {
+                        message: Message::NewAxiomLearned(*species, axiom.clone()),
+                    });
+                    learn.write(LearnNewAxiom { axiom });
                 }
-            } else {
-                respawn.write(RespawnPlayer { victorious: false });
+            }
+            if !cannot_drop_soul && soul != &Soul::Empty {
+                // Add this entity's soul to the soul wheel
+                soul_wheel
+                    .draw_pile
+                    .entry(*soul)
+                    .and_modify(|amount| *amount += 1);
             }
         } else {
-            info!("A RemoveEntity failed to fetch components from its Entity.");
-            dbg!(event);
+            respawn.write(RespawnPlayer { victorious: false });
         }
     }
+    Ok(())
 }
 
 #[derive(Event)]
@@ -2100,42 +2111,28 @@ pub struct DistributeNpcActions {
 }
 
 pub fn distribute_npc_actions(
-    mut step: EventWriter<CreatureStep>,
-    mut spell: EventWriter<CastSpell>,
+    mut cast_spell: EventWriter<CastSpell>,
     mut echo: EventWriter<EchoSpeed>,
     mut events: EventReader<DistributeNpcActions>,
     turn_manager: Res<TurnManager>,
-    player: Query<&Position, With<Player>>,
     // TODO: This will break if Awake becomes a flag component
     // and is no longer stitched directly onto the creature.
-    charm_position_query: Query<&Position, (With<Awake>, Without<Player>)>,
-    npcs: Query<(Entity, &Position, &Species, &Spellbook, &CreatureFlags), Without<Player>>,
-    species: Query<&Species>,
-    map: Res<Map>,
+    npcs: Query<(Entity, &Spellbook, &CreatureFlags), Without<Player>>,
 
-    hunt_query: Query<&Hunt>,
-    random_query: Query<&Random>,
     speed_query: Query<&Speed>,
-    charm_query: Query<&Charm>,
     stunned_query: Query<Entity, Or<(With<Dizzy>, With<Sleeping>)>>,
+    mut commands: Commands,
 ) -> Result {
     for event in events.read() {
-        let player_pos = player.single()?;
         let mut send_echo = false;
-        for (npc_entity, npc_pos, npc_species, npc_spellbook, flags) in npcs.iter() {
-            let (is_hunter, is_random, is_stunned, is_charmed, speed) = {
+        for (npc_entity, npc_spellbook, flags) in npcs.iter() {
+            let (is_stunned, speed) = {
                 (
-                    hunt_query.contains(flags.species_flags)
-                        || hunt_query.contains(flags.effects_flags),
-                    random_query.contains(flags.species_flags)
-                        || random_query.contains(flags.effects_flags),
                     stunned_query.contains(flags.species_flags)
                         || stunned_query.contains(flags.effects_flags)
                         // HACK: The "Sleeping" component currently appears
                         // on the creature itself and not the effects_flags.
                         || stunned_query.contains(npc_entity),
-                    charm_query.contains(flags.species_flags)
-                        || charm_query.contains(flags.effects_flags),
                     // NOTE: Currently, status effect speed overrides species speed.
                     // Maybe it would be interesting to have them cancel each other out.
                     speed_query
@@ -2165,46 +2162,93 @@ pub fn distribute_npc_actions(
             } else if event.speed_level > 1 {
                 continue;
             }
-            if is_random {
-                if let Some(move_direction) = map.random_adjacent_passable_direction(*npc_pos) {
-                    // If it is found, cause a CreatureStep event.
-                    step.write(CreatureStep {
-                        direction: move_direction,
-                        entity: npc_entity,
-                    });
-                }
-            } else if is_hunter {
-                let destination = if is_charmed {
-                    let mut closest_slot: Option<Position> = None;
-                    let mut min_distance = i32::MAX;
-                    for position in charm_position_query.iter() {
-                        let distance = manhattan_distance(npc_pos, position);
-                        if distance < min_distance {
-                            min_distance = distance;
-                            closest_slot = Some(position.clone());
-                        }
-                    }
-                    if let Some(closest_slot) = closest_slot {
-                        closest_slot
-                    } else {
-                        *npc_pos
-                    }
-                } else {
-                    *player_pos
-                };
-                // Try to find a tile that gets the hunter closer to its target.
-                if let Some(move_direction) = map.best_manhattan_move(*npc_pos, destination) {
-                    // If it is found, cause a CreatureStep event.
-                    step.write(CreatureStep {
-                        direction: move_direction,
-                        entity: npc_entity,
-                    });
-                }
+            if npc_spellbook.spells.is_empty() {
+                // If an entity has no spells, just skip right ahead to the step action.
+                commands.trigger_targets(ChooseStepAction, npc_entity);
+            }
+            for (caste, spell) in &npc_spellbook.spells {
+                cast_spell.write(CastSpell {
+                    caster: npc_entity,
+                    spell: spell.clone(),
+                    starting_step: 0,
+                    soul_caste: *caste,
+                    prediction: true,
+                });
             }
         }
         if send_echo {
             echo.write(EchoSpeed {
                 speed_level: event.speed_level + 1,
+            });
+        }
+    }
+    Ok(())
+}
+
+#[derive(Event)]
+pub struct ChooseStepAction;
+
+// FIXME:
+// - Hechaton does not move but does use its spell
+// - Check if non-tinkers get giga boosted with multiple spells
+// - second emblems do not attack and stop near unbreakable walls - do they still "believe" they are weak walls?
+pub fn choose_step_action(
+    trigger: Trigger<ChooseStepAction>,
+    player: Query<&Position, With<Player>>,
+    npcs: Query<(Entity, &Position, &CreatureFlags), Without<Player>>,
+    mut step: EventWriter<CreatureStep>,
+    map: Res<Map>,
+    // TODO: This will break if Awake becomes a flag component
+    // and is no longer stitched directly onto the creature.
+    charm_position_query: Query<&Position, (With<Awake>, Without<Player>)>,
+    hunt_query: Query<&Hunt>,
+    random_query: Query<&Random>,
+    charm_query: Query<&Charm>,
+) -> Result {
+    let player_pos = player.single()?;
+    let (npc_entity, npc_pos, flags) = npcs.get(trigger.target())?;
+    let (is_hunter, is_random, is_charmed) = {
+        (
+            hunt_query.contains(flags.species_flags) || hunt_query.contains(flags.effects_flags),
+            random_query.contains(flags.species_flags)
+                || random_query.contains(flags.effects_flags),
+            charm_query.contains(flags.species_flags) || charm_query.contains(flags.effects_flags),
+        )
+    };
+
+    if is_random {
+        if let Some(move_direction) = map.random_adjacent_passable_direction(*npc_pos) {
+            // If it is found, cause a CreatureStep event.
+            step.write(CreatureStep {
+                direction: move_direction,
+                entity: npc_entity,
+            });
+        }
+    } else if is_hunter {
+        let destination = if is_charmed {
+            let mut closest_slot: Option<Position> = None;
+            let mut min_distance = i32::MAX;
+            for position in charm_position_query.iter() {
+                let distance = manhattan_distance(npc_pos, position);
+                if distance < min_distance {
+                    min_distance = distance;
+                    closest_slot = Some(position.clone());
+                }
+            }
+            if let Some(closest_slot) = closest_slot {
+                closest_slot
+            } else {
+                *npc_pos
+            }
+        } else {
+            *player_pos
+        };
+        // Try to find a tile that gets the hunter closer to its target.
+        if let Some(move_direction) = map.best_manhattan_move(*npc_pos, destination) {
+            // If it is found, cause a CreatureStep event.
+            step.write(CreatureStep {
+                direction: move_direction,
+                entity: npc_entity,
             });
         }
     }

@@ -310,6 +310,7 @@ pub enum Species {
     AxiomaticSeal,
     ConveyorBelt,
     Grinder,
+    Hechaton,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -335,6 +336,19 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::AxiomaticSeal => 25,
         Species::ConveyorBelt => 23,
         Species::Grinder => 20,
+        Species::Hechaton => 61,
+    }
+}
+
+pub fn get_species_recipe(species: &Species) -> Option<Axiom> {
+    match species {
+        Species::Hechaton => Some(Axiom::Transform {
+            species: Species::Abazon,
+        }),
+        Species::Shrike => Some(Axiom::Ego),
+        Species::Tinker => Some(Axiom::MomentumBeam),
+        Species::Oracle => Some(Axiom::WhenMoved),
+        _ => None,
     }
 }
 
@@ -364,6 +378,19 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                     effect: StatusEffect::Stab,
                     potency: 1,
                     stacks: EffectDuration::Infinite,
+                },
+            ]),
+            None,
+            None,
+        ]),
+        Species::Hechaton => Spellbook::new([
+            None,
+            None,
+            None,
+            Some(vec![
+                Axiom::MomentumBeam,
+                Axiom::Transform {
+                    species: Species::Abazon,
                 },
             ]),
             None,

@@ -521,14 +521,10 @@ pub fn learn_new_axiom(
 ) -> Result {
     for event in events.read() {
         // Do not learn duplicate axioms.
-        let mut seen_before = false;
-        for known in known_patterns.iter() {
-            if known.axiom == event.axiom {
-                seen_before = true;
-                break;
-            }
-        }
-        if seen_before {
+        if known_patterns
+            .iter()
+            .any(|known| known.axiom == event.axiom)
+        {
             continue;
         }
         commands.entity(ui.single()?).with_children(|parent| {

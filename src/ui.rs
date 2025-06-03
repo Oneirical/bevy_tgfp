@@ -9,7 +9,8 @@ use crate::{
     creature::{Soul, Species},
     events::mouse_use_wheel_soul,
     graphics::SpriteSheetAtlas,
-    text::{split_text, LORE},
+    spells::Axiom,
+    text::{match_axiom_with_description, split_text, LORE},
 };
 
 pub struct UIPlugin;
@@ -1199,6 +1200,7 @@ pub enum Message {
     HealOther(Species, isize),
     CreatureHealsItself(Species, isize),
     InvalidAction(InvalidAction),
+    NewAxiomLearned(Species, Axiom),
 }
 
 pub fn print_message_in_log(
@@ -1244,6 +1246,9 @@ pub fn print_message_in_log(
                 match_species_with_string(victim_species),
                 damage
             ),
+            Message::NewAxiomLearned(species, axiom) => {
+                &format!("[a]You dissect {}[a]'s yearnings and memories, and find {}[a] within.", match_species_with_string(species), match_axiom_with_description(axiom).lines().next().unwrap())
+            }
             Message::InvalidAction(action) => match action {
                 InvalidAction::WheelFull => {
                     "[y]Your Soul Wheel is already full, cast some with 1-8 before drawing more![w]"

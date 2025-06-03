@@ -350,14 +350,14 @@ pub fn new_cage_on_conveyor(
         );
         let species = match tile_char {
             '#' => Species::Wall,
-            'H' => Species::Hunter,
-            'S' => Species::Spawner,
+            'S' => Species::Hunter,
             'T' => Species::Tinker,
             '@' => Species::Player,
             'W' => Species::WeakWall,
             '2' => Species::Second,
             'A' => Species::Apiarist,
             'F' => Species::Shrike,
+            'H' => Species::Hechaton,
             'O' => Species::Oracle,
             'E' => Species::EpsilonHead,
             't' => Species::EpsilonTail,
@@ -384,6 +384,7 @@ pub fn new_cage_on_conveyor(
             Species::Tinker,
             Species::Apiarist,
             Species::Oracle,
+            Species::Hechaton,
         ]
         .contains(&species)
         {
@@ -478,7 +479,6 @@ pub fn spawn_cage(
 ";
     let tower_height = 2;
     let mut tower_height_tiles = 0;
-    let first_room_size = 9;
     for tower_floor in 0..tower_height {
         let size = 9;
         let mut cage = generate_cage(
@@ -511,8 +511,8 @@ pub fn spawn_cage(
             };
             let species = match tile_char {
                 '#' => Species::Wall,
-                'H' => Species::Hunter,
-                'S' => Species::Spawner,
+                'S' => Species::Hunter,
+                'H' => Species::Hechaton,
                 'T' => Species::Tinker,
                 '@' => Species::Player,
                 'W' => Species::WeakWall,
@@ -547,6 +547,7 @@ pub fn spawn_cage(
                 Species::Tinker,
                 Species::Apiarist,
                 Species::Oracle,
+                Species::Hechaton,
             ]
             .contains(&species)
             {
@@ -583,9 +584,9 @@ pub fn spawn_cage(
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) {
     let creature_chars = if spawn_snake {
-        ['E', 'F', 'H', 'E', 't', 't']
+        ['E', 'F', 'H', 'E', 't', 't', 't']
     } else {
-        ['A', 'T', 'F', '2', 'H', 'O']
+        ['A', 'T', 'F', '2', 'H', 'O', 'S']
     };
 
     let floor_positions: Vec<usize> = cage
