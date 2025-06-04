@@ -485,6 +485,14 @@ pub enum Axiom {
 }
 
 impl Axiom {
+    // NOTE: After some discussion with my friend
+    // I was informed that this implementation is irredeemable garbage.
+    // It adds useless "FormSeparator" variants and takes memory for no reason.
+    // The correct way to do it would involve:
+    // enum Axiom { Form(Form), Function(Function) }
+    // enum Form { Ego, Touch }
+    // enum Function { Dash }
+    // but refactoring this seems nightmarish so I'll let it stay like this for now.
     fn discriminant(&self) -> u16 {
         // SAFETY: Because `Self` is marked `repr(u16)`, its layout is a `repr(C)` `union`
         // between `repr(C)` structs, each of which has the `u16` discriminant as its first
@@ -1674,6 +1682,15 @@ pub fn process_axiom(
 pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>, mut commands: Commands) {
     let mut renewed_spells = Vec::new();
     let len = spell_stack.spells.len();
+    // We count the number of prediction (fake spells) used by each creature.
+    let mut predictions = spell_stack
+        .spells
+        .iter()
+        .filter(|s| s.synapse_flags.contains(&SynapseFlag::Prediction))
+        .fold(HashMap::new(), |mut acc, s| {
+            *acc.entry(s.caster).or_insert(0) += 1;
+            acc
+        });
     for mut synapse_data in spell_stack.spells.drain(0..len) {
         // Get the currently executed spell, removing it temporarily.
         // Step forwards in the axiom queue, if it is allowed.
@@ -1692,8 +1709,18 @@ pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>, mut commands: Comma
             .synapse_flags
             .contains(&SynapseFlag::Prediction)
         {
+            // Only if this is the last possible prediction does this return 0,
+            // which enables the creature to choose non-spellcasting actions instead.
+            let number_of_predictions = {
+                let count = predictions.get_mut(&synapse_data.caster).unwrap();
+                *count -= 1;
+                *count
+            };
             // The prediction has completed, judge if it should be turned into an actual spell.
-            commands.run_system_cached_with(ai_prediction_into_action, synapse_data);
+            commands.run_system_cached_with(
+                ai_prediction_into_action,
+                (synapse_data, number_of_predictions),
+            );
         }
     }
     spell_stack.spells.append(&mut renewed_spells);
@@ -1701,7 +1728,7 @@ pub fn cleanup_synapses(mut spell_stack: ResMut<SpellStack>, mut commands: Comma
 
 /// Consider transforming Predictions into actual spells
 pub fn ai_prediction_into_action(
-    In(synapse): In<SynapseData>,
+    In((synapse, number_of_predictions)): In<(SynapseData, usize)>,
     flags: Query<&CreatureFlags>,
     spellbook: Query<&Spellbook>,
     target_query: Query<&Targeting>,
@@ -1727,7 +1754,7 @@ pub fn ai_prediction_into_action(
             )
             .collect()
     };
-    if species_target_list.is_empty() {
+    if species_target_list.is_empty() && number_of_predictions == 0 {
         // Early return if we are not looking to target anything.
         commands.trigger_targets(ChooseStepAction, synapse.caster);
         return;
@@ -1750,11 +1777,15 @@ pub fn ai_prediction_into_action(
                 soul_caste: synapse.soul_caste,
                 prediction: false,
             });
+            return;
         }
-        return;
     }
-    // If no spell was fired, take a step instead.
-    commands.trigger_targets(ChooseStepAction, synapse.caster);
+    // There needs to be no other spells waiting for their prediction to
+    // resolve to assert "well, guess I'll take a step this turn"
+    if number_of_predictions == 0 {
+        // If no spell was fired, take a step instead.
+        commands.trigger_targets(ChooseStepAction, synapse.caster);
+    }
 }
 
 pub fn spell_stack_is_empty(

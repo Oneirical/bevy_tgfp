@@ -2188,10 +2188,6 @@ pub fn distribute_npc_actions(
 #[derive(Event)]
 pub struct ChooseStepAction;
 
-// FIXME:
-// - Hechaton does not move but does use its spell
-// - Check if non-tinkers get giga boosted with multiple spells
-// - second emblems do not attack and stop near unbreakable walls - do they still "believe" they are weak walls?
 pub fn choose_step_action(
     trigger: Trigger<ChooseStepAction>,
     player: Query<&Position, With<Player>>,
