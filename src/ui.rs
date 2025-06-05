@@ -1355,6 +1355,7 @@ pub fn match_species_with_string(species: &Species) -> String {
         Species::EpsilonTail => "[y]Rubberized Mecha-Segment[w]",
         Species::EpsilonHead => "[y]Epsilon, Crowned by Truth[w]",
         Species::AxiomaticSeal => "[a]Axiomatic Seal[w]",
+        Species::Grappler => "[^]Cotton-Woven Scorpion[w]",
         _ => &format!("{:?}", species),
     };
     string.to_owned()

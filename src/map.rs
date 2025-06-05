@@ -358,6 +358,7 @@ pub fn new_cage_on_conveyor(
             'A' => Species::Apiarist,
             'F' => Species::Shrike,
             'H' => Species::Hechaton,
+            'G' => Species::Grinder,
             'O' => Species::Oracle,
             'E' => Species::EpsilonHead,
             't' => Species::EpsilonTail,
@@ -385,6 +386,7 @@ pub fn new_cage_on_conveyor(
             Species::Apiarist,
             Species::Oracle,
             Species::Hechaton,
+            Species::Grappler,
         ]
         .contains(&species)
         {
@@ -432,7 +434,7 @@ pub fn spawn_cage(
 .#####.##+##............#vvvvvvvvvvv#...........###+##.#####.\
 ##...###...#####........#vvvvvvvvvvv#........#####...###...##\
 #.....#........####.....#vvvvvvvvvvv#.....####........#.....#\
-#..B..+..G........###...#vvvvvvvvvvv#...###........G..+..B..#\
+#..B..+...........###...#vvvvvvvvvvv#...###...........+..B..#\
 #.....#.............##..#vvvvvvvvvvv#..##.............#.....#\
 ##...###.............#..#vvvvvvvvvvv#..#....@........###...##\
 .#####.##+####.......##.#vvvvvvvvvvv#.##.........##+##.#####.\
@@ -452,7 +454,7 @@ pub fn spawn_cage(
 .#####.##+####.......##.#vvvvvvvvvvv#.##.........##+##.#####.\
 ##...###.............#..#vvvvvvvvvvv#..#.............###...##\
 #.....#.............##..#vvvvvvvvvvv#..##.............#.....#\
-#..B..+..G........###...#vvvvvvvvvvv#...###........G..+..B..#\
+#..B..+...........###...#vvvvvvvvvvv#...###...........+..B..#\
 #.....#........####.....#vvvvvvvvvvv#.....####........#.....#\
 ##...###...#####........#vvvvvvvvvvv#........#####...###...##\
 .#####.##+##............#vvvvvvvvvvv#............##+##.#####.\
@@ -513,6 +515,7 @@ pub fn spawn_cage(
                 '#' => Species::Wall,
                 'S' => Species::Hunter,
                 'H' => Species::Hechaton,
+                'G' => Species::Grappler,
                 'T' => Species::Tinker,
                 '@' => Species::Player,
                 'W' => Species::WeakWall,
@@ -548,6 +551,7 @@ pub fn spawn_cage(
                 Species::Apiarist,
                 Species::Oracle,
                 Species::Hechaton,
+                Species::Grappler,
             ]
             .contains(&species)
             {
@@ -584,9 +588,9 @@ pub fn spawn_cage(
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) {
     let creature_chars = if spawn_snake {
-        ['E', 'F', 'H', 'E', 't', 't', 't']
+        ['E', 'F', 'H', 'E', 't', 't', 't', 't']
     } else {
-        ['A', 'T', 'F', '2', 'H', 'O', 'S']
+        ['A', 'T', 'F', '2', 'H', 'O', 'S', 'G']
     };
 
     let floor_positions: Vec<usize> = cage

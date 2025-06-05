@@ -521,7 +521,6 @@ pub fn summon_creature(
         let hp = match &event.species {
             Species::Player => 6,
             Species::Hunter => 1,
-            Species::Spawner => 3,
             Species::Apiarist => 3,
             Species::Shrike => 1,
             Species::Second => 1,
@@ -760,7 +759,7 @@ pub fn assign_species_components(
             Species::Airlock => {
                 new_creature.insert((Meleeproof, RealityShield(2), Door, Dizzy, NoDropSoul));
             }
-            Species::Hunter | Species::Spawner | Species::Oracle => {
+            Species::Hunter | Species::Oracle => {
                 new_creature.insert(Hunt);
             }
             Species::Second => {
@@ -770,7 +769,7 @@ pub fn assign_species_components(
                     Targeting(HashSet::from([Species::WeakWall])),
                 ));
             }
-            Species::Hechaton => {
+            Species::Hechaton | Species::Grappler => {
                 new_creature.insert((Hunt, Targeting(HashSet::from([Species::Player]))));
             }
             Species::Tinker => {

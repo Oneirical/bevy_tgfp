@@ -298,7 +298,6 @@ pub enum Species {
     Shrike,
     Tinker,
     Second,
-    Spawner,
     Airlock,
     Trap,
     Oracle,
@@ -311,6 +310,7 @@ pub enum Species {
     ConveyorBelt,
     Grinder,
     Hechaton,
+    Grappler,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -320,7 +320,6 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Wall => 3,
         Species::WeakWall => 3,
         Species::Hunter => 4,
-        Species::Spawner => 5,
         Species::Airlock => 17,
         Species::Shrike => 5,
         Species::Apiarist => 6,
@@ -337,6 +336,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::ConveyorBelt => 23,
         Species::Grinder => 20,
         Species::Hechaton => 61,
+        Species::Grappler => 62,
     }
 }
 
@@ -345,9 +345,7 @@ pub fn get_species_recipe(species: &Species) -> Option<Axiom> {
         Species::Hechaton => Some(Axiom::Transform {
             species: Species::Abazon,
         }),
-        Species::Shrike => Some(Axiom::Ego),
-        Species::Tinker => Some(Axiom::MomentumBeam),
-        Species::Oracle => Some(Axiom::WhenMoved),
+        Species::Grappler => Some(Axiom::MomentumBeam),
         _ => None,
     }
 }
@@ -386,7 +384,6 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         Species::Hechaton => Spellbook::new([
             None,
             None,
-            None,
             Some(vec![
                 Axiom::MomentumBeam,
                 Axiom::Transform {
@@ -394,6 +391,20 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                 },
             ]),
             None,
+            None,
+            None,
+        ]),
+        Species::Grappler => Spellbook::new([
+            None,
+            None,
+            None,
+            None,
+            Some(vec![
+                Axiom::MomentumBeam,
+                Axiom::ToggleUntarget,
+                Axiom::Touch,
+                Axiom::Dash { max_distance: -5 },
+            ]),
             None,
         ]),
         Species::EpsilonHead => Spellbook::new([
@@ -522,7 +533,9 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                 Axiom::Trace,
                 Axiom::Dash { max_distance: 5 },
                 Axiom::Spread,
-                Axiom::UntargetCaster,
+                Axiom::ToggleUntarget,
+                Axiom::Ego,
+                Axiom::ToggleUntarget,
                 Axiom::HealOrHarm { amount: -1 },
                 Axiom::PurgeTargets,
                 Axiom::Touch,

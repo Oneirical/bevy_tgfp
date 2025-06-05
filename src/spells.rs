@@ -150,8 +150,8 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_mutator_spread),
         );
         axioms.library.insert(
-            discriminant(&Axiom::UntargetCaster),
-            world.register_system(axiom_mutator_untarget_caster),
+            discriminant(&Axiom::ToggleUntarget),
+            world.register_system(axiom_mutator_toggle_untarget),
         );
         axioms.library.insert(
             discriminant(&Axiom::PiercingBeams),
@@ -457,9 +457,12 @@ pub enum Axiom {
     Trace,
     /// All targeted tiles expand to also target their orthogonally adjacent tiles.
     Spread,
-    /// Remove the Caster's tile from targets.
-    UntargetCaster,
+    /// Toggle Untarget flag on or off. While on, Forms remove targets instead
+    /// of adding them..
+    ToggleUntarget,
     /// All Beam-type Forms will pierce through non-Spellproof creatures.
+    // NOTE: Maybe this could be used to make filters ban a species instead
+    // of select only that species.
     PiercingBeams,
     /// Remove all targets.
     PurgeTargets,
@@ -572,6 +575,22 @@ impl SynapseData {
             .map(|(entity, _)| entity)
             .collect()
     }
+
+    fn target_tiles(&mut self, target: Vec<Position>) {
+        if self.synapse_flags.contains(&SynapseFlag::Untarget) {
+            self.targets.retain(|&t| !target.contains(&t));
+        } else {
+            self.targets.extend(target);
+        }
+    }
+
+    fn target_tile(&mut self, target: Position) {
+        if self.synapse_flags.contains(&SynapseFlag::Untarget) {
+            self.targets.remove(&target);
+        } else {
+            self.targets.insert(target);
+        }
+    }
 }
 
 #[derive(Eq, Debug, PartialEq, Hash)]
@@ -593,6 +612,8 @@ pub enum SynapseFlag {
     /// A fake spell with its Functions blocked, used by AI to contemplate whether or not it is
     /// wise to cast the real version of a spell.
     Prediction,
+    /// Forms will remove targets instead of adding them.
+    Untarget,
 }
 
 pub fn cast_new_spell(
@@ -645,7 +666,7 @@ fn axiom_form_ego(
         });
     }
     // Add that caster's position to the targets.
-    synapse_data.targets.insert(caster_position);
+    synapse_data.target_tile(caster_position);
 }
 
 /// Target the player's tile.
@@ -674,7 +695,7 @@ fn axiom_form_player(
         });
     }
     // Add that caster's position to the targets.
-    synapse_data.targets.insert(player_position);
+    synapse_data.target_tile(player_position);
 }
 
 /// Target all orthogonally adjacent tiles to the caster.
@@ -706,7 +727,7 @@ fn axiom_form_plus(
             appear: 0.,
         });
     }
-    synapse_data.targets.extend(&output);
+    synapse_data.target_tiles(output);
 }
 
 /// The targeted creatures dash in the direction of the caster's last move.
@@ -723,7 +744,7 @@ fn axiom_function_dash(
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
-    if let Axiom::Dash { max_distance } = synapse_data.axioms[synapse_data.step] {
+    if let Axiom::Dash { mut max_distance } = synapse_data.axioms[synapse_data.step] {
         // For each (Entity, Position) on a targeted tile with a creature on it...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
             // Spellproof entities cannot be affected.
@@ -739,7 +760,14 @@ fn axiom_function_dash(
             // The dashing creature starts where it currently is standing.
             let mut final_dash_destination = dasher_pos;
             // It will travel in the direction of the caster's last move.
-            let (off_x, off_y) = caster_momentum.as_offset();
+            let (mut off_x, mut off_y) = caster_momentum.as_offset();
+            // If the max distance is negative, the direction of travel
+            // is inverted.
+            if max_distance.signum() == -1 {
+                off_x = -off_x;
+                off_y = -off_y;
+                max_distance = -max_distance;
+            }
             // The dash has a maximum travel distance of `max_distance`.
             let mut distance_travelled = 0;
             while distance_travelled < max_distance {
@@ -872,7 +900,7 @@ fn axiom_form_momentum_beam(
         });
     }
     // Add these tiles to `targets`.
-    synapse_data.targets.extend(&output);
+    synapse_data.target_tiles(output);
 }
 
 /// Fire 4 beams from the caster, towards the diagonal directions. Target all travelled tiles,
@@ -919,7 +947,7 @@ fn axiom_form_xbeam(
             });
         }
         // Add these tiles to `targets`.
-        synapse_data.targets.extend(&output);
+        synapse_data.target_tiles(output);
     }
 }
 
@@ -971,7 +999,7 @@ fn axiom_form_plus_beam(
             });
         }
         // Add these tiles to `targets`.
-        synapse_data.targets.extend(&output);
+        synapse_data.target_tiles(output);
     }
 }
 
@@ -987,7 +1015,7 @@ fn axiom_form_touch(
         position_and_momentum.get(synapse_data.caster).unwrap();
     let (off_x, off_y) = caster_momentum.as_offset();
     let touch = Position::new(caster_position.x + off_x, caster_position.y + off_y);
-    synapse_data.targets.insert(touch);
+    synapse_data.target_tile(touch);
     if !synapse_data
         .synapse_flags
         .contains(&SynapseFlag::DisableVfx)
@@ -1033,7 +1061,7 @@ fn axiom_form_halo(
             });
         }
         // Add these tiles to `targets`.
-        synapse_data.targets.extend(&circle);
+        synapse_data.target_tiles(circle);
     } else {
         panic!()
     }
@@ -1453,19 +1481,14 @@ fn axiom_mutator_spread(
                 appear: 0.,
             });
         }
-        synapse_data.targets.extend(&ord_dir_vec);
+        synapse_data.target_tiles(ord_dir_vec);
     }
 }
 
-/// Remove the Caster's tile from targets.
-fn axiom_mutator_untarget_caster(
-    In(spell_idx): In<usize>,
-    mut spell_stack: ResMut<SpellStack>,
-    position: Query<&Position>,
-) {
+/// Make it so future Forms will remove targets instead of adding them..
+fn axiom_mutator_toggle_untarget(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
-    let caster_position = position.get(synapse_data.caster).unwrap();
-    synapse_data.targets.remove(caster_position);
+    synapse_data.synapse_flags.insert(SynapseFlag::Untarget);
 }
 
 /// Delete all targets.
@@ -1576,7 +1599,7 @@ fn teleport_transmission(
                 });
             }
             // Add these tiles to `targets`.
-            synapse_data.targets.extend(&output);
+            synapse_data.target_tiles(output);
         }
     }
     teleport_writer.write(teleport_event);
