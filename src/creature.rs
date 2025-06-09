@@ -140,6 +140,8 @@ pub enum StatusEffect {
     Magnetize,
     // The creature is controlled by the player.
     Possessed,
+    // The creature will return to its original Species when this expires.
+    ReturnOriginalForm,
 }
 
 #[derive(Debug)]
@@ -196,6 +198,11 @@ pub struct Stab {
 
 #[derive(Component)]
 pub struct Invincible;
+
+#[derive(Component)]
+pub struct ReturnOriginalForm {
+    pub original_form: Species,
+}
 
 #[derive(Component)]
 pub struct Dizzy;
@@ -386,6 +393,11 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             Some(vec![
                 Axiom::MomentumBeam,
+                Axiom::StatusEffect {
+                    effect: StatusEffect::ReturnOriginalForm,
+                    potency: 0,
+                    stacks: EffectDuration::Finite { stacks: 5 },
+                },
                 Axiom::Transform {
                     species: Species::Abazon,
                 },

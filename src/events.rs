@@ -16,8 +16,8 @@ use crate::{
         DesignatedForRemoval, Dizzy, DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile,
         Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Magnetic, Magnetized,
         Meleeproof, NoDropSoul, Player, Possessed, Possessing, PotencyAndStacks, Random,
-        RealityBreak, RealityShield, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Stab,
-        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
+        RealityBreak, RealityShield, ReturnOriginalForm, Sleeping, Soul, Species, Speed,
+        SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -423,8 +423,9 @@ pub struct AddStatusEffect {
 pub fn add_status_effects(
     mut events: EventReader<AddStatusEffect>,
     mut effects: Query<(&mut StatusEffectsList, &CreatureFlags)>,
+    species_query: Query<&Species>,
     mut commands: Commands,
-) {
+) -> Result {
     for event in events.read() {
         let (mut effects_list, flags) = effects.get_mut(event.entity).unwrap();
         if let Some(effect) = effects_list.effects.get(&event.effect) {
@@ -480,8 +481,14 @@ pub fn add_status_effects(
                     conductor: None,
                 });
             }
+            StatusEffect::ReturnOriginalForm => {
+                commands.entity(effects_flags).insert(ReturnOriginalForm {
+                    original_form: *species_query.get(event.entity)?,
+                });
+            }
         }
     }
+    Ok(())
 }
 
 #[derive(Event)]
@@ -2060,7 +2067,10 @@ fn room_circulation_check(
 pub fn tick_down_status_effects(
     mut effects: Query<(Entity, &mut StatusEffectsList)>,
     flags_query: Query<(Entity, &CreatureFlags)>,
+    original_form_query: Query<&ReturnOriginalForm>,
     mut commands: Commands,
+    mut transform: EventWriter<TransformCreature>,
+    // TODO: When Bevy bug is fixed, change this to -> Result
 ) {
     // Tick down status effects.
     for (entity, mut effect_list) in effects.iter_mut() {
@@ -2096,6 +2106,18 @@ pub fn tick_down_status_effects(
                         StatusEffect::Magnetize => {
                             commands.entity(effects_flags).remove::<Magnetic>();
                             commands.entity(effects_flags).remove::<Magnetized>();
+                        }
+                        StatusEffect::ReturnOriginalForm => {
+                            transform.write(TransformCreature {
+                                entity,
+                                new_species: original_form_query
+                                    .get(effects_flags)
+                                    .unwrap()
+                                    .original_form,
+                            });
+                            commands
+                                .entity(effects_flags)
+                                .remove::<ReturnOriginalForm>();
                         }
                     }
                 }
