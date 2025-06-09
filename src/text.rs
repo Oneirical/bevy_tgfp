@@ -70,6 +70,8 @@ pub const LORE: &[&str] = &[
 "[l]A Tingling in the Soul\n[y]Reward: [b]Haughty as the Saints Were[w]\n\nEnter the [a]Mnemonic Quarry[w] to complete this research node.\n\n[p]@There is no mistaking that strange buzzing in my brain. This cycle has ended. My pilgrimage begins.",
 "[m]Wear Beings Like Costumes\n[y]Reward: [m]False Charms and Pretend Affection[w]\n\nCast a spell using the [a]Soul Wheel[w] to complete this research node.\n\n[p]@Ideology, identity, values... As malleable as soft clay. I choose to not be myself for a half-second, and gain a taste of the glorious annihilation awaiting me at the end of this pilgrimage.",
 "[c]Herald of the New World\n[y]Reward: [a]Share the Fruits of Faith[w]\n\nInteract with the Herald of the New World to complete this research node.\n\n[p]@I have waited for far too long an apocalypse that refused to come. I lust to learn what has become of the outside world, and this Herald is my key.",
+"It cowers in fear, unleashing a painful psychic scream as its soul is rended from its body.",
+"It finds your form disappointing, and believes your body would be put to much better use as a garden ornament.",
 "The head of a gigantic mechanical snake, its blazing red eyes burning away the retinas of organics whom would dare stare too long. Its gold and chrome frills act as an attestation of the superiority of metal over muscle.\n\n[r]MELTDOWN[w] - Each turn, if this [y]Creature[w] is adjacent to 4 [y]Creatures[w], it gains one [l]Meltdown[w]. Upon reaching 5 [l]Meltdown[w], it immediately [r]Concedes[w].",
 
 "Cyan Floods Wash Away Scorn - If possessed, Inject 1 Serene Soul into each Targeted Creature. Targeted Creatures become Charmed for Pride x 10 turns.",
@@ -93,6 +95,8 @@ pub fn match_species_with_description(species: &Species) -> &str {
         Species::Player => 10,
         Species::Abazon => 11,
         Species::AxiomaticSeal => 28,
+        Species::Exploder => 51,
+        Species::Hechaton => 52,
         _ => 0,
     }]
 }

@@ -318,6 +318,7 @@ pub enum Species {
     Grinder,
     Hechaton,
     Grappler,
+    Exploder,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -344,6 +345,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Grinder => 20,
         Species::Hechaton => 61,
         Species::Grappler => 62,
+        Species::Exploder => 63,
     }
 }
 
@@ -353,6 +355,7 @@ pub fn get_species_recipe(species: &Species) -> Option<Axiom> {
             species: Species::Abazon,
         }),
         Species::Grappler => Some(Axiom::MomentumBeam),
+        Species::Exploder => Some(Axiom::HealOrHarm { amount: -1 }),
         _ => None,
     }
 }
@@ -384,6 +387,19 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
                     potency: 1,
                     stacks: EffectDuration::Infinite,
                 },
+            ]),
+            None,
+            None,
+        ]),
+        Species::Exploder => Spellbook::new([
+            None,
+            None,
+            None,
+            Some(vec![
+                Axiom::WhenRemoved,
+                Axiom::Plus,
+                Axiom::Spread,
+                Axiom::HealOrHarm { amount: -1 },
             ]),
             None,
             None,

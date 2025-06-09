@@ -533,6 +533,7 @@ pub fn summon_creature(
             Species::Second => 1,
             Species::Tinker => 1,
             Species::Oracle => 2,
+            Species::Exploder => 1,
             Species::AxiomaticSeal => 4,
             // Wall-type creatures just get full HP to avoid displaying
             // their healthbar.
@@ -581,7 +582,7 @@ pub fn summon_creature(
                     Species::Apiarist => Soul::Ordered,
                     Species::Tinker | Species::Hechaton => Soul::Artistic,
                     Species::Second => Soul::Vile,
-                    Species::Oracle => Soul::Unhinged,
+                    Species::Oracle | Species::Exploder => Soul::Unhinged,
                     Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
                     Species::CageSlot => Soul::Saintly,
                     Species::AxiomaticSeal => Soul::Vile,
@@ -1837,8 +1838,6 @@ pub fn respawn_player(
         soul_wheel.draw_pile.insert(Soul::Unhinged, 1);
         soul_wheel.draw_pile.insert(Soul::Feral, 1);
         soul_wheel.draw_pile.insert(Soul::Vile, 1);
-        faiths_end.cage_address_position.clear();
-        faiths_end.current_cage = 0;
         cage.write(RespawnCage);
         title.write(AnnounceGameOver {
             victorious: event.victorious,

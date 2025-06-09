@@ -22,9 +22,6 @@ impl Plugin for MapPlugin {
             creatures: HashMap::new(),
         });
         app.insert_resource(FaithsEnd {
-            cage_address_position: HashMap::new(),
-            cage_dimensions: HashMap::new(),
-            current_cage: 0,
             conveyor_active: true,
         });
         app.add_systems(Startup, spawn_cage);
@@ -246,86 +243,7 @@ pub fn register_creatures(
 
 #[derive(Resource, Debug)]
 pub struct FaithsEnd {
-    pub cage_address_position: HashMap<Position, usize>,
-    pub cage_dimensions: HashMap<usize, (Position, Position)>,
-    pub current_cage: usize,
     pub conveyor_active: bool,
-}
-
-pub fn is_soul_cage_room(room: usize) -> bool {
-    false
-}
-
-// TODO: If a creature is transformed into something Immobile,
-// like Abazon, it will get stuck and make other entities
-// bump into it.
-pub fn slide_conveyor_belt(
-    query: Query<(Entity, &Position)>,
-    doors: Query<(Entity, &Position, &CreatureFlags)>,
-    closed_door_query: Query<&Door, Without<Intangible>>,
-    mut teleport: EventWriter<TeleportEntity>,
-    mut commands: Commands,
-    mut remove: EventWriter<RemoveCreature>,
-    mut open: EventWriter<OpenCloseDoor>,
-    mut tracker: ResMut<ConveyorTracker>,
-    awake_creatures: Query<&Position, With<Awake>>,
-) {
-    if tracker.open_doors_next {
-        let (boundary_a, boundary_b) = (Position::new(27, 24), Position::new(33, 30));
-        for pos in awake_creatures.iter() {
-            if pos.is_within_range(&boundary_a, &boundary_b) {
-                return;
-            }
-        }
-        for (door, pos, flags) in doors.iter() {
-            if (closed_door_query.contains(flags.species_flags)
-                || closed_door_query.contains(flags.effects_flags))
-                && (pos.y == 27 || pos == &Position::new(25, 27) || pos == &Position::new(35, 27))
-            {
-                open.write(OpenCloseDoor {
-                    entity: door,
-                    open: true,
-                });
-            }
-        }
-        return;
-    }
-    let mut creatures = query.iter().collect::<Vec<(Entity, &Position)>>();
-    let mut send_next = false;
-    let mut close_door = false;
-    creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
-    for (entity, pos) in creatures {
-        if pos.y == 32 {
-            send_next = true;
-        } else if pos.y == 23 {
-            close_door = true;
-        }
-        if pos.y < -10 {
-            remove.write(RemoveCreature { entity });
-        } else {
-            // teleport.write(TeleportEntity {
-            //     destination: Position::new(pos.x, pos.y - 9),
-            //     entity,
-            // });
-        }
-    }
-    if send_next {
-        tracker.open_doors_next = true;
-    }
-    if close_door {
-        commands.run_system_cached(new_cage_on_conveyor);
-        for (door, pos, flags) in doors.iter() {
-            if (!closed_door_query.contains(flags.species_flags)
-                && !closed_door_query.contains(flags.effects_flags))
-                && (pos == &Position::new(25, 27) || pos == &Position::new(35, 27))
-            {
-                open.write(OpenCloseDoor {
-                    entity: door,
-                    open: false,
-                });
-            }
-        }
-    }
 }
 
 #[derive(Resource)]
@@ -340,7 +258,7 @@ pub fn new_cage_on_conveyor(
 ) {
     tracker.number_spawned += 1;
     let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
-    add_creatures(&mut cage, 2 + tracker.number_spawned, false);
+    add_creatures(&mut cage, 2 + tracker.number_spawned);
 
     let cage_corner = Position::new(26, 52);
     for (idx, tile_char) in cage.iter().enumerate() {
@@ -364,6 +282,7 @@ pub fn new_cage_on_conveyor(
             't' => Species::EpsilonTail,
             'x' => Species::CageSlot,
             'C' => Species::AxiomaticSeal,
+            '0' => Species::Exploder,
             '^' | '>' | '<' | 'V' => Species::Airlock,
             'w' | 'n' | 'e' | 's' => Species::CageBorder,
             _ => continue,
@@ -387,6 +306,7 @@ pub fn new_cage_on_conveyor(
             Species::Oracle,
             Species::Hechaton,
             Species::Grappler,
+            Species::Exploder,
         ]
         .contains(&species)
         {
@@ -402,9 +322,8 @@ pub fn new_cage_on_conveyor(
 
 pub fn spawn_cage(
     mut summon: EventWriter<SummonCreature>,
-    mut faiths_end: ResMut<FaithsEnd>,
-    player: Query<&Player>,
     mut text: EventWriter<AddMessage>,
+    mut commands: Commands,
 ) {
     text.write(AddMessage {
         message: Message::Tutorial,
@@ -479,119 +398,41 @@ pub fn spawn_cage(
 ........................#vvvvvvvvvvv#........................\
 ........................#$$$$$$$$$$$#........................\
 ";
-    let tower_height = 2;
-    let mut tower_height_tiles = 0;
-    for tower_floor in 0..tower_height {
-        let size = 9;
-        let mut cage = generate_cage(
-            tower_floor,
-            // Spawn the player in the first room
-            // (the player must not already exist).
-            tower_floor == 0 && player.is_empty(),
-            !is_soul_cage_room(tower_floor),
-            size,
-            &[OrdDir::Left, OrdDir::Right],
-        );
-        if !is_soul_cage_room(tower_floor) {
-            add_creatures(&mut cage, 2 + tower_floor, tower_floor > 11);
-        }
-
-        let cage_corner = Position::new(26, tower_height_tiles as i32 - 5 + 9 * 4);
-        let iterator = if tower_floor == 0 {
-            quarry.chars().collect::<Vec<char>>()
-        } else {
-            cage
+    for (idx, tile_char) in quarry.chars().enumerate() {
+        let position = Position::new(idx as i32 % 61, 61 - idx as i32 / 61);
+        let species = match tile_char {
+            '#' => Species::Wall,
+            '@' => Species::Player,
+            'W' => Species::WeakWall,
+            'x' => Species::CageSlot,
+            'v' => Species::ConveyorBelt,
+            'C' => Species::AxiomaticSeal,
+            '$' => Species::Grinder,
+            '^' | '>' | '<' | 'V' => Species::Airlock,
+            'w' | 'n' | 'e' | 's' => Species::CageBorder,
+            _ => continue,
         };
-        for (idx, tile_char) in iterator.iter().enumerate() {
-            let position = if tower_floor == 0 {
-                Position::new(idx as i32 % 61, 61 - idx as i32 / 61)
-            } else {
-                Position::new(
-                    (idx % size) as i32 + cage_corner.x,
-                    size as i32 - (idx / size) as i32 + cage_corner.y,
-                )
-            };
-            let species = match tile_char {
-                '#' => Species::Wall,
-                'S' => Species::Hunter,
-                'H' => Species::Hechaton,
-                'G' => Species::Grappler,
-                'T' => Species::Tinker,
-                '@' => Species::Player,
-                'W' => Species::WeakWall,
-                '2' => Species::Second,
-                'A' => Species::Apiarist,
-                'F' => Species::Shrike,
-                'O' => Species::Oracle,
-                'E' => Species::EpsilonHead,
-                't' => Species::EpsilonTail,
-                'x' => Species::CageSlot,
-                'v' => Species::ConveyorBelt,
-                'C' => Species::AxiomaticSeal,
-                '$' => Species::Grinder,
-                '^' | '>' | '<' | 'V' => Species::Airlock,
-                'w' | 'n' | 'e' | 's' => Species::CageBorder,
-                _ => continue,
-            };
-            let mut properties = vec![SummonProperties::Momentum(match tile_char {
-                '^' => OrdDir::Up,
-                '>' => OrdDir::Right,
-                '<' => OrdDir::Left,
-                'n' => OrdDir::Up,
-                'e' => OrdDir::Right,
-                'w' => OrdDir::Left,
-                's' => OrdDir::Down,
-                'V' | _ => OrdDir::Down,
-            })];
-            if [
-                Species::Hunter,
-                Species::Shrike,
-                Species::Second,
-                Species::Tinker,
-                Species::Apiarist,
-                Species::Oracle,
-                Species::Hechaton,
-                Species::Grappler,
-            ]
-            .contains(&species)
-            {
-                properties.push(SummonProperties::Sleeping);
-            }
-            summon.write(SummonCreature {
-                species,
-                position,
-                properties,
-            });
-            faiths_end
-                .cage_address_position
-                .insert(position, tower_floor);
-            // If there is no player yet (first run),
-            // set the boundaries.
-            if player.is_empty() {
-                faiths_end.cage_dimensions.insert(
-                    tower_floor,
-                    (
-                        cage_corner,
-                        Position::new(
-                            cage_corner.x + size as i32 - 1,
-                            cage_corner.y + size as i32 - 1,
-                        ),
-                    ),
-                );
-            }
-        }
-        if tower_floor != 0 {
-            tower_height_tiles += size;
-        }
+        let properties = vec![SummonProperties::Momentum(match tile_char {
+            '^' => OrdDir::Up,
+            '>' => OrdDir::Right,
+            '<' => OrdDir::Left,
+            'n' => OrdDir::Up,
+            'e' => OrdDir::Right,
+            'w' => OrdDir::Left,
+            's' => OrdDir::Down,
+            'V' | _ => OrdDir::Down,
+        })];
+        summon.write(SummonCreature {
+            species,
+            position,
+            properties,
+        });
     }
+    commands.run_system_cached(new_cage_on_conveyor);
 }
 
-fn add_creatures(cage: &mut [char], creatures_amount: usize, spawn_snake: bool) {
-    let creature_chars = if spawn_snake {
-        ['E', 'F', 'H', 'E', 't', 't', 't', 't']
-    } else {
-        ['A', 'T', 'F', '2', 'H', 'O', 'S', 'G']
-    };
+fn add_creatures(cage: &mut [char], creatures_amount: usize) {
+    let creature_chars = ['A', 'T', 'F', '2', 'H', 'O', 'S', 'G', '0'];
 
     let floor_positions: Vec<usize> = cage
         .iter()
@@ -656,18 +497,6 @@ pub fn generate_cage(
                 cage.push('.');
                 passable_tiles += 1;
                 idx_start = i;
-            }
-        }
-        if is_soul_cage_room(floor) {
-            cage[idx_from_xy(4, 1, size)] = 'C';
-            for i in 3..6 {
-                cage[idx_from_xy(i, 2, size)] = 's';
-                cage[idx_from_xy(i, 6, size)] = 'n';
-                cage[idx_from_xy(6, i, size)] = 'w';
-                cage[idx_from_xy(2, i, size)] = 'e';
-                for j in 3..6 {
-                    cage[idx_from_xy(i, j, size)] = 'x';
-                }
             }
         }
         for airlock in connections {
