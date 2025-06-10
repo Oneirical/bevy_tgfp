@@ -32,6 +32,7 @@ use crate::{
 #[derive(Resource)]
 pub struct CraftingRecipes {
     sorted_recipes: Vec<(Recipe, Axiom)>,
+    pub craftable_axioms: Vec<Axiom>,
 }
 
 #[derive(Resource)]
@@ -82,7 +83,7 @@ impl BagOfLoot {
                     stacks: EffectDuration::Finite { stacks: 20 },
                 },
                 Axiom::SummonCreature {
-                    species: Species::Hunter,
+                    species: Species::Scion,
                 },
                 Axiom::StatusEffect {
                     effect: StatusEffect::Magnetize,
@@ -220,7 +221,7 @@ pub fn match_axiom_with_icon(axiom: &Axiom) -> usize {
         Axiom::Touch => 177,
         Axiom::Trace => 231,
         Axiom::SummonCreature {
-            species: Species::Hunter,
+            species: Species::Scion,
         } => 228,
         Axiom::PiercingBeams => 233,
         _ => 1,
@@ -1186,7 +1187,7 @@ impl FromWorld for CraftingRecipes {
                 ",
             ),
             Axiom::SummonCreature {
-                species: Species::Hunter,
+                species: Species::Scion,
             },
         );
         recipes.insert(
@@ -1274,9 +1275,16 @@ impl FromWorld for CraftingRecipes {
             ),
             Axiom::WhenMoved,
         );
+        let mut craftable_axioms = Vec::new();
+        for (_, axiom) in recipes.clone() {
+            craftable_axioms.push(axiom);
+        }
         let mut sorted_recipes: Vec<(Recipe, Axiom)> = recipes.into_iter().collect();
         sorted_recipes.sort_by(|(a, _), (b, _)| b.souls.len().cmp(&a.souls.len()));
 
-        CraftingRecipes { sorted_recipes }
+        CraftingRecipes {
+            sorted_recipes,
+            craftable_axioms,
+        }
     }
 }

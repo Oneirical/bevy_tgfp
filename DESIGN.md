@@ -41,6 +41,7 @@ Currently, this is where the game will end. The player becomes another mechanica
 - Instead of "UntargetCaster", make a mutator that makes every form untarget tiles instead of targeting them - "untarget" + "ego" instead of "untargetcaster".
 - A racetrack with many obstacles on the way against an NPC
 - Multiple soul cage sizes and shapes, like a donut or a triangle.
+- An enemy that does more damage when it attacks you on your side (Momentum)
 
 # Coding
 

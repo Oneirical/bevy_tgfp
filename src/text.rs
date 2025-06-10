@@ -83,7 +83,7 @@ pub const LORE: &[&str] = &[
 
 pub fn match_species_with_description(species: &Species) -> &str {
     LORE[match species {
-        Species::Hunter => 1,
+        Species::Scion => 1,
         Species::Apiarist => 2,
         Species::Tinker => 3,
         Species::Oracle => 4,
@@ -160,7 +160,7 @@ pub fn match_axiom_with_description(axiom: &Axiom) -> &str {
         Axiom::Spread => 42,
         Axiom::ForceCast => 44,
         Axiom::SummonCreature {
-            species: Species::Hunter,
+            species: Species::Scion,
         } => 45,
         Axiom::StatusEffect {
             effect: StatusEffect::Magnetize,

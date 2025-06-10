@@ -1340,7 +1340,7 @@ pub fn slide_message_log(mut messages: Query<(&mut Node, &mut LogSlide)>, time: 
 
 pub fn match_species_with_string(species: &Species) -> String {
     let string = match species {
-        Species::Hunter => "[l]Scion of the Old World[w]",
+        Species::Scion => "[l]Scion of the Old World[w]",
         Species::Apiarist => "[m]Brass Apiarist[w]",
         Species::Tinker => "[d]Frenzied Dreamtinker[w]",
         Species::Oracle => "[r]Anisychic Oracle[w]",

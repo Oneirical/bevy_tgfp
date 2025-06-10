@@ -8,16 +8,17 @@ use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
     crafting::{
-        AxiomUI, BagOfLoot, DroppedSoul, KnownPattern, LearnNewAxiom, PredictCraft, TakeOrDropSoul,
+        AxiomUI, BagOfLoot, CraftingRecipes, DroppedSoul, KnownPattern, LearnNewAxiom,
+        PredictCraft, TakeOrDropSoul,
     },
     creature::{
-        get_soul_sprite, get_species_recipe, get_species_spellbook, get_species_sprite,
-        is_naturally_intangible, Awake, Charm, CraftingSlot, Creature, CreatureFlags,
-        DesignatedForRemoval, Dizzy, DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile,
-        Health, HealthIndicator, Hunt, Immobile, Intangible, Invincible, Magnetic, Magnetized,
-        Meleeproof, NoDropSoul, Player, Possessed, Possessing, PotencyAndStacks, Random,
-        RealityBreak, RealityShield, ReturnOriginalForm, Sleeping, Soul, Species, Speed,
-        SpellLibrary, Spellbook, Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
+        get_soul_sprite, get_species_spellbook, get_species_sprite, is_naturally_intangible, Awake,
+        Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
+        DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt,
+        Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
+        Possessed, Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield,
+        ReturnOriginalForm, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Stab,
+        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -527,7 +528,7 @@ pub fn summon_creature(
         let max_hp = 6;
         let hp = match &event.species {
             Species::Player => 6,
-            Species::Hunter => 1,
+            Species::Scion => 1,
             Species::Apiarist => 3,
             Species::Shrike => 1,
             Species::Second => 1,
@@ -577,7 +578,7 @@ pub fn summon_creature(
                 soul: match &event.species {
                     Species::Player => Soul::Saintly,
                     Species::Wall | Species::WeakWall => Soul::Ordered,
-                    Species::Hunter => Soul::Saintly,
+                    Species::Scion => Soul::Saintly,
                     Species::Shrike => Soul::Feral,
                     Species::Apiarist => Soul::Ordered,
                     Species::Tinker | Species::Hechaton => Soul::Artistic,
@@ -640,7 +641,9 @@ pub fn summon_creature(
 
         new_creature.insert(transform);
 
-        new_creature.observe(choose_step_action);
+        new_creature
+            .observe(choose_step_action)
+            .observe(salvage_axiom_from_defeated_enemy);
 
         // TODO: This will have to be removed when creating player clones
         // becomes possible.
@@ -767,7 +770,7 @@ pub fn assign_species_components(
             Species::Airlock => {
                 new_creature.insert((Meleeproof, RealityShield(2), Door, Dizzy, NoDropSoul));
             }
-            Species::Hunter | Species::Oracle => {
+            Species::Scion | Species::Oracle | Species::Exploder => {
                 new_creature.insert(Hunt);
             }
             Species::Second => {
@@ -1174,6 +1177,7 @@ pub fn check_airlock_bridge_formation(
     }
     for potential_door in potential_doors {
         let (species, _) = doors.get(*potential_door).unwrap();
+        // If there are creatures in the room and the airlocks line up, stop the conveyor.
         if species == &Species::Airlock && {
             let mut creature_left_in_the_room = false;
             let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
@@ -1713,21 +1717,18 @@ pub struct RemoveCreature {
 pub fn remove_creature(
     mut events: EventReader<RemoveCreature>,
     mut commands: Commands,
-    creature: Query<(&Position, &Soul, Has<Player>, &CreatureFlags, &Species)>,
+    creature: Query<(&Position, &Soul, Has<Player>, &CreatureFlags)>,
     dying_flags: Query<&NoDropSoul>,
     mut magic_vfx: EventWriter<PlaceMagicVfx>,
     mut soul_wheel: ResMut<SoulWheel>,
     mut contingency: EventWriter<TriggerContingency>,
     mut respawn: EventWriter<RespawnPlayer>,
-    mut learn: EventWriter<LearnNewAxiom>,
-    mut text: EventWriter<AddMessage>,
-    known_patterns: Query<&AxiomUI, With<KnownPattern>>,
 ) -> Result {
     let mut seen = HashSet::new();
     // NOTE: This filter prevents double-removal of a single entity by removing duplicates.
     // As an example, this can happen if two Shrikes simultaneously attack the player.
     for event in events.read().filter(|e| seen.insert(e.entity)) {
-        let (position, soul, is_player, flags, species) = creature.get(event.entity)?;
+        let (position, soul, is_player, flags) = creature.get(event.entity)?;
         // Visually flash an X where the creature was removed.
         magic_vfx.write(PlaceMagicVfx {
             targets: vec![*position],
@@ -1746,15 +1747,7 @@ pub fn remove_creature(
                 caster: event.entity,
                 contingency: Axiom::WhenRemoved,
             });
-            if let Some(axiom) = get_species_recipe(species) {
-                // Do not send any message if the new axiom discovered was already known.
-                if !known_patterns.iter().any(|known| known.axiom == axiom) {
-                    text.write(AddMessage {
-                        message: Message::NewAxiomLearned(*species, axiom.clone()),
-                    });
-                    learn.write(LearnNewAxiom { axiom });
-                }
-            }
+            commands.trigger_targets(SalvageAxiom, event.entity);
             if !cannot_drop_soul && soul != &Soul::Empty {
                 // Add this entity's soul to the soul wheel
                 soul_wheel
@@ -1764,6 +1757,47 @@ pub fn remove_creature(
             }
         } else {
             respawn.write(RespawnPlayer { victorious: false });
+        }
+    }
+    Ok(())
+}
+
+#[derive(Event)]
+pub struct SalvageAxiom;
+
+fn salvage_axiom_from_defeated_enemy(
+    trigger: Trigger<SalvageAxiom>,
+    spellbook: Query<&Spellbook>,
+    species: Query<&Species>,
+    mut learn: EventWriter<LearnNewAxiom>,
+    mut text: EventWriter<AddMessage>,
+    known_patterns: Query<&AxiomUI, With<KnownPattern>>,
+    all_patterns: Res<CraftingRecipes>,
+) -> Result {
+    let mut axioms = HashSet::new();
+    let mut rng = thread_rng();
+    for (_, spell) in spellbook.get(trigger.target())?.spells.clone() {
+        for axiom in spell.axioms {
+            axioms.insert(axiom);
+        }
+    }
+    if let Some(new_axiom) = axioms
+        .iter()
+        // Only craftable axioms can be learned.
+        .filter(|&a| all_patterns.craftable_axioms.contains(&a))
+        .choose(&mut rng)
+    {
+        // Do not send any message if the new axiom discovered was already known.
+        if !known_patterns.iter().any(|known| known.axiom == *new_axiom) {
+            text.write(AddMessage {
+                message: Message::NewAxiomLearned(
+                    *species.get(trigger.target())?,
+                    new_axiom.clone(),
+                ),
+            });
+            learn.write(LearnNewAxiom {
+                axiom: new_axiom.clone(),
+            });
         }
     }
     Ok(())
@@ -2122,6 +2156,14 @@ pub fn tick_down_status_effects(
                 }
             }
         }
+        // Remove any expired effects.
+        effect_list.effects.retain(|_, potency_and_stacks| {
+            if let EffectDuration::Finite { stacks } = &potency_and_stacks.stacks {
+                *stacks != 0
+            } else {
+                true
+            }
+        });
     }
 }
 

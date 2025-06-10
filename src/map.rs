@@ -268,7 +268,7 @@ pub fn new_cage_on_conveyor(
         );
         let species = match tile_char {
             '#' => Species::Wall,
-            'S' => Species::Hunter,
+            'S' => Species::Scion,
             'T' => Species::Tinker,
             '@' => Species::Player,
             'W' => Species::WeakWall,
@@ -276,7 +276,7 @@ pub fn new_cage_on_conveyor(
             'A' => Species::Apiarist,
             'F' => Species::Shrike,
             'H' => Species::Hechaton,
-            'G' => Species::Grinder,
+            'G' => Species::Grappler,
             'O' => Species::Oracle,
             'E' => Species::EpsilonHead,
             't' => Species::EpsilonTail,
@@ -298,7 +298,7 @@ pub fn new_cage_on_conveyor(
             'V' | _ => OrdDir::Down,
         })];
         if [
-            Species::Hunter,
+            Species::Scion,
             Species::Shrike,
             Species::Second,
             Species::Tinker,

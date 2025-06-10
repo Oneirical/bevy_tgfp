@@ -300,7 +300,7 @@ pub enum Species {
     Player,
     Wall,
     WeakWall,
-    Hunter,
+    Scion,
     Apiarist,
     Shrike,
     Tinker,
@@ -327,7 +327,7 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Player => 0,
         Species::Wall => 3,
         Species::WeakWall => 3,
-        Species::Hunter => 4,
+        Species::Scion => 4,
         Species::Airlock => 17,
         Species::Shrike => 5,
         Species::Apiarist => 6,
@@ -346,17 +346,6 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Hechaton => 61,
         Species::Grappler => 62,
         Species::Exploder => 63,
-    }
-}
-
-pub fn get_species_recipe(species: &Species) -> Option<Axiom> {
-    match species {
-        Species::Hechaton => Some(Axiom::Transform {
-            species: Species::Abazon,
-        }),
-        Species::Grappler => Some(Axiom::MomentumBeam),
-        Species::Exploder => Some(Axiom::HealOrHarm { amount: -1 }),
-        _ => None,
     }
 }
 
@@ -397,7 +386,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             Some(vec![
                 Axiom::WhenRemoved,
-                Axiom::Plus,
+                Axiom::XBeam,
                 Axiom::Spread,
                 Axiom::HealOrHarm { amount: -1 },
             ]),
@@ -463,7 +452,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             None,
             Some(vec![Axiom::Plus, Axiom::DevourWall]),
         ]),
-        Species::Hunter => Spellbook::new([
+        Species::Scion => Spellbook::new([
             Some(vec![
                 Axiom::WhenDealingDamage,
                 Axiom::Ego,
