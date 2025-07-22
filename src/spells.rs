@@ -230,7 +230,16 @@ pub fn tick_time_contingency(
         creatures
             .iter()
             .collect::<Vec<(Entity, &Position, &Species, &Spellbook, &CreatureFlags)>>();
-    creatures.sort_by(|&a, &b| a.1.y.cmp(&b.1.y));
+    creatures.sort_by(|&a, &b| {
+        // First, sort by whether the species is Airlock (Airlock comes first)
+        // This is essential to make sure the conveyor belt is enabled before we start
+        // iterating through the conveyor tiles.
+        match (a.2 == &Species::Airlock, b.2 == &Species::Airlock) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.1.y.cmp(&b.1.y), // If both are or aren't Airlock, sort by Y coordinate
+        }
+    });
     for (creature, pos, species, spellbook, flags) in creatures.iter() {
         contingency.write(TriggerContingency {
             caster: *creature,
