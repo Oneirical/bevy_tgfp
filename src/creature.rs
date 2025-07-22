@@ -53,6 +53,24 @@ pub enum Soul {
     Empty,
 }
 
+pub const SAINTLY: &[Species] = &[Species::Player, Species::Scion, Species::CageSlot];
+
+pub const ORDERED: &[Species] = &[
+    Species::Wall,
+    Species::WeakWall,
+    Species::Apiarist,
+    Species::EpsilonHead,
+    Species::EpsilonTail,
+];
+
+pub const FERAL: &[Species] = &[Species::Shrike, Species::Grappler];
+
+pub const ARTISTIC: &[Species] = &[Species::Tinker, Species::Hechaton];
+
+pub const VILE: &[Species] = &[Species::Second, Species::AxiomaticSeal];
+
+pub const _UNHINGED: &[Species] = &[Species::Oracle, Species::Exploder];
+
 /// Get the appropriate texture from the spritesheet depending on the soul type.
 pub fn get_soul_sprite(soul: &Soul) -> usize {
     match soul {

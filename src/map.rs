@@ -1,17 +1,17 @@
-use bevy::{
-    platform::collections::{HashMap, HashSet},
-    prelude::*,
-};
-use rand::{
-    seq::{IteratorRandom, SliceRandom},
-    thread_rng, Rng,
-};
-
 use crate::{
     creature::{Awake, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
     events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
     ui::{AddMessage, Message},
     OrdDir,
+};
+use bevy::{
+    platform::collections::{HashMap, HashSet},
+    prelude::*,
+};
+use pathfinding::prelude::astar;
+use rand::{
+    seq::{IteratorRandom, SliceRandom},
+    thread_rng, Rng,
 };
 
 pub struct MapPlugin;
@@ -160,6 +160,53 @@ impl Map {
         if let Some(entity) = self.creatures.remove(&old_pos) {
             self.creatures.insert(new_pos, entity);
         }
+    }
+
+    pub fn best_astar_move(&self, start: Position, destination: Position) -> Option<OrdDir> {
+        // Get all wall positions (blocked tiles)
+        let walls: Vec<Position> = self
+            .creatures
+            .keys()
+            .filter(|&&pos| pos != start && pos != destination)
+            .cloned()
+            .collect();
+
+        let result = astar(
+            &start,
+            |&pos| {
+                let mut successors = Vec::new();
+
+                // Check each direction using OrdDir variants
+                let directions = [
+                    (OrdDir::Up, Position::new(pos.x, pos.y + 1)),
+                    (OrdDir::Down, Position::new(pos.x, pos.y - 1)),
+                    (OrdDir::Right, Position::new(pos.x + 1, pos.y)),
+                    (OrdDir::Left, Position::new(pos.x - 1, pos.y)),
+                ];
+
+                for (dir, new_pos) in directions {
+                    // Check if the new position is not a wall
+                    if !walls.contains(&new_pos) {
+                        successors.push((new_pos, 1)); // Cost of 1 for each move
+                    }
+                }
+
+                successors
+            },
+            // Manhattan distance heuristic
+            |&pos| (pos.x.abs_diff(destination.x) + pos.y.abs_diff(destination.y)) as u32,
+            |&pos| pos == destination,
+        );
+
+        // Extract the first move direction from the path
+        result.and_then(|(path, _)| {
+            if path.len() >= 2 {
+                let first_step = path[1];
+                OrdDir::direction_towards_adjacent_tile(start, first_step)
+            } else {
+                None // No path found or already at destination
+            }
+        })
     }
 }
 

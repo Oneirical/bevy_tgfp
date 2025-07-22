@@ -4,6 +4,7 @@ use bevy::{
     platform::collections::{HashMap, HashSet},
     prelude::*,
 };
+use pathfinding::prelude::astar;
 use rand::{seq::IteratorRandom, thread_rng};
 
 use crate::{
@@ -18,7 +19,8 @@ use crate::{
         Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
         Possessed, Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield,
         ReturnOriginalForm, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Stab,
-        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
+        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall, ARTISTIC, FERAL, ORDERED,
+        SAINTLY, VILE,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -539,6 +541,8 @@ pub fn summon_creature(
             Species::Oracle => 2,
             Species::Exploder => 1,
             Species::AxiomaticSeal => 4,
+            Species::Hechaton => 3,
+            Species::Grappler => 2,
             // Wall-type creatures just get full HP to avoid displaying
             // their healthbar.
             _ => max_hp,
@@ -578,19 +582,18 @@ pub fn summon_creature(
                 effects: StatusEffectsList {
                     effects: HashMap::new(),
                 },
-                soul: match &event.species {
-                    Species::Player => Soul::Saintly,
-                    Species::Wall | Species::WeakWall => Soul::Ordered,
-                    Species::Scion => Soul::Saintly,
-                    Species::Shrike => Soul::Feral,
-                    Species::Apiarist => Soul::Ordered,
-                    Species::Tinker | Species::Hechaton => Soul::Artistic,
-                    Species::Second => Soul::Vile,
-                    Species::Oracle | Species::Exploder => Soul::Unhinged,
-                    Species::EpsilonHead | Species::EpsilonTail => Soul::Ordered,
-                    Species::CageSlot => Soul::Saintly,
-                    Species::AxiomaticSeal => Soul::Vile,
-                    _ => Soul::Unhinged,
+                soul: if SAINTLY.contains(&event.species) {
+                    Soul::Saintly
+                } else if ORDERED.contains(&event.species) {
+                    Soul::Ordered
+                } else if FERAL.contains(&event.species) {
+                    Soul::Feral
+                } else if ARTISTIC.contains(&event.species) {
+                    Soul::Artistic
+                } else if VILE.contains(&event.species) {
+                    Soul::Vile
+                } else {
+                    Soul::Unhinged
                 },
                 spellbook: get_species_spellbook(&event.species),
                 flags: CreatureFlags {
@@ -2317,7 +2320,7 @@ pub fn choose_step_action(
             *player_pos
         };
         // Try to find a tile that gets the hunter closer to its target.
-        if let Some(move_direction) = map.best_manhattan_move(*npc_pos, destination) {
+        if let Some(move_direction) = map.best_astar_move(*npc_pos, destination) {
             // If it is found, cause a CreatureStep event.
             step.write(CreatureStep {
                 direction: move_direction,
