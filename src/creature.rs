@@ -61,9 +61,13 @@ pub const ORDERED: &[Species] = &[
     Species::Apiarist,
     Species::EpsilonHead,
     Species::EpsilonTail,
+    Species::IcyVisors,
+    Species::Cart,
+    Species::Railway,
+    Species::OrderedWall,
 ];
 
-pub const FERAL: &[Species] = &[Species::Shrike, Species::Grappler];
+pub const FERAL: &[Species] = &[Species::Shrike, Species::Grappler, Species::Ragemaw];
 
 pub const ARTISTIC: &[Species] = &[Species::Tinker, Species::Hechaton];
 
@@ -273,6 +277,14 @@ pub struct Door;
 #[derive(Component)]
 pub struct Wall;
 
+// Will not leave tiles without an intangible Railway.
+#[derive(Component)]
+pub struct Railbound;
+
+// Can be pushed around.
+#[derive(Component)]
+pub struct Pushable;
+
 #[derive(Component)]
 pub struct Meleeproof;
 
@@ -337,6 +349,11 @@ pub enum Species {
     Hechaton,
     Grappler,
     Exploder,
+    Railway,
+    OrderedWall,
+    Cart,
+    Ragemaw,
+    IcyVisors,
 }
 
 /// Get the appropriate texture from the spritesheet depending on the species type.
@@ -364,6 +381,11 @@ pub fn get_species_sprite(species: &Species) -> usize {
         Species::Hechaton => 61,
         Species::Grappler => 62,
         Species::Exploder => 63,
+        Species::Railway => 63,
+        Species::OrderedWall => 58,
+        Species::Cart => 65,
+        Species::IcyVisors => 79,
+        Species::Ragemaw => 46,
     }
 }
 

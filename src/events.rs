@@ -17,9 +17,9 @@ use crate::{
         Charm, CraftingSlot, Creature, CreatureFlags, DesignatedForRemoval, Dizzy,
         DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt,
         Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
-        Possessed, Possessing, PotencyAndStacks, Random, RealityBreak, RealityShield,
-        ReturnOriginalForm, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook, Stab,
-        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall, ARTISTIC, FERAL, ORDERED,
+        Possessed, Possessing, PotencyAndStacks, Pushable, Railbound, Random, RealityBreak,
+        RealityShield, ReturnOriginalForm, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook,
+        Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, Wall, ARTISTIC, FERAL, ORDERED,
         SAINTLY, VILE,
     },
     graphics::{
@@ -543,6 +543,8 @@ pub fn summon_creature(
             Species::AxiomaticSeal => 4,
             Species::Hechaton => 3,
             Species::Grappler => 2,
+            Species::Ragemaw => 1,
+            Species::IcyVisors => 2,
             // Wall-type creatures just get full HP to avoid displaying
             // their healthbar.
             _ => max_hp,
@@ -745,6 +747,15 @@ pub fn assign_species_components(
                     DoesNotLockInput,
                 ));
             }
+            Species::Railway => {
+                new_creature.insert((
+                    Meleeproof,
+                    Intangible,
+                    NoDropSoul,
+                    RealityBreak(5),
+                    RealityShield(6),
+                ));
+            }
             Species::Grinder => {
                 new_creature.insert((
                     Meleeproof,
@@ -767,16 +778,23 @@ pub fn assign_species_components(
                     CraftingSlot,
                 ));
             }
-            Species::Wall => {
+            Species::Wall | Species::OrderedWall => {
                 new_creature.insert((Meleeproof, RealityShield(2), Wall, Dizzy, NoDropSoul));
             }
             Species::WeakWall => {
                 new_creature.insert((Meleeproof, Wall, RealityShield(1), Dizzy, NoDropSoul));
             }
+            Species::Cart => {
+                new_creature.insert((Pushable, Railbound, NoDropSoul));
+            }
             Species::Airlock => {
                 new_creature.insert((Meleeproof, RealityShield(2), Door, Dizzy, NoDropSoul));
             }
-            Species::Scion | Species::Oracle | Species::Exploder => {
+            Species::Scion
+            | Species::Oracle
+            | Species::Exploder
+            | Species::Ragemaw
+            | Species::IcyVisors => {
                 new_creature.insert(Hunt);
             }
             Species::Second => {
