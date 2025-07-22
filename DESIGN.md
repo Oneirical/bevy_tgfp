@@ -12,7 +12,7 @@ Gameplay:
 - Occasionally, a miniboss spawns with a special spell, and it rewards the player with a new pattern to use on the Canvas.
 - The player is invited to try their hand at crafting with these patterns.
 - If the player dies, a Harmonic Nurse will drag them out and inject them with a Serene Soul to revive them (it boosts their ego so much they will themselves alive again)
-    - This must eventually happen. If the player stays alive for too long, put them against an impossible miniboss but reward them with a nice rare pattern to compensate if they perform well against it.
+    - This must eventually happen. If the player stays alive for too long, put them against an impossible miniboss but reward them with a nice rare pattern to compensate if they perform well against it. This should be a "Harmonic Anaesthetist" who is timing the injection of the Serene soul precisely with the Quarry's expected completion date.
 
 After some time, one of the cages will be booby-trapped by Epsilon's squad. It will explode out of the quarry area and send out a militia to take over the facility. The Harmony will attempt to force them to inhale their gaseous forms, then realize that they are unbreathing mechanical beings.
 
