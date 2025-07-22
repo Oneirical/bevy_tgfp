@@ -325,9 +325,6 @@ pub fn spawn_cage(
     mut text: EventWriter<AddMessage>,
     mut commands: Commands,
 ) {
-    text.write(AddMessage {
-        message: Message::Tutorial,
-    });
     let quarry = "\
 ........................#vvvvvvvvvvv#........................\
 ........................#vvvvvvvvvvv#........................\

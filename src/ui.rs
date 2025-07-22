@@ -6,9 +6,10 @@ use bevy::{prelude::*, text::TextLayoutInfo, window::WindowResized};
 
 use crate::{
     caste::{on_click_equip_unequip, on_hover_move_caste_cursor},
-    creature::{Soul, Species},
+    creature::{Player, Soul, Species},
     events::mouse_use_wheel_soul,
     graphics::SpriteSheetAtlas,
+    map::Position,
     spells::Axiom,
     text::{match_axiom_with_description, split_text, LORE},
 };
@@ -30,6 +31,8 @@ const SOUL_WHEEL_RADIUS: f32 = 8.;
 const SOUL_WHEEL_SLOT_SPRITE_SIZE: f32 = 4.;
 const CHAIN_SIZE: f32 = 2.;
 const TITLE_FADE_TIME: f32 = 3.;
+// The max distance where printed messages in the log are shown to the player.
+const MESSAGE_LISTENING_RANGE: i32 = 12;
 
 #[derive(Component)]
 pub struct SoulSlot {
@@ -1170,6 +1173,8 @@ pub struct LogEntry;
 #[derive(Event)]
 pub struct AddMessage {
     pub message: Message,
+    // Messages can only be "heard" from 12 tiles away
+    pub origin: Position,
 }
 
 #[derive(Event)]
@@ -1209,8 +1214,16 @@ pub fn print_message_in_log(
     log: Query<Entity, With<MessageLog>>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    player_position: Query<&Position, With<Player>>,
 ) -> Result {
     for (i, event) in events.read().enumerate() {
+        // If the message is too far away, do not print it.
+        let player_pos = player_position.single()?;
+        if (player_pos.x - event.origin.x).abs() > MESSAGE_LISTENING_RANGE
+            || (player_pos.y - event.origin.y).abs() > MESSAGE_LISTENING_RANGE
+        {
+            continue;
+        }
         let new_string = match &event.message {
             Message::Tutorial => LORE[18],
             Message::HostileAttack(species, damage) => &format!(

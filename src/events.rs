@@ -354,6 +354,7 @@ pub fn use_wheel_soul(
     mut turn_manager: ResMut<TurnManager>,
     player: Query<(Entity, &Spellbook), With<Player>>,
     mut text: EventWriter<AddMessage>,
+    player_position: Query<&Position, With<Player>>,
 ) -> Result {
     for event in events.read() {
         let mut newly_discarded = None;
@@ -382,6 +383,7 @@ pub fn use_wheel_soul(
                 // That caste has no spell attached!
                 text.write(AddMessage {
                     message: Message::InvalidAction(InvalidAction::NoSpellForCaste),
+                    origin: *player_position.single()?,
                 });
                 turn_manager.action_this_turn = PlayerAction::Invalid;
             }
@@ -389,6 +391,7 @@ pub fn use_wheel_soul(
             // That soul slot is empty!
             text.write(AddMessage {
                 message: Message::InvalidAction(InvalidAction::EmptySlotCast),
+                origin: *player_position.single()?,
             });
             turn_manager.action_this_turn = PlayerAction::Invalid;
         }
@@ -1430,6 +1433,7 @@ pub fn creature_collision(
                 message: Message::InvalidAction(InvalidAction::CannotMelee(
                     *species_query.get(event.collided_with).unwrap(),
                 )),
+                origin: *position.get(event.collided_with).unwrap(),
             });
             turn_manager.action_this_turn = PlayerAction::Invalid;
         }
@@ -1491,6 +1495,7 @@ pub fn harm_creature(
     mut contingency: EventWriter<TriggerContingency>,
     mut text: EventWriter<AddMessage>,
     text_query: Query<(&Species, Has<Player>)>,
+    position: Query<&Position>,
 ) {
     for event in events.read() {
         let (mut health, children, flags) = creature.get_mut(event.entity).unwrap();
@@ -1499,12 +1504,14 @@ pub fn harm_creature(
         let (culprit_species, culprit_is_player) = text_query.get(event.culprit).unwrap();
         let (victim_species, victim_is_player) = text_query.get(event.entity).unwrap();
         // Apply damage or healing.
+        let origin = position.get(event.entity).unwrap();
         match event.hp_mod.signum() {
             -1 => {
                 if is_invincible {
                     if victim_is_player {
                         text.write(AddMessage {
                             message: Message::PlayerIsInvincible(*culprit_species),
+                            origin: *origin,
                         });
                     }
                     continue;
@@ -1513,10 +1520,12 @@ pub fn harm_creature(
                 if culprit_is_player {
                     text.write(AddMessage {
                         message: Message::PlayerAttack(*victim_species, -event.hp_mod),
+                        origin: *origin,
                     });
                 } else if victim_is_player {
                     text.write(AddMessage {
                         message: Message::HostileAttack(*culprit_species, -event.hp_mod),
+                        origin: *origin,
                     });
                 } else {
                     text.write(AddMessage {
@@ -1525,6 +1534,7 @@ pub fn harm_creature(
                             *victim_species,
                             -event.hp_mod,
                         ),
+                        origin: *origin,
                     });
                 }
 
@@ -1552,14 +1562,17 @@ pub fn harm_creature(
                 if victim_is_player {
                     text.write(AddMessage {
                         message: Message::HealSelf(health_difference),
+                        origin: *origin,
                     });
                 } else if culprit_is_player {
                     text.write(AddMessage {
                         message: Message::HealOther(*victim_species, health_difference),
+                        origin: *origin,
                     });
                 } else {
                     text.write(AddMessage {
                         message: Message::CreatureHealsItself(*victim_species, health_difference),
+                        origin: *origin,
                     });
                 }
             } // Healing
@@ -1773,6 +1786,7 @@ fn salvage_axiom_from_defeated_enemy(
     mut text: EventWriter<AddMessage>,
     known_patterns: Query<&AxiomUI, With<KnownPattern>>,
     all_patterns: Res<CraftingRecipes>,
+    position: Query<&Position>,
 ) -> Result {
     let mut axioms = HashSet::new();
     let mut rng = thread_rng();
@@ -1794,6 +1808,7 @@ fn salvage_axiom_from_defeated_enemy(
                     *species.get(trigger.target())?,
                     new_axiom.clone(),
                 ),
+                origin: *position.get(trigger.target())?,
             });
             learn.write(LearnNewAxiom {
                 axiom: new_axiom.clone(),
