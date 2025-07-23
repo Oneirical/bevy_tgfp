@@ -190,6 +190,10 @@ impl FromWorld for AxiomLibrary {
             discriminant(&Axiom::ForceCast),
             world.register_system(axiom_function_force_cast),
         );
+        axioms.library.insert(
+            discriminant(&Axiom::TargetIntangibleToo),
+            world.register_system(axiom_mutator_target_intangible_too),
+        );
         axioms
     }
 }
@@ -248,7 +252,7 @@ pub fn tick_time_contingency(
         let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
         match species {
             Species::ConveyorBelt | Species::Grinder => {
-                if (faith.conveyor_active || pos.y < 19)
+                if (faith.conveyor_active || pos.y < 15)
                     && map.get_entity_at(pos.x, pos.y).is_some()
                 {
                     spell.write(CastSpell {
@@ -494,6 +498,8 @@ pub enum Axiom {
     LoopBack {
         steps: usize,
     },
+    /// Also include intangible creatures in the targets.
+    TargetIntangibleToo,
 }
 
 impl Axiom {
@@ -623,6 +629,8 @@ pub enum SynapseFlag {
     Prediction,
     /// Forms will remove targets instead of adding them.
     Untarget,
+    /// Also include intangible creatures in the targets.
+    TargetIntangibleToo,
 }
 
 pub fn cast_new_spell(
@@ -1171,6 +1179,17 @@ fn axiom_mutator_terminate_if_counter(
 fn axiom_mutator_terminate(In(spell_idx): In<usize>, mut spell_stack: ResMut<SpellStack>) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+}
+
+/// Also include intangible creatures in the targets.
+fn axiom_mutator_target_intangible_too(
+    In(spell_idx): In<usize>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    synapse_data
+        .synapse_flags
+        .insert(SynapseFlag::TargetIntangibleToo);
 }
 
 /// Disable all visual magic effects.

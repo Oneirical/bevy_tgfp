@@ -748,13 +748,7 @@ pub fn assign_species_components(
                 ));
             }
             Species::Railway => {
-                new_creature.insert((
-                    Meleeproof,
-                    Intangible,
-                    NoDropSoul,
-                    RealityBreak(5),
-                    RealityShield(6),
-                ));
+                new_creature.insert((Meleeproof, Intangible, NoDropSoul, RealityShield(2)));
             }
             Species::Grinder => {
                 new_creature.insert((

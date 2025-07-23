@@ -304,14 +304,15 @@ pub fn new_cage_on_conveyor(
     mut summon: EventWriter<SummonCreature>,
 ) {
     tracker.number_spawned += 1;
-    let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
-    add_creatures(&mut cage, 2 + tracker.number_spawned);
+    // let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
+    let mut cage = get_vault(0);
+    add_creatures(&mut cage.chars, 2 + tracker.number_spawned);
 
-    let cage_corner = Position::new(26, 52);
-    for (idx, tile_char) in cage.iter().enumerate() {
+    let cage_corner = Position::new(26, 52 - (cage.size.1 as i32 - 9));
+    for (idx, tile_char) in cage.chars.iter().enumerate() {
         let position = Position::new(
-            (idx % 9) as i32 + cage_corner.x,
-            9 as i32 - (idx / 9) as i32 + cage_corner.y,
+            (idx % cage.size.0) as i32 + cage_corner.x,
+            cage.size.1 as i32 - (idx / cage.size.0) as i32 + cage_corner.y,
         );
         let species = match tile_char {
             '#' => Species::Wall,
@@ -330,6 +331,9 @@ pub fn new_cage_on_conveyor(
             'x' => Species::CageSlot,
             'C' => Species::AxiomaticSeal,
             '0' => Species::Exploder,
+            'R' => Species::Railway,
+            '{' => Species::Cart,
+            'm' => Species::Ragemaw,
             '^' | '>' | '<' | 'V' => Species::Airlock,
             'w' | 'n' | 'e' | 's' => Species::CageBorder,
             _ => continue,
@@ -476,7 +480,7 @@ pub fn spawn_cage(
 }
 
 fn add_creatures(cage: &mut [char], creatures_amount: usize) {
-    let creature_chars = ['A', 'T', 'F', '2', 'H', 'O', 'S', 'G', '0'];
+    let creature_chars = ['A', 'T', 'F', '2', 'H', 'O', 'S', 'G', '0', 'm'];
 
     let floor_positions: Vec<usize> = cage
         .iter()
@@ -500,7 +504,7 @@ pub fn generate_cage(
     spawn_walls: bool,
     size: usize,
     connections: &[OrdDir],
-) -> Vec<char> {
+) -> Vault {
     let mut cage = Vec::new();
 
     for _i in 0..100 {
@@ -562,7 +566,10 @@ pub fn generate_cage(
         }
         // Every passable tile must be connected to all other passable tiles, no "islands".
         if passable_tiles == get_connected_tiles(idx_start, size, &cage) {
-            return cage;
+            return Vault {
+                chars: cage,
+                size: (size, size),
+            };
         } else {
             cage.clear();
         }
@@ -602,4 +609,59 @@ fn get_connected_tiles(idx_start: usize, size: usize, cage: &[char]) -> usize {
         }
     }
     connected_indices.len()
+}
+
+pub const VAULTS: &[&str] = &["
+#########
+#.......#
+#.RRRRR.#
+#...R...#
+###.R.###
+###.R.###
+###.R.###
+###.R.###
+#...R...#
+#...R...#
+<.RRRRR.>
+#...R{..#
+#...R...#
+###.R.###
+###.R.###
+###.R.###
+###.R.###
+#...R...#
+#.RRRRR.#
+#.......#
+#########
+"];
+
+#[derive(Debug)]
+pub struct Vault {
+    pub chars: Vec<char>,
+    pub size: (usize, usize), // (width, height)
+}
+
+pub fn get_vault(index: usize) -> Vault {
+    VAULTS
+        .get(index)
+        .map(|vault_str| {
+            // Split into lines and filter out empty ones (in case of leading/trailing newlines)
+            let lines: Vec<&str> = vault_str
+                .split('\n')
+                .filter(|line| !line.is_empty())
+                .collect();
+
+            // Calculate dimensions
+            let height = lines.len();
+            let width = lines.first().map_or(0, |line| line.len());
+
+            // Combine all characters without newlines
+            let chars: Vec<char> = lines.join("").chars().collect();
+
+            Vault {
+                chars,
+                size: (width, height),
+            }
+        })
+        .unwrap()
 }

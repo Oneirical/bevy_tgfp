@@ -31,7 +31,12 @@ The player will eventually find a train leading them to the Panopticon.
 
 Currently, this is where the game will end. The player becomes another mechanical member of the Panopticon. The infection is gone, but so is their identity as Terminal. Later developments should allow for some way to escape the Panopticon.
 
-
+Railways Where Fire Turns Upside Down, Ever Growing (O) (gimmick: anti-entropy)
+Gardens Where Roses Become Peonies, Then Return (S) (gimmick: constant swapping around and shapeshifting)
+Forests Where Grass Cuts Flesh, With Blood Unshed (F) (gimmick: illusions and traps everywhere)
+Hives Where All That Was Wrong, Is Made Right (U) (gimmick: very large and very small creatures)
+Ships Where Life is Well Worth Free Will, Floating in Void (V) (gimmick: no direct fights, only allies)
+Towers Where Cats Pat At Dust, Floating Among Sunrays (A) (gimmick: gravity)
 
 # Ideas
 
