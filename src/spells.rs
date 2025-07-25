@@ -252,9 +252,7 @@ pub fn tick_time_contingency(
         let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
         match species {
             Species::ConveyorBelt | Species::Grinder => {
-                if (faith.conveyor_active || pos.y < 15)
-                    && map.get_entity_at(pos.x, pos.y).is_some()
-                {
+                if faith.conveyor_active || pos.y < 15 {
                     spell.write(CastSpell {
                         caster: *creature,
                         spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
@@ -556,7 +554,10 @@ pub struct SynapseData {
     pub caster: Entity,
     /// Flags that alter the behaviour of an active synapse.
     synapse_flags: HashSet<SynapseFlag>,
+    /// The caste type of the spell.
     soul_caste: Soul,
+    /// A cache of intangible creatures, to assist in targeting.
+    intangible_cache: HashMap<Position, Entity>,
 }
 
 impl SynapseData {
@@ -569,6 +570,7 @@ impl SynapseData {
             caster,
             synapse_flags: HashSet::new(),
             soul_caste,
+            intangible_cache: HashMap::new(),
         }
     }
 
@@ -578,6 +580,14 @@ impl SynapseData {
         for target in &self.targets {
             if let Some(creature) = map.get_entity_at(target.x, target.y) {
                 targeted_pairs.push((*creature, *target));
+            }
+            if self
+                .synapse_flags
+                .contains(&SynapseFlag::TargetIntangibleToo)
+            {
+                if let Some(creature) = self.intangible_cache.get(target) {
+                    targeted_pairs.push((*creature, *target));
+                }
             }
         }
         targeted_pairs
@@ -1700,6 +1710,22 @@ fn angle_from_center(center: &Position, point: &Position) -> f64 {
     (delta_y as f64).atan2(delta_x as f64)
 }
 
+pub fn collect_intangible(
+    In(synapse_idx): In<usize>,
+    mut spell_stack: ResMut<SpellStack>,
+    intangible: Query<&FlagEntity, With<Intangible>>,
+    position: Query<&Position>,
+) {
+    let synapse = spell_stack.spells.get_mut(synapse_idx).unwrap();
+    synapse.intangible_cache.clear();
+    for flag_entity in intangible.iter() {
+        synapse.intangible_cache.insert(
+            *position.get(flag_entity.parent_creature).unwrap(),
+            flag_entity.parent_creature,
+        );
+    }
+}
+
 /// Get the spells active this turn.
 /// Get the next axiom, and runs its effects.
 pub fn process_axiom(
@@ -1711,13 +1737,19 @@ pub fn process_axiom(
     for (i, synapse_data) in spell_stack.spells.iter().enumerate() {
         // Get this spell's first axiom.
         let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
-        if synapse_data
-            .synapse_flags
-            .contains(&SynapseFlag::Prediction)
-            && matches!(axiom.return_axiom_type(), AxiomType::Function)
-        {
-            // Predictor-type spells should ignore any Axiom that would affect the gamestate.
-            continue;
+        if matches!(axiom.return_axiom_type(), AxiomType::Function) {
+            if synapse_data
+                .synapse_flags
+                .contains(&SynapseFlag::Prediction)
+            {
+                // Predictor-type spells should ignore any Axiom that would affect the gamestate.
+                continue;
+            } else if synapse_data
+                .synapse_flags
+                .contains(&SynapseFlag::TargetIntangibleToo)
+            {
+                commands.run_system_cached_with(collect_intangible, i);
+            }
         }
         // Launch the axiom, which will send out some Events (if it's a Function,
         // which affect the game world) or add some target tiles (if it's a Form, which

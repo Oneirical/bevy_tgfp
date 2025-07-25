@@ -509,6 +509,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
             Some(vec![
                 Axiom::DisableVfx,
                 Axiom::Ego,
+                Axiom::TargetIntangibleToo,
                 Axiom::TeleportDash { distance: 1 },
             ]),
             None,
