@@ -520,6 +520,7 @@ pub fn summon_creature(
     mut events: EventReader<SummonCreature>,
     asset_server: Res<AssetServer>,
     atlas_layout: Res<SpriteSheetAtlas>,
+    mut stepped: EventWriter<SteppedOnTile>,
     map: Res<Map>,
 ) {
     for event in events.read() {
@@ -694,6 +695,11 @@ pub fn summon_creature(
             })
             .id();
         commands.entity(new_creature_entity).add_child(hp_bar);
+
+        stepped.write(SteppedOnTile {
+            entity: new_creature_entity,
+            position: event.position,
+        });
     }
 }
 

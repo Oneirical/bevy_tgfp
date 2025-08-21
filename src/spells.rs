@@ -251,17 +251,17 @@ pub fn tick_time_contingency(
         });
         let (boundary_a, boundary_b) = (Position::new(25, 24), Position::new(35, 30));
         match species {
-            Species::ConveyorBelt | Species::Grinder => {
-                if faith.conveyor_active || pos.y < 15 {
-                    spell.write(CastSpell {
-                        caster: *creature,
-                        spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
-                        starting_step: 0,
-                        soul_caste: Soul::Ordered,
-                        prediction: false,
-                    });
-                }
-            }
+            // Species::ConveyorBelt | Species::Grinder => {
+            //     if faith.conveyor_active || pos.y < 15 {
+            //         spell.write(CastSpell {
+            //             caster: *creature,
+            //             spell: spellbook.spells.get(&Soul::Ordered).unwrap().clone(),
+            //             starting_step: 0,
+            //             soul_caste: Soul::Ordered,
+            //             prediction: false,
+            //         });
+            //     }
+            // }
             Species::Airlock => {
                 if !faith.conveyor_active
                     && (pos == &&Position::new(25, 27)

@@ -324,7 +324,7 @@ pub fn new_cage_on_conveyor(
     for (idx, tile_char) in cage.chars.iter().enumerate() {
         let position = Position::new(
             (idx % cage.size.0) as i32 + cage_corner.x,
-            cage.size.1 as i32 - (idx / cage.size.0) as i32 + cage_corner.y,
+            (idx / cage.size.0) as i32 + cage_corner.y,
         );
         let species = match tile_char {
             '#' => Species::Wall,
@@ -422,7 +422,7 @@ pub fn spawn_cage(
 ......#..B..#.....##....#vvvvvvvvvvv#.......#####.....#......\
 ......#.....#..#####....#vvvvvvvvvvv#....####.........#......\
 ......##...##.##'''##...##vvvvvvvvv##...##'''.sss.....##.....\
-.......#####..#'''''#....#vvvvvvvvv#....#''''exxxw.....##....\
+.......#####..#'''''#....#vvvvvvvvv.....#''''exxxw.....##....\
 ..............#''C''+....>vvvvvvvvv<....+''C'exxxw......#....\
 .......#####..#'''''#....#vvvvvvvvv#....#''''exxxw.....##....\
 ......##...##.##'''##...##vvvvvvvvv##...##'''.nnn.....##.....\

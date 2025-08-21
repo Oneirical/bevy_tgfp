@@ -511,6 +511,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         Species::ConveyorBelt => Spellbook::new([
             None,
             Some(vec![
+                Axiom::WhenSteppedOn,
                 Axiom::DisableVfx,
                 Axiom::Ego,
                 Axiom::TargetIntangibleToo,
@@ -524,6 +525,7 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         Species::Grinder => Spellbook::new([
             None,
             Some(vec![
+                Axiom::WhenSteppedOn,
                 Axiom::DisableVfx,
                 Axiom::Ego,
                 Axiom::HealOrHarm { amount: -99 },
