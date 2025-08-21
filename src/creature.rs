@@ -245,6 +245,10 @@ pub struct Summoned {
     pub summoner: Entity,
 }
 
+// Determines whether the creature is drawn over or under others by the graphics engine.
+#[derive(Component)]
+pub struct VisualLayering(pub f32);
+
 // Controlled by another creature.
 #[derive(Component)]
 pub struct Possessed {

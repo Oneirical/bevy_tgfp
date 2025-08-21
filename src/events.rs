@@ -19,8 +19,8 @@ use crate::{
         Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
         Possessed, Possessing, PotencyAndStacks, Pushable, Railbound, Random, RealityBreak,
         RealityShield, ReturnOriginalForm, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook,
-        Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, Wall, ARTISTIC, FERAL, ORDERED,
-        SAINTLY, VILE,
+        Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, VisualLayering, Wall, ARTISTIC,
+        FERAL, ORDERED, SAINTLY, VILE,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -745,10 +745,17 @@ pub fn assign_species_components(
                     RealityBreak(5),
                     RealityShield(6),
                     DoesNotLockInput,
+                    VisualLayering(-10.),
                 ));
             }
             Species::Railway => {
-                new_creature.insert((Meleeproof, Intangible, NoDropSoul, RealityShield(2)));
+                new_creature.insert((
+                    Meleeproof,
+                    Intangible,
+                    NoDropSoul,
+                    RealityShield(2),
+                    VisualLayering(-6.),
+                ));
             }
             Species::Grinder => {
                 new_creature.insert((

@@ -1,5 +1,7 @@
 use crate::{
-    creature::{Awake, CreatureFlags, Door, FlagEntity, Intangible, Player, Species},
+    creature::{
+        Awake, CreatureFlags, Door, FlagEntity, Intangible, Player, Species, VisualLayering,
+    },
     events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
     ui::{AddMessage, Message},
     OrdDir,
@@ -218,7 +220,8 @@ pub fn register_creatures(
     // Naturally intangible creatures skip this.
     newly_positioned_creatures: Query<(&Position, Entity, &CreatureFlags), Added<Position>>,
     intangible_query: Query<&FlagEntity, Added<Intangible>>,
-
+    visual_layer: Query<&VisualLayering>,
+    creature_flags: Query<&CreatureFlags>,
     intangible_creature: Query<&Position>,
     tangible_creatures: Query<&Position, With<Species>>,
     flag_query: Query<&FlagEntity>,
@@ -280,11 +283,20 @@ pub fn register_creatures(
         }
         // Lowering the sprite of the intangible creature, ensuring other creatures
         // appear to be on top of it.
+        let flags = creature_flags.get(flag_entity.parent_creature).unwrap();
+        let z = if let Ok(layer) = visual_layer
+            .get(flags.species_flags)
+            .or(visual_layer.get(flags.effects_flags))
+        {
+            layer.0
+        } else {
+            -5.
+        };
         transform
             .get_mut(flag_entity.parent_creature)
             .unwrap()
             .translation
-            .z = -5.;
+            .z = z;
     }
 }
 
