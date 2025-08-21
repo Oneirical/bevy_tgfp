@@ -1388,6 +1388,7 @@ pub fn creature_collision(
     stab_query: Query<&Stab>,
     species_query: Query<&Species>,
     meleeproof_query: Query<&Meleeproof>,
+    pushable_query: Query<&Pushable>,
     mut turn_manager: ResMut<TurnManager>,
     mut creature: Query<(&mut Transform, Has<Player>, &CreatureFlags)>,
     flags_query: Query<&CreatureFlags>,
@@ -1395,6 +1396,7 @@ pub fn creature_collision(
     mut effects: Query<&mut StatusEffectsList>,
     position: Query<&Position>,
     mut draw_soul: EventWriter<DrawSoul>,
+    mut step: EventWriter<CreatureStep>,
 ) {
     for event in events.read() {
         if event.culprit == event.collided_with {
@@ -1402,11 +1404,17 @@ pub fn creature_collision(
             continue;
         }
         let (mut attacker_transform, is_player, flags) = creature.get_mut(event.culprit).unwrap();
+        let defender_flags = flags_query.get(event.collided_with).unwrap();
         let cannot_be_melee_attacked = {
-            let defender_flags = flags_query.get(event.collided_with).unwrap();
             meleeproof_query.contains(defender_flags.species_flags)
                 || meleeproof_query.contains(defender_flags.effects_flags)
         };
+        let is_pushable = {
+            pushable_query.contains(defender_flags.species_flags)
+                || pushable_query.contains(defender_flags.effects_flags)
+        };
+        let atk_pos = position.get(event.culprit).unwrap();
+        let def_pos = position.get(event.collided_with).unwrap();
         // if is_door {
         // Open doors.
         // NOTE: Disabled as doors are currently automatic.
@@ -1416,7 +1424,18 @@ pub fn creature_collision(
         // });
         // }
         // else
-        if !cannot_be_melee_attacked {
+        if is_pushable {
+            if let Some(direction) = OrdDir::direction_towards_adjacent_tile(*atk_pos, *def_pos) {
+                step.write(CreatureStep {
+                    entity: event.collided_with,
+                    direction,
+                });
+                step.write(CreatureStep {
+                    entity: event.culprit,
+                    direction,
+                });
+            }
+        } else if !cannot_be_melee_attacked {
             let damage = if let Ok(stab) = {
                 stab_query
                     .get(flags.species_flags)
@@ -1444,8 +1463,6 @@ pub fn creature_collision(
             }
             // Melee attack animation.
             // This must be calculated and cannot be "momentum", it has not been altered yet.
-            let atk_pos = position.get(event.culprit).unwrap();
-            let def_pos = position.get(event.collided_with).unwrap();
             attacker_transform.translation.x += (def_pos.x - atk_pos.x) as f32 * TILE_SIZE / 4.;
             attacker_transform.translation.y += (def_pos.y - atk_pos.y) as f32 * TILE_SIZE / 4.;
             commands.entity(event.culprit).insert(SlideAnimation);
