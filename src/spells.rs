@@ -13,9 +13,9 @@ use uuid::Uuid;
 
 use crate::{
     creature::{
-        Awake, CreatureFlags, DoesNotLockInput, EffectDuration, FlagEntity, Intangible, Player,
-        RealityBreak, RealityShield, Sleeping, Soul, Species, Spellbook, StatusEffect,
-        StatusEffectsList, Summoned, Targeting, Wall,
+        Awake, CreatureFlags, DoesNotLockInput, Door, EffectDuration, FlagEntity, Intangible,
+        Player, RealityBreak, RealityShield, Silenced, Sleeping, Soul, Species, Spellbook,
+        StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
     },
     events::{
         AddStatusEffect, ChooseStepAction, DamageOrHealCreature, OpenCloseDoor, RemoveCreature,
@@ -65,6 +65,10 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::Plus),
             world.register_system(axiom_form_plus),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::SelectArea(Position::new(0, 0), Position::new(0, 0))),
+            world.register_system(axiom_form_select_area),
         );
         axioms.library.insert(
             discriminant(&Axiom::Halo { radius: 1 }),
@@ -142,6 +146,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_function_transform),
         );
         axioms.library.insert(
+            discriminant(&Axiom::OpenCloseDoor),
+            world.register_system(axiom_function_open_close_door),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Trace),
             world.register_system(axiom_mutator_trace),
         );
@@ -205,10 +213,11 @@ pub struct SpellStack {
     pub spells: Vec<SynapseData>,
 }
 
-#[derive(Resource)]
 /// All contingencies triggered this turn, to prevent infinite loops.
+#[derive(Resource, Default)]
 pub struct AntiContingencyLoop {
-    pub contingencies_this_turn: HashSet<(Entity, Axiom)>,
+    // Maps (caster, contingency) to count of triggers this turn
+    pub contingencies_this_turn: HashMap<(Entity, Axiom), u32>,
 }
 
 #[derive(Event, Debug)]
@@ -317,23 +326,44 @@ pub fn trigger_contingency(
     for event in events.read() {
         if let Ok(spellbook) = spellbook.get(event.caster) {
             for (soul, spell) in spellbook.spells.iter() {
-                if event.contingency != Axiom::WhenTimePasses
-                    && loop_protection
+                if event.contingency != Axiom::WhenTimePasses {
+                    let contingency_key = (event.caster, event.contingency.clone());
+                    let count = loop_protection
                         .contingencies_this_turn
-                        .contains(&(event.caster, event.contingency.clone()))
-                {
-                    // Do not allow infinite contingency loops
-                    // (such as, "when dealing damage, deal damage")
-                    break;
-                }
-                if let Some(contingency_index) = spell
-                    .axioms
-                    .iter()
-                    .position(|axiom| axiom == &event.contingency)
-                {
+                        .get(&contingency_key)
+                        .copied()
+                        .unwrap_or(0);
+
+                    // Block after 500 repeats to prevent infinite loops (like "when damage is dealt, deal damage")
+                    if count >= 500 {
+                        break;
+                    }
+
+                    // Increment the counter for this contingency
                     loop_protection
                         .contingencies_this_turn
-                        .insert((event.caster, event.contingency.clone()));
+                        .insert(contingency_key, count + 1);
+                }
+
+                // Check the special case for WhenEnteringTile
+                let contingency_index = if let Axiom::WhenEnteringTile(pos) = &event.contingency {
+                    // Special handling for WhenEnteringTile -> WhenEnteringArea matching
+                    spell.axioms.iter().position(|axiom| {
+                        if let Axiom::WhenEnteringArea(area_start, area_end) = axiom {
+                            pos.is_within_range(area_start, area_end)
+                        } else {
+                            axiom == &event.contingency
+                        }
+                    })
+                } else {
+                    // Standard exact matching for other contingency types
+                    spell
+                        .axioms
+                        .iter()
+                        .position(|axiom| axiom == &event.contingency)
+                };
+
+                if let Some(contingency_index) = contingency_index {
                     cast_spell.write(CastSpell {
                         caster: event.caster,
                         spell: spell.clone(),
@@ -386,6 +416,10 @@ pub enum Axiom {
     WhenTakingDamage,
     // Triggers every 0.2 seconds.
     WhenTimePasses,
+    // Triggers when entering an area where its corners are defined by Position.
+    WhenEnteringArea(Position, Position),
+    // Triggers when entering a tile defined by Position.
+    WhenEnteringTile(Position),
 
     // FORMS
     FormSeparator,
@@ -410,6 +444,8 @@ pub enum Axiom {
     Halo {
         radius: i32,
     },
+    /// Target all tiles contained within the two corners defined by Position, Position.
+    SelectArea(Position, Position),
 
     // FUNCTIONS
     FunctionSeparator,
@@ -461,6 +497,8 @@ pub enum Axiom {
     /// Force all creatures on targeted tiles to cast the remainder of the spell.
     /// This terminates execution of the spell.
     ForceCast,
+    /// Open and closes any creatures with Door. Will require TargetIntangibleToo to close doors.
+    OpenCloseDoor,
 
     // MUTATORS
     MutatorSeparator,
@@ -1094,6 +1132,36 @@ fn axiom_form_halo(
     }
 }
 
+/// Target all tiles within a rectangular area defined by two corner positions
+fn axiom_form_select_area(
+    In(spell_idx): In<usize>,
+    mut magic_vfx: EventWriter<PlaceMagicVfx>,
+    mut spell_stack: ResMut<SpellStack>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+
+    if let Axiom::SelectArea(corner1, corner2) = synapse_data.axioms[synapse_data.step] {
+        // Get all tiles within the rectangular area
+        let area_tiles = corner1.tiles_in_rectangle(corner2);
+        if !synapse_data
+            .synapse_flags
+            .contains(&SynapseFlag::DisableVfx)
+        {
+            magic_vfx.write(PlaceMagicVfx {
+                targets: area_tiles.clone(),
+                sequence: EffectSequence::Simultaneous,
+                effect: EffectType::GreenBlast,
+                decay: 0.5,
+                appear: 0.,
+            });
+        }
+
+        synapse_data.target_tiles(area_tiles);
+    } else {
+        panic!()
+    }
+}
+
 /// The targeted passable tiles summon a new instance of species.
 fn axiom_function_summon_creature(
     In(spell_idx): In<usize>,
@@ -1246,6 +1314,40 @@ fn axiom_function_devour_wall(
         culprit: synapse_data.caster,
         hp_mod: total_heal,
     });
+}
+
+/// Open and closes any creatures with Door. Will require TargetIntangibleToo to close doors.
+fn axiom_function_open_close_door(
+    In(spell_idx): In<usize>,
+    mut open: EventWriter<OpenCloseDoor>,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    break_query: Query<&RealityBreak>,
+    shield_query: Query<&RealityShield>,
+    door_query: Query<&Door>,
+    flags: Query<&CreatureFlags>,
+) {
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
+    for entity in synapse_data.get_all_targeted_entities(&map) {
+        let is_door = {
+            let flags = flags.get(entity).unwrap();
+            door_query.contains(flags.effects_flags) || door_query.contains(flags.species_flags)
+        };
+        let is_spellproof = is_spellproof(
+            synapse_data.caster,
+            entity,
+            &flags,
+            &break_query,
+            &shield_query,
+        );
+        if is_door && !is_spellproof {
+            open.write(OpenCloseDoor {
+                entity: entity,
+                open: true,
+            });
+        }
+        // WIP door closing
+    }
 }
 
 /// All targeted creatures heal or are harmed by this amount.
@@ -1732,11 +1834,21 @@ pub fn process_axiom(
     mut commands: Commands,
     axioms: Res<AxiomLibrary>,
     spell_stack: Res<SpellStack>,
+    flags: Query<&CreatureFlags>,
+    silenced_query: Query<&Silenced>,
 ) {
     // Get the spells active this turn.
     for (i, synapse_data) in spell_stack.spells.iter().enumerate() {
         // Get this spell's first axiom.
         let axiom = synapse_data.axioms.get(synapse_data.step).unwrap();
+        // Silenced creatures cannot cast.
+        let flags = flags.get(synapse_data.caster).unwrap();
+        let is_silenced = silenced_query.contains(flags.species_flags)
+            || silenced_query.contains(flags.effects_flags);
+        if is_silenced {
+            continue;
+        }
+        // Handle prediction-states.
         if matches!(axiom.return_axiom_type(), AxiomType::Function) {
             if synapse_data
                 .synapse_flags

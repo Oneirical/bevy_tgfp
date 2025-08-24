@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use bevy::{platform::collections::HashSet, prelude::*, time::common_conditions::on_timer};
+use bevy::{platform::collections::HashMap, prelude::*, time::common_conditions::on_timer};
 
 use crate::{
     caste::{equip_spell, hide_caste_menu, show_caste_menu, EquipSpell, UnequipSpell},
@@ -78,16 +78,16 @@ impl Plugin for SetsPlugin {
         app.add_event::<EquipSpell>();
         app.add_event::<UnequipSpell>();
         app.add_systems(Update, equip_spell);
-        app.add_systems(
-            Update,
-            tick_time_contingency.run_if(on_timer(Duration::from_millis(300))),
-        );
+        // app.add_systems(
+        //     Update,
+        //     tick_time_contingency.run_if(on_timer(Duration::from_millis(300))),
+        // );
         app.init_resource::<CraftingRecipes>();
         app.insert_resource(SpellLibrary {
             library: Vec::new(),
         });
         app.insert_resource(AntiContingencyLoop {
-            contingencies_this_turn: HashSet::new(),
+            contingencies_this_turn: HashMap::new(),
         });
         app.insert_resource(ConveyorTracker {
             number_spawned: 0,

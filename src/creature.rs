@@ -164,6 +164,8 @@ pub enum StatusEffect {
     Possessed,
     // The creature will return to its original Species when this expires.
     ReturnOriginalForm,
+    // The creature is unable of resolving any Axiom effects.
+    Silenced,
 }
 
 #[derive(Debug)]
@@ -234,6 +236,9 @@ pub struct Sleeping;
 
 #[derive(Component)]
 pub struct Awake;
+
+#[derive(Component)]
+pub struct Silenced;
 
 // Performs random actions on its turn.
 #[derive(Component)]

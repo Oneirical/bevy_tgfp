@@ -1,8 +1,10 @@
 use crate::{
     creature::{
-        Awake, CreatureFlags, Door, FlagEntity, Intangible, Player, Species, VisualLayering,
+        Awake, CreatureFlags, Door, EffectDuration, FlagEntity, Intangible, Player, Species,
+        Spellbook, StatusEffect, VisualLayering,
     },
     events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
+    spells::Axiom,
     ui::{AddMessage, Message},
     OrdDir,
 };
@@ -70,6 +72,24 @@ impl Position {
         let max_y = a.y.max(b.y);
 
         self.x >= min_x && self.x <= max_x && self.y >= min_y && self.y <= max_y
+    }
+
+    /// Returns all positions within a rectangle defined by two corner positions
+    pub fn tiles_in_rectangle(&self, other: Position) -> Vec<Position> {
+        let min_x = self.x.min(other.x);
+        let max_x = self.x.max(other.x);
+        let min_y = self.y.min(other.y);
+        let max_y = self.y.max(other.y);
+
+        let mut tiles = Vec::new();
+
+        for x in min_x..=max_x {
+            for y in min_y..=max_y {
+                tiles.push(Position::new(x, y));
+            }
+        }
+
+        tiles
     }
 }
 
@@ -316,8 +336,8 @@ pub fn new_cage_on_conveyor(
     mut summon: EventWriter<SummonCreature>,
 ) {
     tracker.number_spawned += 1;
-    // let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
-    let mut cage = get_vault(0);
+    let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
+    // let mut cage = get_vault(0);
     add_creatures(&mut cage.chars, 2 + tracker.number_spawned);
 
     let cage_corner = Position::new(26, 52 - (cage.size.1 as i32 - 9));
@@ -375,6 +395,35 @@ pub fn new_cage_on_conveyor(
         {
             properties.push(SummonProperties::Sleeping);
         }
+        if species == Species::Airlock {
+            properties.push(SummonProperties::Spellbook(Spellbook::new([
+                None,
+                Some(vec![
+                    Axiom::WhenEnteringArea(Position::new(25, 29), Position::new(35, 29)),
+                    // Axiom::DisableVfx,
+                    Axiom::Ego,
+                    Axiom::Plus,
+                    Axiom::Spread,
+                    Axiom::Spread,
+                    Axiom::TargetIntangibleToo,
+                    Axiom::OpenCloseDoor,
+                    Axiom::PurgeTargets,
+                    Axiom::SelectArea(Position::new(25, 0), Position::new(35, 100)),
+                    Axiom::FilterBySpecies {
+                        species: Species::ConveyorBelt,
+                    },
+                    Axiom::StatusEffect {
+                        effect: StatusEffect::Silenced,
+                        potency: 1,
+                        stacks: EffectDuration::Infinite,
+                    },
+                ]),
+                None,
+                None,
+                None,
+                None,
+            ])));
+        }
         summon.write(SummonCreature {
             species,
             position,
@@ -422,7 +471,7 @@ pub fn spawn_cage(
 ......#..B..#.....##....#vvvvvvvvvvv#.......#####.....#......\
 ......#.....#..#####....#vvvvvvvvvvv#....####.........#......\
 ......##...##.##'''##...##vvvvvvvvv##...##'''.sss.....##.....\
-.......#####..#'''''#....#vvvvvvvvv.....#''''exxxw.....##....\
+.......#####..#'''''#....#vvvvvvvvv#....#''''exxxw.....##....\
 ..............#''C''+....>vvvvvvvvv<....+''C'exxxw......#....\
 .......#####..#'''''#....#vvvvvvvvv#....#''''exxxw.....##....\
 ......##...##.##'''##...##vvvvvvvvv##...##'''.nnn.....##.....\

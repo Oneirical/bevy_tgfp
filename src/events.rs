@@ -18,9 +18,9 @@ use crate::{
         DoesNotLockInput, Door, EffectDuration, FlagEntity, Fragile, Health, HealthIndicator, Hunt,
         Immobile, Intangible, Invincible, Magnetic, Magnetized, Meleeproof, NoDropSoul, Player,
         Possessed, Possessing, PotencyAndStacks, Pushable, Railbound, Random, RealityBreak,
-        RealityShield, ReturnOriginalForm, Sleeping, Soul, Species, Speed, SpellLibrary, Spellbook,
-        Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, VisualLayering, Wall, ARTISTIC,
-        FERAL, ORDERED, SAINTLY, VILE,
+        RealityShield, ReturnOriginalForm, Silenced, Sleeping, Soul, Species, Speed, SpellLibrary,
+        Spellbook, Stab, StatusEffect, StatusEffectsList, Summoned, Targeting, VisualLayering,
+        Wall, ARTISTIC, FERAL, ORDERED, SAINTLY, VILE,
     },
     graphics::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
@@ -463,6 +463,9 @@ pub fn add_status_effects(
             StatusEffect::Dizzy => {
                 commands.entity(effects_flags).insert(Dizzy);
             }
+            StatusEffect::Silenced => {
+                commands.entity(effects_flags).insert(Silenced);
+            }
             StatusEffect::DimensionBond => {
                 commands.entity(effects_flags).insert(Summoned {
                     summoner: event.culprit,
@@ -795,7 +798,14 @@ pub fn assign_species_components(
                 new_creature.insert((Pushable, Railbound, NoDropSoul));
             }
             Species::Airlock => {
-                new_creature.insert((Meleeproof, RealityShield(2), Door, Dizzy, NoDropSoul));
+                new_creature.insert((
+                    Meleeproof,
+                    RealityBreak(6), // necessary to silence the conveyor belts
+                    RealityShield(2),
+                    Door,
+                    Dizzy,
+                    NoDropSoul,
+                ));
             }
             Species::Scion
             | Species::Oracle
@@ -1166,6 +1176,10 @@ pub fn teleport_execution(
             contingency.write(TriggerContingency {
                 caster: event.entity,
                 contingency: Axiom::WhenMoved,
+            });
+            contingency.write(TriggerContingency {
+                caster: event.entity,
+                contingency: Axiom::WhenEnteringTile(event.destination),
             });
             if is_player.get(event.entity).unwrap() {
                 commands.run_system_cached(toggle_paint_mode);
@@ -2180,6 +2194,9 @@ pub fn tick_down_status_effects(
                         }
                         StatusEffect::Stab => {
                             commands.entity(effects_flags).remove::<Stab>();
+                        }
+                        StatusEffect::Silenced => {
+                            commands.entity(effects_flags).remove::<Silenced>();
                         }
                         StatusEffect::Dizzy => {
                             commands.entity(effects_flags).remove::<Dizzy>();
