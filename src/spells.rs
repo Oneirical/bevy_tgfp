@@ -420,6 +420,8 @@ pub enum Axiom {
     WhenEnteringArea(Position, Position),
     // Triggers when entering a tile defined by Position.
     WhenEnteringTile(Position),
+    // Triggers when another creature uses the Broadcast axiom.
+    WhenReceivingRadio(String),
 
     // FORMS
     FormSeparator,
@@ -595,7 +597,7 @@ pub struct SynapseData {
     /// The caste type of the spell.
     soul_caste: Soul,
     /// A cache of intangible creatures, to assist in targeting.
-    intangible_cache: HashMap<Position, Entity>,
+    intangible_cache: HashMap<Position, HashSet<Entity>>,
 }
 
 impl SynapseData {
@@ -623,8 +625,10 @@ impl SynapseData {
                 .synapse_flags
                 .contains(&SynapseFlag::TargetIntangibleToo)
             {
-                if let Some(creature) = self.intangible_cache.get(target) {
-                    targeted_pairs.push((*creature, *target));
+                if let Some(intangible_creatures) = self.intangible_cache.get(target) {
+                    for creature in intangible_creatures {
+                        targeted_pairs.push((*creature, *target));
+                    }
                 }
             }
         }
@@ -1821,10 +1825,11 @@ pub fn collect_intangible(
     let synapse = spell_stack.spells.get_mut(synapse_idx).unwrap();
     synapse.intangible_cache.clear();
     for flag_entity in intangible.iter() {
-        synapse.intangible_cache.insert(
-            *position.get(flag_entity.parent_creature).unwrap(),
-            flag_entity.parent_creature,
-        );
+        synapse
+            .intangible_cache
+            .entry(*position.get(flag_entity.parent_creature).unwrap())
+            .or_insert_with(HashSet::new)
+            .insert(flag_entity.parent_creature);
     }
 }
 

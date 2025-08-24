@@ -400,7 +400,7 @@ pub fn new_cage_on_conveyor(
                 None,
                 Some(vec![
                     Axiom::WhenEnteringArea(Position::new(25, 29), Position::new(35, 29)),
-                    // Axiom::DisableVfx,
+                    Axiom::DisableVfx,
                     Axiom::Ego,
                     Axiom::Plus,
                     Axiom::Spread,
@@ -412,11 +412,22 @@ pub fn new_cage_on_conveyor(
                     Axiom::FilterBySpecies {
                         species: Species::ConveyorBelt,
                     },
+                    // TODO: I think filterbyspecies should also filter intangible. It would need
+                    // to add a check in is_spellproof to see if there is a restricted species.
                     Axiom::StatusEffect {
                         effect: StatusEffect::Silenced,
                         potency: 1,
                         stacks: EffectDuration::Infinite,
                     },
+                    Axiom::Terminate,
+                    Axiom::WhenReceivingRadio(String::from("treadmill")),
+                    Axiom::DisableVfx,
+                    Axiom::Ego,
+                    Axiom::Plus,
+                    Axiom::Spread,
+                    Axiom::Spread,
+                    Axiom::TargetIntangibleToo,
+                    Axiom::OpenCloseDoor,
                 ]),
                 None,
                 None,
