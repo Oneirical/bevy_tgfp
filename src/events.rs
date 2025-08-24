@@ -729,6 +729,19 @@ pub fn transform_creature(
     }
 }
 
+pub fn assign_default_break_shield(
+    no_shield: Query<Entity, (With<FlagEntity>, Without<RealityShield>)>,
+    no_break: Query<Entity, (With<FlagEntity>, Without<RealityBreak>)>,
+    mut commands: Commands,
+) {
+    for flag in no_shield.iter() {
+        commands.entity(flag).insert(RealityShield(0));
+    }
+    for flag in no_break.iter() {
+        commands.entity(flag).insert(RealityBreak(0));
+    }
+}
+
 /// Add any species-specific components.
 pub fn assign_species_components(
     changed_species: Query<(&CreatureFlags, &Species), Changed<Species>>,

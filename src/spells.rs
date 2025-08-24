@@ -4,7 +4,7 @@ use std::{
 };
 
 use bevy::{
-    ecs::system::SystemId,
+    ecs::{query::QueryData, system::SystemId},
     platform::collections::{HashMap, HashSet},
     prelude::*,
 };
@@ -807,9 +807,8 @@ fn axiom_function_dash(
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
     momentum: Query<&OrdDir>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
@@ -817,13 +816,7 @@ fn axiom_function_dash(
         // For each (Entity, Position) on a targeted tile with a creature on it...
         for (dasher, dasher_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
             // Spellproof entities cannot be affected.
-            if is_spellproof(
-                synapse_data.caster,
-                dasher,
-                &flags,
-                &break_query,
-                &shield_query,
-            ) {
+            if is_spellproof(dasher, &synapse_data, &flags_query, &creature_query) {
                 continue;
             }
             // The dashing creature starts where it currently is standing.
@@ -880,9 +873,8 @@ fn axiom_function_teleport_dash(
     map: Res<Map>,
     spell_stack: Res<SpellStack>,
     momentum: Query<&OrdDir>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     let caster_momentum = momentum.get(synapse_data.caster).unwrap();
@@ -890,13 +882,7 @@ fn axiom_function_teleport_dash(
         // For each (Entity, Position) on a targeted tile with a creature on it...
         for (entity, entity_pos) in synapse_data.get_all_targeted_entity_pos_pairs(&map) {
             // Spellproof entities cannot be affected.
-            if is_spellproof(
-                synapse_data.caster,
-                entity,
-                &flags,
-                &break_query,
-                &shield_query,
-            ) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
                 continue;
             }
             let (off_x, off_y) = caster_momentum.as_offset();
@@ -930,9 +916,8 @@ fn axiom_form_momentum_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position_and_momentum: Query<(&Position, &OrdDir)>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let (caster_position, caster_momentum) =
@@ -950,7 +935,9 @@ fn axiom_form_momentum_beam(
             .synapse_flags
             .contains(&SynapseFlag::PiercingBeams),
         synapse_data.caster,
-        (&flags, &break_query, &shield_query),
+        &flags_query,
+        &creature_query,
+        &synapse_data,
     );
     // Add some visual beam effects.
     if !synapse_data
@@ -983,6 +970,8 @@ fn axiom_form_xbeam(
     break_query: Query<&RealityBreak>,
     shield_query: Query<&RealityShield>,
     flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
@@ -1000,7 +989,9 @@ fn axiom_form_xbeam(
                 .synapse_flags
                 .contains(&SynapseFlag::PiercingBeams),
             synapse_data.caster,
-            (&flags, &break_query, &shield_query),
+            &flags_query,
+            &creature_query,
+            &synapse_data,
         );
         // Add some visual beam effects.
         if !synapse_data
@@ -1031,6 +1022,8 @@ fn axiom_form_plus_beam(
     break_query: Query<&RealityBreak>,
     shield_query: Query<&RealityShield>,
     flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     let caster_position = *position.get(synapse_data.caster).unwrap();
@@ -1049,7 +1042,9 @@ fn axiom_form_plus_beam(
                 .synapse_flags
                 .contains(&SynapseFlag::PiercingBeams),
             synapse_data.caster,
-            (&flags, &break_query, &shield_query),
+            &flags_query,
+            &creature_query,
+            &synapse_data,
         );
         // Add some visual beam effects.
         if !synapse_data
@@ -1288,8 +1283,8 @@ fn axiom_function_devour_wall(
     mut heal: EventWriter<DamageOrHealCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
     wall_query: Query<&Wall>,
     flags: Query<&CreatureFlags>,
 ) {
@@ -1300,13 +1295,7 @@ fn axiom_function_devour_wall(
             let flags = flags.get(entity).unwrap();
             wall_query.contains(flags.effects_flags) || wall_query.contains(flags.species_flags)
         };
-        let is_spellproof = is_spellproof(
-            synapse_data.caster,
-            entity,
-            &flags,
-            &break_query,
-            &shield_query,
-        );
+        let is_spellproof = is_spellproof(entity, synapse_data, &flags_query, &creature_query);
 
         if is_wall && !is_spellproof {
             remove.write(RemoveCreature { entity });
@@ -1326,8 +1315,8 @@ fn axiom_function_open_close_door(
     mut open: EventWriter<OpenCloseDoor>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
     door_query: Query<&Door>,
     flags: Query<&CreatureFlags>,
 ) {
@@ -1337,13 +1326,7 @@ fn axiom_function_open_close_door(
             let flags = flags.get(entity).unwrap();
             door_query.contains(flags.effects_flags) || door_query.contains(flags.species_flags)
         };
-        let is_spellproof = is_spellproof(
-            synapse_data.caster,
-            entity,
-            &flags,
-            &break_query,
-            &shield_query,
-        );
+        let is_spellproof = is_spellproof(entity, synapse_data, &flags_query, &creature_query);
         if is_door && !is_spellproof {
             open.write(OpenCloseDoor {
                 entity: entity,
@@ -1360,20 +1343,13 @@ fn axiom_function_heal_or_harm(
     mut heal: EventWriter<DamageOrHealCreature>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::HealOrHarm { amount } = synapse_data.axioms[synapse_data.step] {
         for entity in synapse_data.get_all_targeted_entities(&map) {
-            if is_spellproof(
-                synapse_data.caster,
-                entity,
-                &flags,
-                &break_query,
-                &shield_query,
-            ) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
                 continue;
             }
             heal.write(DamageOrHealCreature {
@@ -1393,9 +1369,8 @@ fn axiom_function_status_effect(
     mut status_effect: EventWriter<AddStatusEffect>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::StatusEffect {
@@ -1405,13 +1380,7 @@ fn axiom_function_status_effect(
     } = synapse_data.axioms[synapse_data.step]
     {
         for entity in synapse_data.get_all_targeted_entities(&map) {
-            if is_spellproof(
-                synapse_data.caster,
-                entity,
-                &flags,
-                &break_query,
-                &shield_query,
-            ) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
                 continue;
             }
             status_effect.write(AddStatusEffect {
@@ -1434,9 +1403,8 @@ fn axiom_function_upgrade_status_effect(
     creature_status_effect: Query<&mut StatusEffectsList>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::UpgradeStatusEffect {
@@ -1446,13 +1414,7 @@ fn axiom_function_upgrade_status_effect(
     } = synapse_data.axioms[synapse_data.step]
     {
         for entity in synapse_data.get_all_targeted_entities(&map) {
-            if is_spellproof(
-                synapse_data.caster,
-                entity,
-                &flags,
-                &break_query,
-                &shield_query,
-            ) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
                 continue;
             }
             let status_list = creature_status_effect.get(entity).unwrap();
@@ -1475,18 +1437,16 @@ fn axiom_function_increment_counter(
     In(spell_idx): In<usize>,
     mut spellbook: Query<&mut Spellbook>,
     mut spell_stack: ResMut<SpellStack>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     if let Axiom::IncrementCounter { amount, count } = synapse_data.axioms[synapse_data.step] {
         if !is_spellproof(
             synapse_data.caster,
-            synapse_data.caster,
-            &flags,
-            &break_query,
-            &shield_query,
+            &synapse_data,
+            &flags_query,
+            &creature_query,
         ) {
             let mut book = spellbook.get_mut(synapse_data.caster).unwrap();
             // Access itself, deep inside the creature's spellbook
@@ -1525,20 +1485,13 @@ fn axiom_function_abjuration(
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
     summons: Query<(&Summoned, &FlagEntity)>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     for entity in synapse_data.get_all_targeted_entities(&map) {
         // Spellproof entities cannot be affected.
-        if is_spellproof(
-            synapse_data.caster,
-            entity,
-            &flags,
-            &break_query,
-            &shield_query,
-        ) {
+        if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
             continue;
         }
         for (summoned_component, flag_entity) in summons.iter() {
@@ -1555,21 +1508,14 @@ fn axiom_function_transform(
     In(spell_idx): In<usize>,
     spell_stack: Res<SpellStack>,
     map: Res<Map>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
     mut transform: EventWriter<TransformCreature>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     if let Axiom::Transform { species } = synapse_data.axioms[synapse_data.step] {
         for entity in synapse_data.get_all_targeted_entities(&map) {
-            if is_spellproof(
-                synapse_data.caster,
-                entity,
-                &flags,
-                &break_query,
-                &shield_query,
-            ) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
                 continue;
             }
             transform.write(TransformCreature {
@@ -1681,19 +1627,12 @@ fn axiom_function_force_cast(
     mut cast_spell: EventWriter<CastSpell>,
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
 ) {
     let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
     for entity in synapse_data.get_all_targeted_entities(&map) {
-        if is_spellproof(
-            synapse_data.caster,
-            entity,
-            &flags,
-            &break_query,
-            &shield_query,
-        ) {
+        if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
             continue;
         }
         cast_spell.write(CastSpell {
@@ -1757,11 +1696,9 @@ fn linear_beam(
     map: &Map,
     is_piercing: bool,
     caster: Entity,
-    queries: (
-        &Query<&CreatureFlags>,
-        &Query<&RealityBreak>,
-        &Query<&RealityShield>,
-    ),
+    flags_query: &Query<SpellproofQueryFlags>,
+    creature_query: &Query<SpellproofQueryCreature>,
+    synapse: &SynapseData,
 ) -> Vec<Position> {
     let mut distance_travelled = 0;
     let mut output = Vec::new();
@@ -1774,7 +1711,7 @@ fn linear_beam(
         // But if it is impassable, the beam stops.
         if is_piercing {
             if let Some(possible_block) = map.get_entity_at(start.x, start.y) {
-                if is_spellproof(caster, *possible_block, queries.0, queries.1, queries.2) {
+                if is_spellproof(*possible_block, synapse, flags_query, creature_query) {
                     break;
                 }
             }
@@ -2034,23 +1971,53 @@ pub fn walk_grid(p0: Position, p1: Position) -> Vec<Position> {
     points
 }
 
-fn is_spellproof(
-    caster: Entity,
-    target: Entity,
-    creature_flags: &Query<&CreatureFlags>,
-    caster_query: &Query<&RealityBreak>,
-    target_query: &Query<&RealityShield>,
-) -> bool {
-    let flags_caster = creature_flags.get(caster).unwrap();
-    let flags_target = creature_flags.get(target).unwrap();
-    let pierce = caster_query
-        .get(flags_caster.species_flags)
-        .or(caster_query.get(flags_caster.effects_flags))
-        .unwrap_or(&RealityBreak(0));
-    let shield = target_query
-        .get(flags_target.species_flags)
-        .or(target_query.get(flags_target.effects_flags))
-        .unwrap_or(&RealityShield(0));
+#[derive(QueryData)]
+struct SpellproofQueryFlags {
+    reality_shield: &'static RealityShield,
+    reality_break: &'static RealityBreak,
+}
 
-    pierce.0 < shield.0
+#[derive(QueryData)]
+struct SpellproofQueryCreature {
+    flags: &'static CreatureFlags,
+    species: &'static Species,
+}
+
+fn is_spellproof(
+    target: Entity,
+    synapse: &SynapseData,
+    flags_query: &Query<SpellproofQueryFlags>,
+    creature_query: &Query<SpellproofQueryCreature>,
+) -> bool {
+    let flags_caster = creature_query.get(synapse.caster).unwrap().flags;
+    let flags_target = creature_query.get(target).unwrap().flags;
+    let pierce = {
+        let species_pierce = flags_query
+            .get(flags_caster.species_flags)
+            .unwrap()
+            .reality_break
+            .0;
+        let effects_pierce = flags_query
+            .get(flags_caster.effects_flags)
+            .unwrap()
+            .reality_break
+            .0;
+        species_pierce.max(effects_pierce)
+    };
+
+    let shield = {
+        let species_shield = flags_query
+            .get(flags_target.species_flags)
+            .unwrap()
+            .reality_shield
+            .0;
+        let effects_shield = flags_query
+            .get(flags_target.effects_flags)
+            .unwrap()
+            .reality_shield
+            .0;
+        species_shield.max(effects_shield)
+    };
+
+    pierce < shield
 }

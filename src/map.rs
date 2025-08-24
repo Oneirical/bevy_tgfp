@@ -336,8 +336,8 @@ pub fn new_cage_on_conveyor(
     mut summon: EventWriter<SummonCreature>,
 ) {
     tracker.number_spawned += 1;
-    let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
-    // let mut cage = get_vault(0);
+    // let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
+    let mut cage = get_vault(0);
     add_creatures(&mut cage.chars, 2 + tracker.number_spawned);
 
     let cage_corner = Position::new(26, 52 - (cage.size.1 as i32 - 9));

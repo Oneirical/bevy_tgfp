@@ -12,7 +12,7 @@ use crate::{
     creature::SpellLibrary,
     cursor::{cursor_step, despawn_cursor, spawn_cursor, teleport_cursor, update_cursor_box},
     events::{
-        add_status_effects, alter_momentum, assign_species_components,
+        add_status_effects, alter_momentum, assign_default_break_shield, assign_species_components,
         check_airlock_bridge_formation, creature_collision, creature_step, distribute_npc_actions,
         draw_soul, echo_speed, end_turn, harm_creature, is_painting, magnet_follow,
         magnetize_tail_segments, open_close_door, remove_creature, remove_designated_creatures,
@@ -55,6 +55,7 @@ impl Plugin for SetsPlugin {
                 teleport_entity.before(teleport_execution),
                 alter_momentum.after(creature_collision),
                 take_or_drop_soul.after(stepped_on_tile),
+                assign_default_break_shield.after(assign_species_components),
             )
                 .in_set(ResolutionPhase),
         );
@@ -109,6 +110,7 @@ impl Plugin for SetsPlugin {
                 // This will ensure entities keep their species-specific
                 // components when a turn begins.
                 assign_species_components,
+                assign_default_break_shield,
                 keyboard_input.run_if(spell_stack_is_empty),
                 creature_step,
                 use_wheel_soul.run_if(not(is_painting)),
