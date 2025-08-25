@@ -683,6 +683,8 @@ pub enum SynapseFlag {
     Untarget,
     /// Also include intangible creatures in the targets.
     TargetIntangibleToo,
+    /// Any creature that is not of Species cannot be affected.
+    RestrictSpecies(Species),
 }
 
 pub fn cast_new_spell(
@@ -1603,6 +1605,9 @@ fn axiom_mutator_filter_by_species(
             }
         }
         synapse_data.targets = retained_creatures;
+        synapse_data
+            .synapse_flags
+            .insert(SynapseFlag::RestrictSpecies(species));
     }
 }
 
@@ -1989,8 +1994,23 @@ fn is_spellproof(
     flags_query: &Query<SpellproofQueryFlags>,
     creature_query: &Query<SpellproofQueryCreature>,
 ) -> bool {
+    // Check for species restriction first
+    if let Some(restricted_species) = synapse.synapse_flags.iter().find_map(|flag| {
+        if let SynapseFlag::RestrictSpecies(species) = flag {
+            Some(*species)
+        } else {
+            None
+        }
+    }) {
+        let target_species = creature_query.get(target).unwrap().species;
+        if *target_species != restricted_species {
+            return true; // Species doesn't match restriction
+        }
+    }
+
     let flags_caster = creature_query.get(synapse.caster).unwrap().flags;
     let flags_target = creature_query.get(target).unwrap().flags;
+
     let pierce = {
         let species_pierce = flags_query
             .get(flags_caster.species_flags)

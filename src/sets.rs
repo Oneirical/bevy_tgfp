@@ -55,7 +55,6 @@ impl Plugin for SetsPlugin {
                 teleport_entity.before(teleport_execution),
                 alter_momentum.after(creature_collision),
                 take_or_drop_soul.after(stepped_on_tile),
-                assign_default_break_shield.after(assign_species_components),
             )
                 .in_set(ResolutionPhase),
         );
@@ -127,6 +126,7 @@ impl Plugin for SetsPlugin {
                 summon_creature,
                 transform_creature,
                 assign_species_components,
+                assign_default_break_shield,
                 register_creatures,
                 add_status_effects,
                 teleport_execution,
