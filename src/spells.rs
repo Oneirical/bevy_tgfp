@@ -150,6 +150,10 @@ impl FromWorld for AxiomLibrary {
             world.register_system(axiom_function_open_close_door),
         );
         axioms.library.insert(
+            discriminant(&Axiom::GraftSpell(EffectDuration::Infinite)),
+            world.register_system(axiom_function_graft_spell),
+        );
+        axioms.library.insert(
             discriminant(&Axiom::Trace),
             world.register_system(axiom_mutator_trace),
         );
@@ -463,7 +467,7 @@ pub enum Axiom {
     SummonCreature {
         species: Species,
     },
-    /// The targeted tiles summon a step-triggered trap with following axioms as the payload.
+    /// The targeted tiles summon a step-triggered trap with the following axioms as the payload.
     /// This terminates the spell.
     PlaceStepTrap,
     /// Any targeted creature with the Wall component is removed.
@@ -501,6 +505,9 @@ pub enum Axiom {
     ForceCast,
     /// Open and closes any creatures with Door. Will require TargetIntangibleToo to close doors.
     OpenCloseDoor,
+    /// Graft a new spell to a creature, as if it was in its spellbook, with the following axioms as the payload.
+    /// This terminates the spell.
+    GraftSpell(EffectDuration),
 
     // MUTATORS
     MutatorSeparator,
@@ -1223,6 +1230,48 @@ fn axiom_function_place_step_trap(
         });
     }
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+}
+
+/// Graft a new spell to a creature, as if it was in its spellbook, with the following axioms as the payload.
+/// This terminates the spell.
+fn axiom_function_graft_spell(
+    In(spell_idx): In<usize>,
+    mut spell_stack: ResMut<SpellStack>,
+    mut graft: ResMut<GraftSpell>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
+    mut status_effect: EventWriter<AddStatusEffect>,
+    map: Res<Map>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    if let Axiom::GraftSpell(stacks) = synapse_data.axioms[synapse_data.step] {
+        let id = Uuid::new_v4();
+        graft.0.insert(
+            id,
+            Spell {
+                axioms: synapse_data.axioms[synapse_data.step + 1..].to_vec(),
+                caste: Soul::Graft(id),
+                icon: 0,
+                id,
+                description: String::from("what is this even used for"),
+            },
+        );
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
+                continue;
+            }
+            status_effect.write(AddStatusEffect {
+                entity,
+                effect: StatusEffect::Graft(id),
+                potency: 1,
+                stacks,
+                culprit: synapse_data.caster,
+            });
+        }
+        synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
+    } else {
+        panic!();
+    }
 }
 
 /// If the synapse's counter is [condition] than the value, terminate.
@@ -2041,3 +2090,6 @@ fn is_spellproof(
 
     pierce < shield
 }
+
+#[derive(Resource)]
+pub struct GraftSpell(pub HashMap<Uuid, Spell>);

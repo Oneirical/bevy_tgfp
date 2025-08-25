@@ -51,6 +51,8 @@ pub enum Soul {
     Serene,
     // Its sole purpose is to display a tutorial tooltip in the Caste UI menu.
     Empty,
+    // Extra spells temporarily added by graft effects
+    Graft(Uuid),
 }
 
 pub const SAINTLY: &[Species] = &[Species::Player, Species::Scion, Species::CageSlot];
@@ -86,6 +88,7 @@ pub fn get_soul_sprite(soul: &Soul) -> usize {
         Soul::Vile => 165,
         Soul::Serene => 181,
         Soul::Empty => 166,
+        Soul::Graft(_) => 166,
     }
 }
 
@@ -166,6 +169,8 @@ pub enum StatusEffect {
     ReturnOriginalForm,
     // The creature is unable of resolving any Axiom effects.
     Silenced,
+    // The creature has an additional spell
+    Graft(Uuid),
 }
 
 #[derive(Debug)]

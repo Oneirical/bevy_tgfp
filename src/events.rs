@@ -28,7 +28,7 @@ use crate::{
     },
     map::{manhattan_distance, spawn_cage, ConveyorTracker, FaithsEnd, Map, Position},
     sets::ControlState,
-    spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, TriggerContingency},
+    spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, GraftSpell, TriggerContingency},
     ui::{
         AddMessage, AnnounceGameOver, EquipSlot, InvalidAction, LibrarySlot, Message, RecipebookUI,
         SoulSlot,
@@ -428,12 +428,13 @@ pub struct AddStatusEffect {
 
 pub fn add_status_effects(
     mut events: EventReader<AddStatusEffect>,
-    mut effects: Query<(&mut StatusEffectsList, &CreatureFlags)>,
+    mut effects: Query<(&mut StatusEffectsList, &mut Spellbook, &CreatureFlags)>,
     species_query: Query<&Species>,
+    mut graft: ResMut<GraftSpell>,
     mut commands: Commands,
 ) -> Result {
     for event in events.read() {
-        let (mut effects_list, flags) = effects.get_mut(event.entity).unwrap();
+        let (mut effects_list, mut spellbook, flags) = effects.get_mut(event.entity).unwrap();
         if let Some(effect) = effects_list.effects.get(&event.effect) {
             // Re-applying a status effect which is already possessed does not work
             // if the new effect has a lesser potency.
@@ -494,6 +495,11 @@ pub fn add_status_effects(
                 commands.entity(effects_flags).insert(ReturnOriginalForm {
                     original_form: *species_query.get(event.entity)?,
                 });
+            }
+            StatusEffect::Graft(id) => {
+                spellbook
+                    .spells
+                    .insert(Soul::Graft(id), graft.0.remove(&id).unwrap().clone());
             }
         }
     }
@@ -2185,7 +2191,7 @@ fn room_circulation_check(
 }
 
 pub fn tick_down_status_effects(
-    mut effects: Query<(Entity, &mut StatusEffectsList)>,
+    mut effects: Query<(Entity, &mut StatusEffectsList, &mut Spellbook)>,
     flags_query: Query<(Entity, &CreatureFlags)>,
     original_form_query: Query<&ReturnOriginalForm>,
     mut commands: Commands,
@@ -2193,7 +2199,7 @@ pub fn tick_down_status_effects(
     // TODO: When Bevy bug is fixed, change this to -> Result
 ) {
     // Tick down status effects.
-    for (entity, mut effect_list) in effects.iter_mut() {
+    for (entity, mut effect_list, mut spellbook) in effects.iter_mut() {
         for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
             if let EffectDuration::Finite { stacks } = &mut potency_and_stacks.stacks {
                 *stacks = stacks.saturating_sub(1);
@@ -2241,6 +2247,9 @@ pub fn tick_down_status_effects(
                             commands
                                 .entity(effects_flags)
                                 .remove::<ReturnOriginalForm>();
+                        }
+                        StatusEffect::Graft(id) => {
+                            spellbook.spells.remove(&Soul::Graft(*id));
                         }
                     }
                 }
