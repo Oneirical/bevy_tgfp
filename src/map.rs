@@ -1,6 +1,6 @@
 use crate::{
     creature::{
-        Awake, CreatureFlags, Door, EffectDuration, FlagEntity, Intangible, Player, Species,
+        Awake, CreatureFlags, Door, EffectDuration, FlagEntity, Intangible, Player, Soul, Species,
         Spellbook, StatusEffect, VisualLayering,
     },
     events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
@@ -336,8 +336,8 @@ pub fn new_cage_on_conveyor(
     mut summon: EventWriter<SummonCreature>,
 ) {
     tracker.number_spawned += 1;
-    // let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
-    let mut cage = get_vault(0);
+    let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
+    // let mut cage = get_vault(0);
     add_creatures(&mut cage.chars, 2 + tracker.number_spawned);
 
     let cage_corner = Position::new(26, 52 - (cage.size.1 as i32 - 9));
@@ -400,6 +400,7 @@ pub fn new_cage_on_conveyor(
                 None,
                 Some(vec![
                     Axiom::WhenEnteringArea(Position::new(25, 29), Position::new(35, 29)),
+                    Axiom::Ego,
                     Axiom::DisableVfx,
                     Axiom::Ego,
                     Axiom::Plus,
@@ -412,15 +413,13 @@ pub fn new_cage_on_conveyor(
                     Axiom::FilterBySpecies {
                         species: Species::ConveyorBelt,
                     },
-                    // TODO: I think filterbyspecies should also filter intangible. It would need
-                    // to add a check in is_spellproof to see if there is a restricted species.
                     Axiom::StatusEffect {
                         effect: StatusEffect::Silenced,
                         potency: 1,
                         stacks: EffectDuration::Infinite,
                     },
                     Axiom::Terminate,
-                    Axiom::WhenReceivingRadio(String::from("treadmill")),
+                    Axiom::WhenReceivingRadio(String::from("conveyor")),
                     Axiom::DisableVfx,
                     Axiom::Ego,
                     Axiom::Plus,
@@ -428,6 +427,11 @@ pub fn new_cage_on_conveyor(
                     Axiom::Spread,
                     Axiom::TargetIntangibleToo,
                     Axiom::OpenCloseDoor,
+                    Axiom::SelectArea(Position::new(25, 0), Position::new(35, 100)),
+                    Axiom::FilterBySpecies {
+                        species: Species::ConveyorBelt,
+                    },
+                    Axiom::DispelEffect(StatusEffect::Silenced),
                 ]),
                 None,
                 None,

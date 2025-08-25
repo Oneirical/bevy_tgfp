@@ -18,8 +18,9 @@ use crate::{
         StatusEffect, StatusEffectsList, Summoned, Targeting, Wall,
     },
     events::{
-        AddStatusEffect, ChooseStepAction, DamageOrHealCreature, OpenCloseDoor, RemoveCreature,
-        SummonCreature, SummonProperties, TeleportEntity, TransformCreature,
+        dispel_status_effect, AddStatusEffect, ChooseStepAction, DamageOrHealCreature,
+        OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity,
+        TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
     map::{new_cage_on_conveyor, FaithsEnd, Map, Position},
@@ -32,6 +33,7 @@ impl Plugin for SpellPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<Events<CastSpell>>();
         app.insert_resource(SpellStack { spells: Vec::new() });
+        app.insert_resource(GraftSpell(HashMap::new()));
         app.init_resource::<AxiomLibrary>();
         app.add_event::<TriggerContingency>();
     }
@@ -103,6 +105,18 @@ impl FromWorld for AxiomLibrary {
         axioms.library.insert(
             discriminant(&Axiom::PlaceStepTrap),
             world.register_system(axiom_function_place_step_trap),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::Broadcast(String::from("wao"))),
+            world.register_system(axiom_function_broadcast),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::Pulse(Soul::Ordered)),
+            world.register_system(axiom_function_pulse),
+        );
+        axioms.library.insert(
+            discriminant(&Axiom::DispelEffect(StatusEffect::Invincible)),
+            world.register_system(axiom_function_dispel_effect),
         );
         axioms.library.insert(
             discriminant(&Axiom::DevourWall),
@@ -508,6 +522,12 @@ pub enum Axiom {
     /// Graft a new spell to a creature, as if it was in its spellbook, with the following axioms as the payload.
     /// This terminates the spell.
     GraftSpell(EffectDuration),
+    /// Trigger all WhenReceivingRadio axioms with the corresponding String.
+    Broadcast(String),
+    /// Forcecast a creature's axiom slot.
+    Pulse(Soul),
+    /// Remove any effects of type StatusEffect from targeted creatures.
+    DispelEffect(StatusEffect),
 
     // MUTATORS
     MutatorSeparator,
@@ -1028,9 +1048,6 @@ fn axiom_form_plus_beam(
     map: Res<Map>,
     mut spell_stack: ResMut<SpellStack>,
     position: Query<&Position>,
-    break_query: Query<&RealityBreak>,
-    shield_query: Query<&RealityShield>,
-    flags: Query<&CreatureFlags>,
     flags_query: Query<SpellproofQueryFlags>,
     creature_query: Query<SpellproofQueryCreature>,
 ) {
@@ -1309,6 +1326,29 @@ fn axiom_mutator_terminate(In(spell_idx): In<usize>, mut spell_stack: ResMut<Spe
     synapse_data.synapse_flags.insert(SynapseFlag::Terminate);
 }
 
+/// Trigger all WhenReceivingRadio axioms with the corresponding String.
+fn axiom_function_broadcast(
+    In(spell_idx): In<usize>,
+    spell_stack: Res<SpellStack>,
+    all: Query<Entity, With<Species>>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
+    mut contingency: EventWriter<TriggerContingency>,
+) {
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
+    if let Axiom::Broadcast(string) = &synapse_data.axioms[synapse_data.step] {
+        for caster in all.iter() {
+            if is_spellproof(caster, &synapse_data, &flags_query, &creature_query) {
+                continue;
+            }
+            contingency.write(TriggerContingency {
+                caster,
+                contingency: Axiom::WhenReceivingRadio(string.clone()),
+            });
+        }
+    }
+}
+
 /// Also include intangible creatures in the targets.
 fn axiom_mutator_target_intangible_too(
     In(spell_idx): In<usize>,
@@ -1370,21 +1410,27 @@ fn axiom_function_open_close_door(
     creature_query: Query<SpellproofQueryCreature>,
     door_query: Query<&Door>,
     flags: Query<&CreatureFlags>,
+    intangible_query: Query<&Intangible>,
 ) {
     let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
     for entity in synapse_data.get_all_targeted_entities(&map) {
-        let is_door = {
-            let flags = flags.get(entity).unwrap();
-            door_query.contains(flags.effects_flags) || door_query.contains(flags.species_flags)
-        };
+        let flags = flags.get(entity).unwrap();
+        let is_door =
+            door_query.contains(flags.effects_flags) || door_query.contains(flags.species_flags);
         let is_spellproof = is_spellproof(entity, synapse_data, &flags_query, &creature_query);
-        if is_door && !is_spellproof {
-            open.write(OpenCloseDoor {
-                entity: entity,
-                open: true,
-            });
+
+        if !is_door || is_spellproof {
+            continue;
         }
-        // WIP door closing
+
+        // Check if door is currently open (has Intangible component)
+        let is_open = intangible_query.contains(flags.effects_flags)
+            || intangible_query.contains(flags.species_flags);
+
+        open.write(OpenCloseDoor {
+            entity: entity,
+            open: !is_open,
+        });
     }
 }
 
@@ -1444,6 +1490,30 @@ fn axiom_function_status_effect(
         }
     } else {
         panic!();
+    }
+}
+
+/// Remove a specific status effect from all targeted creatures.
+fn axiom_function_dispel_effect(
+    In(spell_idx): In<usize>,
+    mut commands: Commands,
+    spell_stack: Res<SpellStack>,
+    map: Res<Map>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
+) {
+    let synapse_data = spell_stack.spells.get(spell_idx).unwrap();
+
+    if let Axiom::DispelEffect(effect_to_dispel) = synapse_data.axioms[synapse_data.step] {
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
+                continue;
+            }
+
+            commands.run_system_cached_with(dispel_status_effect, (entity, effect_to_dispel));
+        }
+    } else {
+        panic!("Expected DispelEffect axiom");
     }
 }
 
@@ -1671,6 +1741,41 @@ fn axiom_mutator_loop_back(In(spell_idx): In<usize>, mut spell_stack: ResMut<Spe
         synapse_data.synapse_flags.insert(SynapseFlag::NoStep);
     } else {
         panic!()
+    }
+}
+
+/// Force all targeted creatures to cast a spell from their spellbook corresponding to the specified Soul.
+fn axiom_function_pulse(
+    In(spell_idx): In<usize>,
+    mut cast_spell: EventWriter<CastSpell>,
+    map: Res<Map>,
+    mut spell_stack: ResMut<SpellStack>,
+    flags_query: Query<SpellproofQueryFlags>,
+    creature_query: Query<SpellproofQueryCreature>,
+    spellbook_query: Query<&Spellbook>,
+) {
+    let synapse_data = spell_stack.spells.get_mut(spell_idx).unwrap();
+    if let Axiom::Pulse(soul_to_cast) = synapse_data.axioms[synapse_data.step] {
+        for entity in synapse_data.get_all_targeted_entities(&map) {
+            if is_spellproof(entity, &synapse_data, &flags_query, &creature_query) {
+                continue;
+            }
+
+            // Get the entity's spellbook and find the spell for the specified soul
+            if let Ok(spellbook) = spellbook_query.get(entity) {
+                if let Some(spell) = spellbook.spells.get(&soul_to_cast) {
+                    cast_spell.write(CastSpell {
+                        caster: entity,
+                        spell: spell.clone(),
+                        starting_step: 0,
+                        soul_caste: soul_to_cast,
+                        prediction: false,
+                    });
+                }
+            }
+        }
+    } else {
+        panic!("Expected Pulse axiom");
     }
 }
 

@@ -853,6 +853,9 @@ pub fn assign_species_components(
             Species::Abazon => {
                 new_creature.insert((Immobile, Hunt));
             }
+            Species::Player => {
+                new_creature.insert(RealityBreak(10));
+            }
             Species::AxiomaticSeal => {
                 new_creature.insert((Immobile, Hunt, Dizzy, NoDropSoul, RealityShield(2)));
             }
@@ -2190,75 +2193,99 @@ fn room_circulation_check(
     }
 }
 
+// Main system that ticks down status effects
 pub fn tick_down_status_effects(
-    mut effects: Query<(Entity, &mut StatusEffectsList, &mut Spellbook)>,
-    flags_query: Query<(Entity, &CreatureFlags)>,
-    original_form_query: Query<&ReturnOriginalForm>,
+    mut effects: Query<(Entity, &mut StatusEffectsList)>,
     mut commands: Commands,
-    mut transform: EventWriter<TransformCreature>,
-    // TODO: When Bevy bug is fixed, change this to -> Result
 ) {
-    // Tick down status effects.
-    for (entity, mut effect_list, mut spellbook) in effects.iter_mut() {
+    let mut expired_effects = Vec::new();
+
+    // Tick down status effects and collect expired ones
+    for (entity, mut effect_list) in effects.iter_mut() {
         for (effect, potency_and_stacks) in effect_list.effects.iter_mut() {
             if let EffectDuration::Finite { stacks } = &mut potency_and_stacks.stacks {
                 *stacks = stacks.saturating_sub(1);
                 if *stacks == 0 {
-                    // Disable this effect.
-                    potency_and_stacks.potency = 0;
-                    let effects_flags = flags_query.get(entity).unwrap().1.effects_flags;
-                    match effect {
-                        StatusEffect::Invincible => {
-                            commands.entity(effects_flags).remove::<Invincible>();
-                        }
-                        StatusEffect::Stab => {
-                            commands.entity(effects_flags).remove::<Stab>();
-                        }
-                        StatusEffect::Silenced => {
-                            commands.entity(effects_flags).remove::<Silenced>();
-                        }
-                        StatusEffect::Dizzy => {
-                            commands.entity(effects_flags).remove::<Dizzy>();
-                        }
-                        StatusEffect::DimensionBond => {
-                            commands.entity(effects_flags).remove::<Summoned>();
-                        }
-                        StatusEffect::Haste => {
-                            commands.entity(effects_flags).remove::<Speed>();
-                        }
-                        StatusEffect::Charm => {
-                            commands.entity(effects_flags).remove::<Charm>();
-                        }
-                        StatusEffect::Possessed => {
-                            commands.entity(effects_flags).remove::<Possessed>();
-                        }
-                        StatusEffect::Magnetize => {
-                            commands.entity(effects_flags).remove::<Magnetic>();
-                            commands.entity(effects_flags).remove::<Magnetized>();
-                        }
-                        StatusEffect::ReturnOriginalForm => {
-                            transform.write(TransformCreature {
-                                entity,
-                                new_species: original_form_query
-                                    .get(effects_flags)
-                                    .unwrap()
-                                    .original_form,
-                            });
-                            commands
-                                .entity(effects_flags)
-                                .remove::<ReturnOriginalForm>();
-                        }
-                        StatusEffect::Graft(id) => {
-                            spellbook.spells.remove(&Soul::Graft(*id));
-                        }
-                    }
+                    expired_effects.push((entity, *effect));
                 }
             }
         }
-        // Remove any expired effects.
-        effect_list.effects.retain(|_, potency_and_stacks| {
-            if let EffectDuration::Finite { stacks } = &potency_and_stacks.stacks {
-                *stacks != 0
+    }
+
+    // Dispatch one-shot systems for each expired effect
+    for (entity, effect) in expired_effects {
+        commands.run_system_cached_with(dispel_status_effect, (entity, effect));
+    }
+}
+
+// One-shot system to handle status effect expiration and removal
+pub fn dispel_status_effect(
+    In((entity, effect)): In<(Entity, StatusEffect)>,
+    flags_query: Query<&CreatureFlags>,
+    original_form_query: Query<&ReturnOriginalForm>,
+    mut commands: Commands,
+    mut transform: EventWriter<TransformCreature>,
+    mut spellbook_query: Query<&mut Spellbook>,
+    mut status_effects_query: Query<&mut StatusEffectsList>,
+) {
+    let creature_flags = flags_query.get(entity).unwrap();
+    let effects_flags = creature_flags.effects_flags;
+
+    match effect {
+        StatusEffect::Invincible => {
+            commands.entity(effects_flags).remove::<Invincible>();
+        }
+        StatusEffect::Stab => {
+            commands.entity(effects_flags).remove::<Stab>();
+        }
+        StatusEffect::Silenced => {
+            commands.entity(effects_flags).remove::<Silenced>();
+        }
+        StatusEffect::Dizzy => {
+            commands.entity(effects_flags).remove::<Dizzy>();
+        }
+        StatusEffect::DimensionBond => {
+            commands.entity(effects_flags).remove::<Summoned>();
+        }
+        StatusEffect::Haste => {
+            commands.entity(effects_flags).remove::<Speed>();
+        }
+        StatusEffect::Charm => {
+            commands.entity(effects_flags).remove::<Charm>();
+        }
+        StatusEffect::Possessed => {
+            commands.entity(effects_flags).remove::<Possessed>();
+        }
+        StatusEffect::Magnetize => {
+            commands.entity(effects_flags).remove::<Magnetic>();
+            commands.entity(effects_flags).remove::<Magnetized>();
+        }
+        StatusEffect::ReturnOriginalForm => {
+            transform.write(TransformCreature {
+                entity,
+                new_species: original_form_query
+                    .get(effects_flags)
+                    .unwrap()
+                    .original_form,
+            });
+            commands
+                .entity(effects_flags)
+                .remove::<ReturnOriginalForm>();
+        }
+        StatusEffect::Graft(id) => {
+            let mut spellbook = spellbook_query.get_mut(entity).unwrap();
+            spellbook.spells.remove(&Soul::Graft(id));
+        }
+    }
+
+    // Remove the effect from the status effects list
+    if let Ok(mut status_effects) = status_effects_query.get_mut(entity) {
+        status_effects.effects.retain(|e, potency_and_stacks| {
+            // Keep if it's not the expired effect, or if it's finite with remaining stacks
+            if *e != effect {
+                true
+            } else if let EffectDuration::Finite { stacks } = potency_and_stacks.stacks {
+                stacks != 0
             } else {
                 true
             }

@@ -572,9 +572,10 @@ pub fn get_species_spellbook(species: &Species) -> Spellbook {
         ]),
         Species::Player => Spellbook::new([
             Some(vec![
-                Axiom::Ego,
-                Axiom::Plus,
-                Axiom::HealOrHarm { amount: 2 },
+                // Axiom::Ego,
+                // Axiom::Plus,
+                // Axiom::HealOrHarm { amount: 2 },
+                Axiom::Broadcast(String::from("conveyor")),
             ]),
             Some(vec![
                 Axiom::Ego,
