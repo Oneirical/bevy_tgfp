@@ -3,7 +3,10 @@ use crate::{
         Awake, CreatureFlags, Door, EffectDuration, FlagEntity, Intangible, Player, Soul, Species,
         Spellbook, StatusEffect, VisualLayering,
     },
-    events::{OpenCloseDoor, RemoveCreature, SummonCreature, SummonProperties, TeleportEntity},
+    events::{
+        OpenCloseDoor, RemoveCreature, SteppedOnTile, SummonCreature, SummonProperties,
+        TeleportEntity,
+    },
     spells::Axiom,
     ui::{AddMessage, Message},
     OrdDir,
@@ -336,8 +339,8 @@ pub fn new_cage_on_conveyor(
     mut summon: EventWriter<SummonCreature>,
 ) {
     tracker.number_spawned += 1;
-    let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
-    // let mut cage = get_vault(0);
+    // let mut cage = generate_cage(0, false, true, 9, &[OrdDir::Left, OrdDir::Right]);
+    let mut cage = get_vault(0);
     add_creatures(&mut cage.chars, 2 + tracker.number_spawned);
 
     let cage_corner = Position::new(26, 52 - (cage.size.1 as i32 - 9));
@@ -409,7 +412,7 @@ pub fn new_cage_on_conveyor(
                     Axiom::TargetIntangibleToo,
                     Axiom::OpenCloseDoor,
                     Axiom::PurgeTargets,
-                    Axiom::SelectArea(Position::new(25, 0), Position::new(35, 100)),
+                    Axiom::SelectArea(Position::new(25, 17), Position::new(35, 100)),
                     Axiom::FilterBySpecies {
                         species: Species::ConveyorBelt,
                     },
@@ -740,4 +743,27 @@ pub fn get_vault(index: usize) -> Vault {
             }
         })
         .unwrap()
+}
+
+pub fn hardcoded_restep_conveyor_restart(
+    all: Query<(Entity, &Position, &Species)>,
+    mut stepped: EventWriter<SteppedOnTile>,
+    mut commands: Commands,
+) {
+    let mut entities: Vec<_> = all.iter().collect();
+
+    // Sort by Y coordinate (smallest to biggest)
+    entities.sort_by(|a, b| a.1.y.cmp(&b.1.y));
+
+    for (entity, position, species) in entities {
+        if position.is_within_range(&Position::new(25, 0), &Position::new(35, 100))
+            && species != &Species::ConveyorBelt
+        {
+            stepped.write(SteppedOnTile {
+                entity,
+                position: *position,
+            });
+        }
+    }
+    commands.run_system_cached(new_cage_on_conveyor);
 }

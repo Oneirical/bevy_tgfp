@@ -23,7 +23,7 @@ use crate::{
         TransformCreature,
     },
     graphics::{EffectSequence, EffectType, PlaceMagicVfx},
-    map::{new_cage_on_conveyor, FaithsEnd, Map, Position},
+    map::{hardcoded_restep_conveyor_restart, new_cage_on_conveyor, FaithsEnd, Map, Position},
     OrdDir,
 };
 

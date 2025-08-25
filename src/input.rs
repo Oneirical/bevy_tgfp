@@ -7,7 +7,7 @@ use crate::{
     cursor::CursorStep,
     events::{CreatureStep, EndTurn, PlayerAction, RespawnPlayer, TurnManager, UseWheelSoul},
     graphics::PortalCamera,
-    map::ConveyorTracker,
+    map::{hardcoded_restep_conveyor_restart, ConveyorTracker},
     sets::ControlState,
     spells::{Axiom, CastSpell, Spell},
     ui::{CastePanelColumn, CastePanelRow, LargeCastePanel},
@@ -32,6 +32,7 @@ pub fn keyboard_input(
     mut unequip: EventWriter<UnequipSpell>,
     mut spell: EventWriter<CastSpell>,
     mut tracker: ResMut<ConveyorTracker>,
+    mut commands: Commands,
 ) -> Result {
     let soul_keys = [
         KeyCode::Digit1,
@@ -204,7 +205,7 @@ pub fn keyboard_input(
     }
 
     if input.just_pressed(KeyCode::KeyP) {
-        tracker.open_doors_next = false;
+        commands.run_system_cached(hardcoded_restep_conveyor_restart);
     }
 
     #[cfg(debug_assertions)]

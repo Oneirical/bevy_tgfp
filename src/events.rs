@@ -26,7 +26,10 @@ use crate::{
         get_effect_sprite, EffectSequence, EffectType, MagicEffect, MagicVfx, PlaceMagicVfx,
         SlideAnimation, SpriteSheetAtlas,
     },
-    map::{manhattan_distance, spawn_cage, ConveyorTracker, FaithsEnd, Map, Position},
+    map::{
+        hardcoded_restep_conveyor_restart, manhattan_distance, spawn_cage, ConveyorTracker,
+        FaithsEnd, Map, Position,
+    },
     sets::ControlState,
     spells::{walk_grid, AntiContingencyLoop, Axiom, CastSpell, GraftSpell, TriggerContingency},
     ui::{
@@ -1372,8 +1375,8 @@ pub fn magnet_follow(
 
 #[derive(Event)]
 pub struct SteppedOnTile {
-    entity: Entity,
-    position: Position,
+    pub entity: Entity,
+    pub position: Position,
 }
 
 pub fn stepped_on_tile(
